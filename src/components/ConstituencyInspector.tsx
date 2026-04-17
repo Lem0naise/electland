@@ -1,4 +1,4 @@
-import { axisSummary, describeValues, formatPopulation, topBlocEntries } from '../lib/sim'
+import { axisSummary, describeValues, formatPopulation, IDEOLOGY_AXES, topBlocEntries, wardFitSentence } from '../lib/sim'
 import type { Constituency, PopulationTile, TilePreferenceEstimate, World } from '../types/sim'
 
 type MapMode = 'ward' | 'bloc' | 'voter'
@@ -76,8 +76,77 @@ export function ConstituencyInspector({
             {isBattleground && <span className="battleground-badge">BATTLEGROUND</span>}
           </div>
           <p className="ward-mood">
-            Pop. {formatPopulation(selectedWard.population)} · {describeValues(selectedWard.values)} · {(selectedWard.urbanity * 100).toFixed(0)}% urban
+            Pop. {formatPopulation(selectedWard.population)} · {(selectedWard.urbanity * 100).toFixed(0)}% urban
           </p>
+
+          {/* Ideology + fit block */}
+          {(() => {
+            const playerParty = world.parties.find((p) => p.id === playerPartyId)
+            const fit = playerParty ? wardFitSentence(playerParty.values, selectedWard.values) : null
+
+            return (
+              <div className={`ward-fit-block ward-fit-${fit?.quality ?? 'neutral'}`}>
+                {/* Per-axis comparison */}
+                <div className="ward-fit-axes">
+                  {IDEOLOGY_AXES.map((ax) => {
+                    const wardVal = selectedWard.values[ax.key]
+                    const partyVal = playerParty?.values[ax.key] ?? 0
+                    const diff = Math.abs(wardVal - partyVal)
+                    const wardPos = ((wardVal + 100) / 200) * 100
+                    const partyPos = ((partyVal + 100) / 200) * 100
+                    const matchLevel: 'close' | 'moderate' | 'far' = diff < 20 ? 'close' : diff < 50 ? 'moderate' : 'far'
+                    return (
+                      <div key={ax.key} className="ward-fit-axis-row">
+                        <span className="wfa-label">{ax.rightLabel}</span>
+                        <div className="wfa-track">
+                          {/* Ward dot */}
+                          <span
+                            className="wfa-dot wfa-ward"
+                            style={{ left: `${wardPos}%` }}
+                            title={`Ward: ${wardVal > 0 ? ax.rightShort : ax.leftShort} (${wardVal.toFixed(0)})`}
+                          />
+                          {/* Player party dot */}
+                          {playerParty && (
+                            <span
+                              className="wfa-dot wfa-party"
+                              style={{ left: `${partyPos}%`, background: playerParty.colour }}
+                              title={`You: ${partyVal > 0 ? ax.rightShort : ax.leftShort} (${partyVal.toFixed(0)})`}
+                            />
+                          )}
+                          {/* Gap indicator */}
+                          {playerParty && (
+                            <span
+                              className={`wfa-gap wfa-gap-${matchLevel}`}
+                              style={{
+                                left: `${Math.min(wardPos, partyPos)}%`,
+                                width: `${Math.abs(wardPos - partyPos)}%`,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className={`wfa-match wfa-match-${matchLevel}`}>
+                          {matchLevel === 'close' ? '✓' : matchLevel === 'moderate' ? '~' : '✗'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Legend */}
+                <div className="ward-fit-legend">
+                  <span className="wfl-ward">◆ Ward voters</span>
+                  {playerParty && (
+                    <span className="wfl-party" style={{ color: playerParty.colour }}>● {playerParty.name}</span>
+                  )}
+                </div>
+                {/* Overall verdict */}
+                {fit && (
+                  <div className="ward-fit-verdict">
+                    {fit.sentence}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Neighbourhood demographics */}
           <div className="bloc-mix-section">
@@ -190,8 +259,8 @@ export function ConstituencyInspector({
                 <li>{selectedWard.results[0].partyName} leads by {selectedWard.margin.toFixed(1)} pts — {selectedWard.margin < 5 ? 'razor thin' : selectedWard.margin < 15 ? 'modest lead' : 'comfortable margin'}.</li>
               )}
               {blocs[0] && <li>{blocs[0].label} makes up {blocs[0].share.toFixed(0)}% of this ward and shapes its baseline mood.</li>}
-              {matchingCurrents[0] && <li>{matchingCurrents[0].label} is landing in this ward because of its {matchingCurrents[0].tags.filter((t) => selectedWard.tags.includes(t)).join(', ')} character.</li>}
-              <li>{axisSummary(selectedWard.values).join('. ')}.</li>
+              {matchingCurrents[0] && <li>{matchingCurrents[0].label} is active here.</li>}
+              <li>Voter values: {axisSummary(selectedWard.values).join(', ')}.</li>
             </ul>
           </details>
         </>

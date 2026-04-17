@@ -3,18 +3,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { ConstituencyInspector } from './components/ConstituencyInspector'
 import { MapFigure } from './components/MapFigure'
-import { PartyWorkbench } from './components/PartyWorkbench'
 import {
   applyCampaignAction,
   estimateTilePreference,
   generateWorld,
   getAvailableActions,
+  IDEOLOGY_AXES,
+  ideologySummary,
   simulateWeek,
 } from './lib/sim'
 import type {
   ActionResult,
   CampaignAction,
-  CustomPartyDraft,
   GovernanceDecision,
   PopulationTile,
   World,
@@ -32,7 +32,50 @@ function formatSigned(value: number, digits = 1) {
   return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`
 }
 
-// ─── Election Night Modal ─────────────────────────────────────────────────────
+// ─── Ideology Widget ──────────────────────────────────────────────────────────
+// Three-bar position widget showing where a party/ward sits on each axis.
+// value range: -100 (left pole) to +100 (right pole)
+function IdeologyWidget({ values, colour, compact = false }: {
+  values: { change: number; growth: number; services: number }
+  colour?: string
+  compact?: boolean
+}) {
+  return (
+    <div className={`ideology-widget${compact ? ' compact' : ''}`}>
+      {IDEOLOGY_AXES.map((ax) => {
+        const val = values[ax.key]
+        // Map -100…+100 to 0…100%
+        const pct = ((val + 100) / 200) * 100
+        // Intensity: how strongly does it lean?
+        const intensity = Math.abs(val)
+        const dotColour = colour ?? (val > 0 ? '#2f6e2f' : val < 0 ? '#7a1c1c' : '#7a6040')
+        return (
+          <div key={ax.key} className="ideology-row">
+            <span className={`ideology-pole left${intensity > 25 && val < 0 ? ' is-dominant' : ''}`}>
+              {ax.leftLabel}
+            </span>
+            <div className="ideology-track">
+              <div className="ideology-track-line" />
+              <div
+                className="ideology-dot"
+                style={{
+                  left: `${pct}%`,
+                  background: dotColour,
+                }}
+                title={`${ax.leftLabel} ↔ ${ax.rightLabel}: ${val > 0 ? '+' : ''}${val.toFixed(0)}`}
+              />
+            </div>
+            <span className={`ideology-pole right${intensity > 25 && val > 0 ? ' is-dominant' : ''}`}>
+              {ax.rightLabel}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+
 function ElectionNightModal({ world, onReveal, onClose }: {
   world: World
   onReveal: () => void
@@ -554,6 +597,7 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
                 <span className="fwp-hint">click map to change</span>
               </div>
 
+
               {/* Candidate bars — full poll with names */}
               <div className="fwp-candidate-bars">
                 {focusWard.results.map((r, rank) => {
@@ -850,10 +894,291 @@ function VoteHistoryChart({ world, tall = false }: { world: World; tall?: boolea
   )
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── Setup / Start screen ─────────────────────────────────────────────────────
+// Used both as the initial full-screen splash and as a mid-game menu modal.
+interface PartyEdit {
+  id: string
+  name: string
+  leader: string
+  colour: string
+}
+
+function SetupScreen({
+  world,
+  constituencyCount,
+  onSetConstituencyCount,
+  onGenerate,
+  onStart,
+  onClose,
+}: {
+  world: World | null
+  constituencyCount: number
+  onSetConstituencyCount: (n: number) => void
+  onGenerate: () => void
+  onStart: (seed?: number, playerPartyId?: string, edits?: Record<string, PartyEdit>) => void
+  onClose?: () => void
+}) {
+  const isFirstTime = world === null
+  const [selectedPartyId, setSelectedPartyId] = useState<string>(world?.playerPartyId ?? '')
+  const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
+  // Editable overrides for generated parties (name/leader/colour only)
+  const [partyEdits, setPartyEdits] = useState<Record<string, PartyEdit>>(() => {
+    if (!world) return {}
+    return Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }]))
+  })
+
+  // If world changes (e.g. new town generated), reset edits and selection
+  useEffect(() => {
+    if (!world) {
+      setPartyEdits({})
+      setSelectedPartyId('')
+      return
+    }
+    setPartyEdits(Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])))
+    setSelectedPartyId(world.playerPartyId)
+  }, [world?.seed])  // only reset when town seed changes
+
+  const parties = world?.parties ?? []
+  const majorParties = parties.filter((p) => p.tier === 'major' || p.tier === 'custom')
+  const minorParties = parties.filter((p) => p.tier === 'minor')
+
+  function editFor(partyId: string): PartyEdit | undefined {
+    return partyEdits[partyId]
+  }
+
+  function updateEdit(partyId: string, changes: Partial<PartyEdit>) {
+    setPartyEdits((prev) => ({ ...prev, [partyId]: { ...prev[partyId], ...changes } }))
+  }
+
+  function handleStart() {
+    onStart(world?.seed, selectedPartyId || world?.playerPartyId, partyEdits)
+  }
+
+  function handleNewTown() {
+    // Generate a new town and stay on the setup screen so the player can pick a party
+    onGenerate()
+  }
+
+  const wardCounts = [5, 6, 7, 8, 9, 10, 11, 12]
+
+  return (
+    <div className={`setup-screen${isFirstTime ? ' is-splash' : ' is-modal'}`}>
+      {/* Background texture */}
+      <div className="setup-bg" />
+
+      <div className="setup-inner">
+        {/* Header */}
+        <div className="setup-masthead">
+          <div className="setup-rule" />
+          <h1 className="setup-title">Electland</h1>
+          <p className="setup-tagline">A tiny English town. A local election. Can you take the council?</p>
+          <div className="setup-rule" />
+        </div>
+
+        <div className="setup-body">
+          {/* Left: configuration */}
+          <div className="setup-config">
+            {/* Ward count */}
+            <div className="setup-section">
+              <div className="setup-section-label">Number of wards</div>
+              <div className="ward-count-buttons">
+                {wardCounts.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`ward-count-btn${constituencyCount === n ? ' is-active' : ''}`}
+                    onClick={() => onSetConstituencyCount(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="setup-hint">
+                {constituencyCount <= 6 ? 'Intimate — every vote is visible.' : constituencyCount <= 9 ? 'Classic — tight but strategic.' : 'Large — harder to manage, more drama.'}
+              </p>
+            </div>
+
+            {/* Town info */}
+            {world && (
+              <div className="setup-section">
+                <div className="setup-section-label">Current town</div>
+                <div className="setup-town-card">
+                  <strong>{world.townName}</strong>
+                  <span>{world.constituencies.length} wards · pop. {world.totalPopulation.toLocaleString('en-GB')} · week {world.week}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="setup-actions">
+              <button className="setup-btn-secondary" type="button" onClick={handleNewTown}>
+                {world ? 'New Town' : 'Generate Town'}
+              </button>
+              {world && (
+                <button className="setup-btn-primary" type="button" onClick={handleStart}>
+                  Start Race
+                </button>
+              )}
+              {!isFirstTime && onClose && (
+                <button className="setup-btn-ghost" type="button" onClick={onClose}>
+                  Cancel — back to game
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right: party selection */}
+          <div className="setup-parties">
+            <div className="setup-section-label">
+              {parties.length === 0 ? 'Generate a town to see the parties' : 'Choose your party — click to select, expand to edit'}
+            </div>
+
+            {parties.length > 0 && (
+              <>
+                {/* Major parties */}
+                <div className="setup-party-group">
+                  {majorParties.map((party) => {
+                    const edit = editFor(party.id) ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour }
+                    const isSelected = selectedPartyId === party.id || (!selectedPartyId && party.id === world?.playerPartyId)
+                    const isExpanded = expandedPartyId === party.id
+                    return (
+                      <div
+                        key={party.id}
+                        className={`setup-party-card${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}`}
+                      >
+                        {/* Card header — click to select */}
+                        <button
+                          type="button"
+                          className="setup-party-header"
+                          onClick={() => {
+                            setSelectedPartyId(party.id)
+                            setExpandedPartyId(isExpanded ? null : party.id)
+                          }}
+                        >
+                           <span className="setup-party-swatch" style={{ background: edit.colour }} />
+                          <div className="setup-party-info">
+                            <span className="setup-party-name">{edit.name}</span>
+                            <span className="setup-party-leader">{edit.leader}</span>
+                            <span className="setup-party-ideology">{ideologySummary(party.values)}</span>
+                          </div>
+                          <div className="setup-party-meta">
+                            <span className="setup-party-tier">Major</span>
+                            {isSelected && <span className="setup-party-playing">YOU</span>}
+                          </div>
+                          <span className="setup-party-expand">{isExpanded ? '▲' : '▼'}</span>
+                        </button>
+
+                        {/* Ideology widget — always visible below header */}
+                        <div className="setup-party-ideology-bar">
+                          <IdeologyWidget values={party.values} colour={edit.colour} compact />
+                        </div>
+
+                        {/* Inline edit panel */}
+                        {isExpanded && (
+                          <div className="setup-party-edit">
+                            <label className="setup-edit-field">
+                              <span>Party name</span>
+                              <input
+                                value={edit.name}
+                                onChange={(e) => updateEdit(party.id, { name: e.target.value })}
+                                placeholder={party.name}
+                              />
+                            </label>
+                            <label className="setup-edit-field">
+                              <span>Leader</span>
+                              <input
+                                value={edit.leader}
+                                onChange={(e) => updateEdit(party.id, { leader: e.target.value })}
+                                placeholder={party.leader}
+                              />
+                            </label>
+                            <label className="setup-edit-field setup-edit-colour">
+                              <span>Colour</span>
+                              <input
+                                type="color"
+                                value={edit.colour}
+                                onChange={(e) => updateEdit(party.id, { colour: e.target.value })}
+                              />
+                              <span className="colour-preview" style={{ background: edit.colour }} />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Minor parties — shown flat, not in a dropdown */}
+                {minorParties.length > 0 && (
+                  <div className="setup-minor-group">
+                    <div className="setup-minor-label">Minor parties</div>
+                    <div className="setup-party-group minor">
+                      {minorParties.map((party) => {
+                        const edit = editFor(party.id) ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour }
+                        const isSelected = selectedPartyId === party.id
+                        const isExpanded = expandedPartyId === party.id
+                        return (
+                          <div
+                            key={party.id}
+                            className={`setup-party-card is-minor${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}`}
+                          >
+                            <button
+                              type="button"
+                              className="setup-party-header"
+                              onClick={() => {
+                                setSelectedPartyId(party.id)
+                                setExpandedPartyId(isExpanded ? null : party.id)
+                              }}
+                            >
+                              <span className="setup-party-swatch" style={{ background: edit.colour }} />
+                              <div className="setup-party-info">
+                                <span className="setup-party-name">{edit.name}</span>
+                                <span className="setup-party-leader">{edit.leader}</span>
+                                <span className="setup-party-ideology">{ideologySummary(party.values)}</span>
+                              </div>
+                              <div className="setup-party-meta">
+                                <span className="setup-party-tier">Minor</span>
+                                {isSelected && <span className="setup-party-playing">YOU</span>}
+                              </div>
+                              <span className="setup-party-expand">{isExpanded ? '▲' : '▼'}</span>
+                            </button>
+                            {/* Ideology widget — always visible */}
+                            <div className="setup-party-ideology-bar">
+                              <IdeologyWidget values={party.values} colour={edit.colour} compact />
+                            </div>
+                            {isExpanded && (
+                              <div className="setup-party-edit">
+                                <label className="setup-edit-field">
+                                  <span>Party name</span>
+                                  <input value={edit.name} onChange={(e) => updateEdit(party.id, { name: e.target.value })} />
+                                </label>
+                                <label className="setup-edit-field">
+                                  <span>Leader</span>
+                                  <input value={edit.leader} onChange={(e) => updateEdit(party.id, { leader: e.target.value })} />
+                                </label>
+                                <label className="setup-edit-field setup-edit-colour">
+                                  <span>Colour</span>
+                                  <input type="color" value={edit.colour} onChange={(e) => updateEdit(party.id, { colour: e.target.value })} />
+                                  <span className="colour-preview" style={{ background: edit.colour }} />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 function App() {
   const [constituencyCount, setConstituencyCount] = useState(8)
-  const [customParties, setCustomParties] = useState<CustomPartyDraft[]>([])
   const [world, setWorld] = useState<World | null>(null)
   const [previousWorld, setPreviousWorld] = useState<World | null>(null)
   const [selectedConstituencyId, setSelectedConstituencyId] = useState('')
@@ -940,33 +1265,64 @@ function App() {
   }, [world?.isGoverning, world?.governanceDecisions])
 
   // ── World builders ────────────────────────────────────────────────────────────
-  const buildWorld = useCallback((seed: number, playerPartyId?: string, partyDrafts?: CustomPartyDraft[]) => {
-    const nextWorld = generateWorld({
-      seed,
-      constituencyCount,
-      customParties: partyDrafts ?? customParties,
-      playerPartyId,
-    })
-    setPreviousWorld(null)
-    setWorld(nextWorld)
-    setShowElectionNight(false)
-    setShowGovernance(false)
-    setLastActionResult(null)
-    setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
-    setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
-    setSelectedTileId(nextWorld.tiles.find((tile) => tile.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
-  }, [constituencyCount, customParties])
-
-  const generateFreshWorld = () => {
-    buildWorld(Date.now())
+  // Called by SetupScreen — applies party name/leader/colour edits to the world and closes menu
+  const handleSetupStart = useCallback((seed?: number, playerPartyId?: string, edits?: Record<string, PartyEdit>) => {
+    // If a new seed is provided, regenerate entirely
+    if (seed !== undefined && seed !== world?.seed) {
+      const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId })
+      // Apply any edits immediately after generation
+      const withEdits: World = edits && Object.keys(edits).length > 0
+        ? {
+            ...nextWorld,
+            playerPartyId: playerPartyId ?? nextWorld.playerPartyId,
+            parties: nextWorld.parties.map((p) => {
+              const edit = edits[p.id]
+              return edit ? { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour } : p
+            }),
+          }
+        : nextWorld
+      // Also patch candidate partyName/partyColour in constituencies to match edits
+      const patched: World = {
+        ...withEdits,
+        constituencies: withEdits.constituencies.map((c) => ({
+          ...c,
+          candidates: c.candidates.map((cand) => {
+            const edit = edits?.[cand.partyId]
+            return edit ? { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour } : cand
+          }),
+        })),
+      }
+      setPreviousWorld(null)
+      setWorld(patched)
+      setShowElectionNight(false)
+      setShowGovernance(false)
+      setLastActionResult(null)
+      setSelectedConstituencyId(patched.constituencies[0]?.id ?? '')
+      setSelectedBlocId(dominantBlocId(patched.constituencies[0]?.blocMix ?? {}))
+      setSelectedTileId(patched.tiles.find((t) => t.constituencyId === patched.constituencies[0]?.id)?.id ?? '')
+    } else if (world) {
+      // Just apply edits and player selection to existing world
+      const updatedParties = edits && Object.keys(edits).length > 0
+        ? world.parties.map((p) => {
+            const edit = edits[p.id]
+            return edit ? { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour } : p
+          })
+        : world.parties
+      setWorld({
+        ...world,
+        playerPartyId: playerPartyId ?? world.playerPartyId,
+        parties: updatedParties,
+        constituencies: world.constituencies.map((c) => ({
+          ...c,
+          candidates: c.candidates.map((cand) => {
+            const edit = edits?.[cand.partyId]
+            return edit ? { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour } : cand
+          }),
+        })),
+      })
+    }
     setMenuOpen(false)
-  }
-
-  const applyMenuChanges = () => {
-    if (!world) { generateFreshWorld(); return }
-    buildWorld(world.seed, world.playerPartyId)
-    setMenuOpen(false)
-  }
+  }, [world, constituencyCount])
 
   const advanceWeek = () => {
     if (!world) return
@@ -1024,6 +1380,7 @@ function App() {
   return (
     <div className="newspaper-shell">
       {/* Masthead */}
+      {!menuOpen && (
       <header className="masthead">
         <div className="masthead-rule" />
         <div className="masthead-inner">
@@ -1040,71 +1397,35 @@ function App() {
         </div>
         <div className="masthead-rule" />
       </header>
+      )}
 
       <main className="front-page">
-        {/* Menu overlay */}
+        {/* Setup screen — full-screen splash on first visit, modal overlay mid-game */}
         {menuOpen && (
-          <section className="menu-overlay">
-            <div className="menu-shell panel">
-              <div className="menu-layout">
-                <section className="menu-intro-panel">
-                  <div className="panel-kicker">Town Hall Setup</div>
-                  <h3>Start a New Council Race</h3>
-                  <p>
-                    A tiny English town, {constituencyCount} wards, and a cast of local characters. You play as the underdog party. Can you win a majority before election day?
-                  </p>
-                  <div className="control-strip">
-                    <label>
-                      <span>Wards</span>
-                      <input
-                        type="range"
-                        min={5}
-                        max={12}
-                        value={constituencyCount}
-                        onChange={(event) => setConstituencyCount(Number(event.target.value))}
-                      />
-                      <strong>{constituencyCount}</strong>
-                    </label>
-                    <button className="ink-button" type="button" onClick={generateFreshWorld}>
-                      New Town
-                    </button>
-                    <button className="ink-button secondary" type="button" onClick={applyMenuChanges}>
-                      {world ? 'Apply Changes' : 'Start Race'}
-                    </button>
-                  </div>
-                  {world && (
-                    <div className="menu-world-note">
-                      <strong>Current:</strong> {world.townName}, week {world.week}, {world.constituencies.length} wards.
-                    </div>
-                  )}
-                </section>
-                <PartyWorkbench
-                  customParties={customParties}
-                  parties={world?.parties ?? []}
-                  playerPartyId={world?.playerPartyId ?? ''}
-                  showPlayerPicker={Boolean(world)}
-                  onCreateParty={(party) => {
-                    const next = [...customParties, party]
-                    setCustomParties(next)
-                    if (world) buildWorld(world.seed, world.playerPartyId, next)
-                  }}
-                  onRemoveParty={(name) => {
-                    const next = customParties.filter((p) => p.name !== name)
-                    setCustomParties(next)
-                    if (world) buildWorld(world.seed, world.playerPartyId, next)
-                  }}
-                  onSelectPlayerParty={(partyId) => {
-                    if (!world) return
-                    setWorld({ ...world, playerPartyId: partyId })
-                  }}
-                />
-              </div>
-            </div>
-          </section>
+          <SetupScreen
+            world={world}
+            constituencyCount={constituencyCount}
+            onSetConstituencyCount={setConstituencyCount}
+            onGenerate={() => {
+              // Generate a new world and stay on the setup screen — let player pick a party first
+              const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], playerPartyId: undefined })
+              setPreviousWorld(null)
+              setWorld(nextWorld)
+              setShowElectionNight(false)
+              setShowGovernance(false)
+              setLastActionResult(null)
+              setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
+              setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
+              setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
+              // menuOpen stays true — user must press Start Race to begin
+            }}
+            onStart={handleSetupStart}
+            onClose={world ? () => setMenuOpen(false) : undefined}
+          />
         )}
 
         {/* Top bar */}
-        {world && (
+        {world && !menuOpen && (
           <div className="game-topbar">
             {/* Player party status */}
             <div className="topbar-party-block" style={{ borderLeftColor: playerParty?.colour ?? '#888' }}>

@@ -2080,21 +2080,100 @@ export function topBlocEntries(blocMix: Record<string, number>, limit = 4) {
 }
 
 export function describeValues(values: PoliticalValues) {
-  const words: string[] = []
-  if (values.change > 18) words.push('restless')
-  if (values.change < -10) words.push('steady')
-  if (values.growth > 18) words.push('growth-hungry')
-  if (values.growth < -10) words.push('careful-spending')
-  if (values.services > 20) words.push('service-focused')
-  if (words.length === 0) words.push('easygoing')
-  return words.slice(0, 3).join(' / ')
+  const stances: string[] = []
+  if (values.change > 25) stances.push('Reformist')
+  else if (values.change < -25) stances.push('Traditional')
+  if (values.growth > 25) stances.push('Pro-growth')
+  else if (values.growth < -25) stances.push('Cautious')
+  if (values.services > 25) stances.push('High-services')
+  else if (values.services < -25) stances.push('Low-tax')
+  return stances.length > 0 ? stances.join(' · ') : 'Centrist'
+}
+
+// ─── Ideology helpers (used in UI components) ─────────────────────────────────
+
+export const IDEOLOGY_AXES = [
+  { key: 'change'   as const, leftLabel: 'Tradition', rightLabel: 'Reform',     leftShort: 'Traditional', rightShort: 'Reformist'  },
+  { key: 'growth'   as const, leftLabel: 'Caution',   rightLabel: 'Enterprise', leftShort: 'Cautious',    rightShort: 'Pro-growth' },
+  { key: 'services' as const, leftLabel: 'Thrift',    rightLabel: 'Services',   leftShort: 'Low-tax',     rightShort: 'High-services' },
+]
+
+export function axisStance(value: number, axis: typeof IDEOLOGY_AXES[number]): string | null {
+  if (value > 25) return axis.rightShort
+  if (value < -25) return axis.leftShort
+  return null
+}
+
+export function ideologySummary(values: PoliticalValues): string {
+  const stances = IDEOLOGY_AXES
+    .map((ax) => axisStance(values[ax.key], ax))
+    .filter(Boolean) as string[]
+  return stances.length > 0 ? stances.join(' · ') : 'Centrist'
+}
+
+export function wardFitSentence(
+  partyValues: PoliticalValues,
+  wardValues: PoliticalValues,
+): { sentence: string; quality: 'good' | 'neutral' | 'poor' } {
+  // Use continuous distance on each axis — same logic as the scorer
+  const axisDiffs = IDEOLOGY_AXES.map((ax) => ({
+    ax,
+    diff: Math.abs(partyValues[ax.key] - wardValues[ax.key]),
+    partyVal: partyValues[ax.key],
+    wardVal: wardValues[ax.key],
+  }))
+
+  // Average absolute difference across axes (0 = perfect match, 200 = polar opposite)
+  const avg = axisDiffs.reduce((sum, a) => sum + a.diff, 0) / axisDiffs.length
+
+  // Quality thresholds calibrated to the scorer's /7000 denominator
+  const quality: 'good' | 'neutral' | 'poor' = avg < 28 ? 'good' : avg > 52 ? 'poor' : 'neutral'
+
+  // Find the closest and furthest axis
+  const sorted = [...axisDiffs].sort((a, b) => a.diff - b.diff)
+  const closest = sorted[0]
+  const furthest = sorted[sorted.length - 1]
+
+  // Describe ward preference on the furthest-apart axis
+  const furthestWardLabel = furthest.wardVal > 25
+    ? furthest.ax.rightShort
+    : furthest.wardVal < -25
+      ? furthest.ax.leftShort
+      : `the ${furthest.ax.leftLabel}/${furthest.ax.rightLabel} middle`
+
+  if (quality === 'good') {
+    if (avg < 12) {
+      return { sentence: `Strong ideological match — your values closely reflect what this ward wants.`, quality }
+    }
+    return { sentence: `Good match on ${closest.ax.rightLabel}/${closest.ax.leftLabel}. These voters should respond well to your campaign.`, quality }
+  }
+
+  if (quality === 'poor') {
+    return {
+      sentence: `Difficult territory — ward wants ${furthestWardLabel} but you diverge on ${furthest.ax.rightLabel}. Campaigning here costs more to move votes.`,
+      quality,
+    }
+  }
+
+  // Neutral: explain the gap clearly
+  if (closest.diff < 20 && furthest.diff > 45) {
+    return {
+      sentence: `Mixed fit — you align on ${closest.ax.rightLabel} but the ward leans ${furthestWardLabel} where you differ. Some voters reachable, some aren't.`,
+      quality,
+    }
+  }
+  if (avg < 38) {
+    return { sentence: `Moderate match — neither a natural base nor hostile ground. Campaigning here can move votes.`, quality }
+  }
+  return { sentence: `Lukewarm fit — this ward doesn't strongly align with your platform but isn't completely opposed either.`, quality }
 }
 
 export function axisSummary(values: PoliticalValues) {
-  return VALUE_KEYS.map((key) => ({ key, value: values[key] }))
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 3)
-    .map(({ key, value }) => `${key} ${value < 0 ? 'leans low' : 'leans high'} ${Math.abs(value).toFixed(0)}`)
+  const lines: string[] = []
+  if (Math.abs(values.change) > 15) lines.push(`${values.change > 0 ? 'Reform' : 'Tradition'}: ${Math.abs(values.change).toFixed(0)}`)
+  if (Math.abs(values.growth) > 15) lines.push(`${values.growth > 0 ? 'Enterprise' : 'Caution'}: ${Math.abs(values.growth).toFixed(0)}`)
+  if (Math.abs(values.services) > 15) lines.push(`${values.services > 0 ? 'Services' : 'Thrift'}: ${Math.abs(values.services).toFixed(0)}`)
+  return lines.length > 0 ? lines : ['Centrist across all axes']
 }
 
 export function getAvailableActions(world: World): CampaignAction[] {
