@@ -132,20 +132,21 @@ export function ConstituencyInspector({
           {selectedWard.history.length > 0 && (
             <div>
               <h4>History</h4>
-              <div className="ward-history-list">
+              <div className="ward-history-scroll">
                 {(() => {
-                  // history is chronological (oldest first); reverse to show newest first
-                  const reversed = [...selectedWard.history].reverse().slice(0, 8)
+                  // Show all history, newest first
+                  const reversed = [...selectedWard.history].reverse()
+                  // Scale bars: widest margin in this ward's history = 100%
+                  const maxMargin = Math.max(...reversed.map((e) => e.margin), 1)
+
                   return reversed.map((entry, i) => {
                     const party = world.parties.find((p) => p.id === entry.leadingPartyId)
-                    // The entry *before* this one in time is at index i+1 in reversed array
                     const olderEntry = reversed[i + 1]
-                    // A change occurred if the leader is different from the previous week
                     const leaderChanged = olderEntry != null && olderEntry.leadingPartyId !== entry.leadingPartyId
-                    // GAIN = your party took the ward this week (wasn't leading before)
-                    // LOSS = your party lost the ward this week (was leading before, isn't now)
                     const yourPartyGained = leaderChanged && entry.leadingPartyId === playerPartyId
                     const yourPartyLost = leaderChanged && olderEntry.leadingPartyId === playerPartyId
+                    const barWidth = (entry.margin / maxMargin) * 100
+
                     return (
                       <div key={entry.week} className="history-item">
                         <span className="history-week">Wk {entry.week}</span>
@@ -154,12 +155,25 @@ export function ConstituencyInspector({
                           style={{ background: party?.colour ?? '#888' }}
                         />
                         <span className="history-party">{party?.name ?? entry.leadingPartyId}</span>
+                        {/* Badge slot — always present to keep grid alignment */}
+                        <span className="history-badge-slot">
+                          {yourPartyGained && <span className="history-change held">GAIN</span>}
+                          {yourPartyLost && <span className="history-change lost">LOSS</span>}
+                          {leaderChanged && !yourPartyGained && !yourPartyLost && (
+                            <span className="history-change neutral">FLIP</span>
+                          )}
+                        </span>
+                        {/* Margin bar, coloured by party */}
+                        <div className="history-bar-wrap">
+                          <div
+                            className="history-bar-fill"
+                            style={{
+                              width: `${barWidth}%`,
+                              background: party?.colour ?? '#888',
+                            }}
+                          />
+                        </div>
                         <span className="history-margin">+{entry.margin.toFixed(1)}</span>
-                        {yourPartyGained && <span className="history-change held">GAIN</span>}
-                        {yourPartyLost && <span className="history-change lost">LOSS</span>}
-                        {leaderChanged && !yourPartyGained && !yourPartyLost && (
-                          <span className="history-change neutral">FLIPPED</span>
-                        )}
                       </div>
                     )
                   })

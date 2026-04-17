@@ -417,8 +417,12 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
                   const barWidth = (r.voteShare / leaderShare) * 100
                   const isPlayer = r.partyId === world.playerPartyId
                   const isWinner = rank === 0
-                  // Find candidate for this ward+party
                   const candidate = focusWard.candidates?.find((c) => c.partyId === r.partyId)
+                  // Incumbent = who won this ward at the last actual election
+                  const incumbentPartyId = world.electionsHeld >= 1
+                    ? world.electionNightResults.find((en) => en.wardId === focusWard.id)?.winner?.partyId
+                    : undefined
+                  const isIncumbent = incumbentPartyId != null && r.partyId === incumbentPartyId
                   return (
                     <div key={r.partyId} className={`fwp-cand-row${isPlayer ? ' is-player' : ''}${isWinner ? ' is-winner' : ''}`}>
                       <div className="fwp-cand-identity">
@@ -426,7 +430,10 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
                           {candidate?.initials ?? r.partyName.slice(0, 2).toUpperCase()}
                         </span>
                         <div className="fwp-cand-names">
-                          <span className="fwp-cand-name">{candidate?.name ?? r.partyName}</span>
+                          <div className="fwp-cand-name-row">
+                            <span className="fwp-cand-name">{candidate?.name ?? r.partyName}</span>
+                            {isIncumbent && <span className="incumbent-badge">INC</span>}
+                          </div>
                           <span className="fwp-cand-party">{r.partyName}</span>
                         </div>
                       </div>
