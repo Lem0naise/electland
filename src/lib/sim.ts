@@ -1798,6 +1798,7 @@ export function generateWorld(options: WorldOptions): World {
     electionNightActive: false,
     electionNightResults: [],
     electionNightRevealIndex: 0,
+    electionNightPreviousSeats: {},
     electionsHeld: 0,
     playerWon: false,
     playerLost: false,
@@ -1886,21 +1887,50 @@ export function simulateWeek(world: World): World {
   const playerWon = electionHappening && (playerResult?.seatsWon ?? 0) >= majority
   const playerLost = electionHappening && !playerWon
 
+  // Capture seat counts BEFORE this election for before/after comparison
+  const electionNightPreviousSeats: Record<string, number> = electionHappening
+    ? Object.fromEntries(world.parties.map((p) => {
+        // Use the previous election's results if they exist, else current weekly poll
+        const prevResult = world.electionsHeld > 0
+          ? world.electionNightResults.filter((r) => r.winner?.partyId === p.id).length
+          : world.nationalResults.find((r) => r.partyId === p.id)?.seatsWon ?? 0
+        return [p.id, prevResult]
+      }))
+    : world.electionNightPreviousSeats
+
   // Build election night results if election is happening
   const electionNightResults = electionHappening
     ? results.constituencies.map((seat) => {
         const winner = seat.candidates.find((c) => c.partyId === seat.leadingPartyId)
-        const previousHistory = seat.history[seat.history.length - 1]
+        // Previous election winner for this ward (from persisted electionNightResults)
+        const prevElectionEntry = world.electionsHeld > 0
+          ? world.electionNightResults.find((r) => r.wardId === seat.id)
+          : undefined
+        const prevWinnerPartyId = prevElectionEntry?.winner?.partyId
+        const prevWinnerParty = prevWinnerPartyId
+          ? world.parties.find((p) => p.id === prevWinnerPartyId)
+          : undefined
+        const prevWinnerCandidate = prevElectionEntry?.winner
+        // The ward changed hands if the new winner differs from the last election winner
+        const wasHeld = prevWinnerPartyId != null && seat.leadingPartyId !== prevWinnerPartyId
+        // Previous margin: use the last entry before the election in this ward's history
+        const prevMarginEntry = seat.history[seat.history.length - 1]
         return {
           wardId: seat.id,
           wardName: seat.name,
           winner: winner ?? seat.candidates[0],
           results: seat.results,
-          swingFromLastElection: previousHistory
-            ? seat.margin - previousHistory.margin
+          swingFromLastElection: prevMarginEntry
+            ? seat.margin - prevMarginEntry.margin
             : undefined,
-          wasHeld: seat.leadingPartyId !== (seat.history[0]?.leadingPartyId ?? seat.leadingPartyId),
-          previousWinner: seat.history[0]?.leadingPartyId,
+          wasHeld,
+          previousWinnerPartyId: prevWinnerPartyId,
+          previousWinnerPartyName: prevWinnerParty?.name,
+          previousWinnerCandidateName: prevWinnerCandidate?.name,
+          previousWinnerColour: prevWinnerParty?.colour,
+          previousMargin: prevElectionEntry?.results[0]
+            ? prevElectionEntry.results[0].voteShare - (prevElectionEntry.results[1]?.voteShare ?? 0)
+            : undefined,
         }
       })
     : world.electionNightResults
@@ -1992,6 +2022,7 @@ export function simulateWeek(world: World): World {
     electionNightActive: electionHappening,
     electionNightResults,
     electionNightRevealIndex: 0,
+    electionNightPreviousSeats,
     electionsHeld: world.electionsHeld + (electionHappening ? 1 : 0),
     playerWon: world.playerWon || playerWon,
     playerLost: !playerWon && playerLost ? true : world.playerLost,

@@ -1523,11 +1523,11 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 .election-result-card {
   border: 1px solid var(--ink-faint);
-  padding: 8px;
+  padding: 7px 8px;
   background: rgba(255,255,255,0.5);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   animation: card-appear 300ms ease forwards;
 }
 @keyframes card-appear {
@@ -1535,11 +1535,16 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   to { transform: scale(1); opacity: 1; }
 }
 .election-result-card.is-player { border-color: var(--ink-mid); background: rgba(122,96,48,0.1); }
-.election-result-card.is-held { border-color: #1a5c2a; }
+.election-result-card.is-gain { border-color: #1a5c2a; background: rgba(26,92,42,0.06); }
+.election-result-card.is-loss { border-color: var(--accent-red); background: rgba(155,28,28,0.05); }
+.election-result-card.is-flip { border-color: rgba(100,60,0,0.4); background: rgba(184,134,11,0.05); }
+.election-result-card.is-player.is-gain { background: rgba(26,92,42,0.1); }
+.election-result-card.is-player.is-loss { background: rgba(155,28,28,0.08); }
+
 .pending-card { cursor: pointer; border-style: dashed; opacity: 0.75; justify-content: center; align-items: center; min-height: 80px; }
 .pending-card:hover { opacity: 1; border-color: var(--ink-mid); }
 .pending-reveal { font-size: 0.75rem; color: var(--ink-soft); text-align: center; }
-.result-card-ward { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
+.result-card-ward { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
 .result-card-winner {
   display: flex;
   align-items: center;
@@ -1547,6 +1552,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   padding-left: 6px;
   border-left: 3px solid transparent;
 }
+.result-winner-names { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .result-candidate-initials {
   width: 22px;
   height: 22px;
@@ -1559,22 +1565,69 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   font-size: 0.6rem;
   flex-shrink: 0;
 }
-.result-candidate-name { font-size: 0.78rem; font-weight: 700; }
-.result-party-name { font-size: 0.65rem; color: var(--ink-soft); }
-.result-card-share { display: flex; align-items: baseline; gap: 5px; }
-.result-card-share strong { font-size: 0.85rem; }
-.result-card-share small { font-size: 0.7rem; color: var(--ink-soft); }
-.held-badge {
-  margin-left: auto;
-  font-size: 0.58rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  color: #1a5c2a;
-  border: 1px solid #1a5c2a;
-  padding: 0 3px;
+.result-candidate-name { font-size: 0.78rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-party-name { font-size: 0.62rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-card-stats { display: flex; align-items: baseline; gap: 6px; }
+.result-pct { font-size: 0.85rem; font-weight: 700; }
+.result-margin { font-size: 0.7rem; color: var(--ink-soft); }
+/* Change of hands line */
+.result-card-change { font-size: 0.68rem; margin-top: 1px; }
+.change-gain { color: #1a5c2a; font-weight: 700; }
+.change-loss { color: var(--accent-red); font-weight: 700; }
+.change-flip { color: var(--ink-mid); font-style: italic; }
+
+.election-night-summary { border-top: 2px solid var(--ink-mid); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Before / after council comparison */
+.en-before-after {
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.35);
+  border: 1px solid var(--ink-faint);
 }
-.election-night-summary { border-top: 2px solid var(--ink-mid); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
-.night-standings { display: flex; flex-direction: column; gap: 5px; }
+.en-ba-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); margin-bottom: 6px; }
+.en-ba-rows { display: flex; flex-direction: column; gap: 3px; }
+.en-ba-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 22px 14px 22px 30px;
+  gap: 5px;
+  align-items: center;
+  font-size: 0.78rem;
+}
+.en-ba-row.is-player { font-weight: 700; }
+.en-ba-swatch { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(44,31,14,0.3); }
+.en-ba-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.en-ba-before { text-align: right; color: var(--ink-soft); }
+.en-ba-arrow { text-align: center; color: var(--ink-soft); font-size: 0.7rem; }
+.en-ba-after { text-align: right; font-weight: 700; }
+.en-ba-delta { font-size: 0.72rem; font-weight: 700; text-align: right; }
+.en-ba-delta.up { color: #1a5c2a; }
+.en-ba-delta.down { color: var(--accent-red); }
+
+/* Gains / losses pills */
+.en-flips { display: flex; flex-direction: column; gap: 5px; }
+.en-flips-section { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+.en-flips-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 70px;
+}
+.en-flips-label.gain { color: #1a5c2a; }
+.en-flips-label.loss { color: var(--accent-red); }
+.en-flips-label.flip { color: var(--ink-soft); }
+.en-flip-pill {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border: 1px solid;
+  border-radius: 2px;
+}
+.en-flip-pill.gain { color: #1a5c2a; border-color: rgba(26,92,42,0.35); background: rgba(26,92,42,0.06); }
+.en-flip-pill.loss { color: var(--accent-red); border-color: rgba(155,28,28,0.35); background: rgba(155,28,28,0.05); }
+.en-flip-pill.flip { color: var(--ink-mid); border-color: var(--ink-faint); background: rgba(255,255,255,0.3); }
+
+.night-standings { display: flex; flex-direction: column; gap: 4px; }
 .night-standing {
   display: grid;
   grid-template-columns: 12px 1fr auto auto auto;

@@ -244,8 +244,15 @@ export interface ElectionNightResult {
   winner: WardCandidate
   results: ConstituencyResult[]
   swingFromLastElection?: number
+  // Whether this ward changed hands at this election
   wasHeld: boolean
-  previousWinner?: string
+  // Party that held the seat before this election
+  previousWinnerPartyId?: string
+  previousWinnerPartyName?: string
+  previousWinnerCandidateName?: string
+  previousWinnerColour?: string
+  // Margin the previous holder had going into the election
+  previousMargin?: number
 }
 
 // Governance mode: between elections
@@ -309,6 +316,8 @@ export interface World {
   electionNightActive: boolean
   electionNightResults: ElectionNightResult[]
   electionNightRevealIndex: number
+  // Seat counts from BEFORE this election (for before/after comparison)
+  electionNightPreviousSeats: Record<string, number>
   // How many elections have been held
   electionsHeld: number
   // Whether the player has won
