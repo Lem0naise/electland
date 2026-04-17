@@ -1,0 +1,1091 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import './App.css'
+import { ConstituencyInspector } from './components/ConstituencyInspector'
+import { MapFigure } from './components/MapFigure'
+import { PartyWorkbench } from './components/PartyWorkbench'
+import {
+  applyCampaignAction,
+  estimateTilePreference,
+  generateWorld,
+  getAvailableActions,
+  simulateWeek,
+} from './lib/sim'
+import type {
+  ActionResult,
+  CampaignAction,
+  CustomPartyDraft,
+  GovernanceDecision,
+  PopulationTile,
+  World,
+} from './types/sim'
+
+type MapMode = 'ward' | 'bloc' | 'voter'
+type RightPanel = 'race' | 'actions' | 'news' | 'history'
+
+const blocPalette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d5524', '#c56b37']
+
+function dominantBlocId(blocMix: Record<string, number>) {
+  return Object.entries(blocMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+}
+
+function trendDirection(delta: number, threshold = 0.05) {
+  if (delta > threshold) return 'up'
+  if (delta < -threshold) return 'down'
+  return 'flat'
+}
+
+function formatSigned(value: number, digits = 1) {
+  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`
+}
+
+// ─── Election Night Modal ─────────────────────────────────────────────────────
+function ElectionNightModal({ world, onReveal, onClose }: {
+  world: World
+  onReveal: () => void
+  onClose: () => void
+}) {
+  const revealed = world.electionNightResults.slice(0, world.electionNightRevealIndex)
+  const total = world.electionNightResults.length
+  const done = world.electionNightRevealIndex >= total
+  const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
+  const playerResult = world.nationalResults.find((r) => r.partyId === world.playerPartyId)
+  const majority = world.stats.councilMajority
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal election-night-modal">
+        <div className="modal-header">
+          <span className="modal-kicker">Election Night</span>
+          <h2>{world.townName} Council Results</h2>
+          <p className="modal-sub">Week {world.week} · {revealed.length} of {total} results declared</p>
+        </div>
+
+        <div className="election-night-grid">
+          {revealed.map((r) => {
+            const isPlayer = r.winner?.partyId === world.playerPartyId
+            const wasHeld = r.wasHeld
+            return (
+              <div key={r.wardId} className={`election-result-card${isPlayer ? ' is-player' : ''}${wasHeld ? ' is-held' : ''}`}>
+                <div className="result-card-ward">{r.wardName}</div>
+                {r.winner && (
+                  <div className="result-card-winner" style={{ borderLeftColor: r.winner.partyColour }}>
+                    <span className="result-candidate-initials" style={{ background: r.winner.partyColour }}>{r.winner.initials}</span>
+                    <span className="result-candidate-name">{r.winner.name}</span>
+                    <span className="result-party-name">{r.winner.partyName}</span>
+                  </div>
+                )}
+                <div className="result-card-share">
+                  {r.results[0] && <strong>{r.results[0].voteShare.toFixed(1)}%</strong>}
+                  {r.results[1] && <small>+{(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)} pts</small>}
+                  {wasHeld && <span className="held-badge">GAIN</span>}
+                </div>
+              </div>
+            )
+          })}
+
+          {!done && (
+            <div className="election-result-card pending-card" onClick={onReveal}>
+              <div className="result-card-ward">Next result...</div>
+              <div className="pending-reveal">Click to reveal</div>
+            </div>
+          )}
+        </div>
+
+        {done && (
+          <div className="election-night-summary">
+            <div className="night-standings">
+              {world.nationalResults.map((r) => (
+                <div key={r.partyId} className={`night-standing${r.partyId === world.playerPartyId ? ' is-player' : ''}`}>
+                  <span className="swatch" style={{ background: r.colour }} />
+                  <span className="night-party-name">{r.partyName}</span>
+                  <strong className="night-seats">{r.seatsWon}</strong>
+                  <span className="night-seats-label">seats</span>
+                  {r.seatsWon >= majority && <span className="majority-badge">MAJORITY</span>}
+                </div>
+              ))}
+            </div>
+
+            <div className={`election-night-verdict${world.playerWon ? ' verdict-win' : ' verdict-loss'}`}>
+              {world.playerWon
+                ? `${playerParty?.name ?? 'Your party'} wins the council! ${playerResult?.seatsWon ?? 0} seats — a majority of ${majority}.`
+                : `${world.currentMayorParty} holds the council. ${playerParty?.name ?? 'Your party'} won ${playerResult?.seatsWon ?? 0} of ${majority} needed.`}
+            </div>
+
+            <button className="ink-button" type="button" onClick={onClose}>
+              {world.playerWon ? 'Govern the town' : 'Campaign continues'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Governance Modal ─────────────────────────────────────────────────────────
+function GovernanceModal({ world, decisions, onDecide, onClose }: {
+  world: World
+  decisions: GovernanceDecision[]
+  onDecide: (decisionId: string, choiceIndex: number) => void
+  onClose: () => void
+}) {
+  const pending = decisions.filter((d) => !d.resolved)
+  if (pending.length === 0) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal governance-modal">
+          <div className="modal-header">
+            <span className="modal-kicker">Council Chambers</span>
+            <h2>Governing {world.townName}</h2>
+          </div>
+          <p>All decisions resolved. Your choices will shape voter opinion before the next election.</p>
+          <button className="ink-button" type="button" onClick={onClose}>Return to campaign</button>
+        </div>
+      </div>
+    )
+  }
+
+  const current = pending[0]
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal governance-modal">
+        <div className="modal-header">
+          <span className="modal-kicker">Council Decision</span>
+          <h2>{current.headline}</h2>
+          <p className="modal-sub">{current.description}</p>
+        </div>
+        <div className="governance-choices">
+          {current.choices.map((choice, index) => (
+            <button
+              key={index}
+              className="governance-choice-btn"
+              type="button"
+              onClick={() => onDecide(current.id, index)}
+            >
+              <strong>{choice.label}</strong>
+              <span>{choice.description}</span>
+              <small>{choice.effect.playerUtilityDelta > 0 ? '↑ Boosts your support' : choice.effect.playerUtilityDelta < 0 ? '↓ Risky for your party' : '→ Neutral for your party'}</small>
+            </button>
+          ))}
+        </div>
+        <p className="governance-note">{pending.length - 1} more decision{pending.length - 1 !== 1 ? 's' : ''} pending.</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Action Flash ─────────────────────────────────────────────────────────────
+function ActionFlash({ result, onDismiss }: { result: ActionResult; onDismiss: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 3200)
+    return () => clearTimeout(timer)
+  }, [onDismiss])
+
+  return (
+    <div className={`action-flash action-flash-${result.outcome}`} onClick={onDismiss}>
+      <div className="flash-outcome-icon">
+        {result.outcome === 'success' ? '✓' : result.outcome === 'backfire' ? '✗' : '~'}
+      </div>
+      <div className="flash-body">
+        <strong>{result.outcome === 'success' ? 'Success' : result.outcome === 'backfire' ? 'Backfired!' : 'Neutral'}</strong>
+        <span>{result.description}</span>
+        {result.voteShareDelta !== undefined && Math.abs(result.voteShareDelta) > 0.1 && (
+          <span className={`flash-delta${result.voteShareDelta > 0 ? ' positive' : ' negative'}`}>
+            {formatSigned(result.voteShareDelta, 1)}pp in {result.wardName ?? 'affected wards'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Campaign Actions Panel ───────────────────────────────────────────────────
+function CampaignActionsPanel({ world, selectedWardId, onAction }: {
+  world: World
+  selectedWardId: string
+  onAction: (action: CampaignAction) => void
+}) {
+  const [focusWardId, setFocusWardId] = useState(selectedWardId)
+  const [actionType, setActionType] = useState<'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event'>('canvass')
+  const [smearTargetId, setSmearTargetId] = useState('')
+  const [policyAxis, setPolicyAxis] = useState<'change' | 'growth' | 'services'>('change')
+  const [policyDir, setPolicyDir] = useState<1 | -1>(1)
+
+  useEffect(() => {
+    setFocusWardId(selectedWardId)
+  }, [selectedWardId])
+
+  const ap = world.playerActionPoints
+  const actions = getAvailableActions(world)
+  const focusWard = world.constituencies.find((c) => c.id === focusWardId)
+  const opponents = world.parties.filter((p) => p.id !== world.playerPartyId)
+
+  const apCosts: Record<string, number> = { canvass: 1, ads: 2, rally: 3, smear: 2, policy_shift: 0, respond_event: 1 }
+  const currentCost = apCosts[actionType] ?? 1
+  const canAfford = ap >= currentCost
+
+  const actionTypeLabels: Record<string, string> = {
+    canvass: 'Canvass',
+    ads: 'Run Ads',
+    rally: 'Hold Rally',
+    smear: 'Attack',
+    policy_shift: 'Policy Shift',
+    respond_event: 'Respond to Event',
+  }
+
+  const hasEvent = world.weeklyEvent && !world.weeklyEvent.resolved
+
+  function handleSubmit() {
+    if (!canAfford) return
+    if (actionType === 'policy_shift') {
+      onAction({
+        type: 'policy_shift',
+        label: `Shift policy`,
+        description: '',
+        apCost: 0,
+        policyAxis,
+        policyDirection: policyDir,
+      })
+    } else if (actionType === 'respond_event') {
+      // handled separately via event buttons
+    } else {
+      const matchingActions = actions.filter((a) =>
+        a.type === actionType &&
+        a.wardId === focusWardId &&
+        (actionType !== 'smear' || a.targetPartyId === smearTargetId),
+      )
+      if (matchingActions[0]) onAction(matchingActions[0])
+    }
+  }
+
+  return (
+    <div className="actions-panel">
+      <div className="ap-bar">
+        <span className="ap-label">Action Points</span>
+        <div className="ap-pips">
+          {Array.from({ length: world.maxActionPoints }).map((_, i) => (
+            <span key={i} className={`ap-pip${i < ap ? ' filled' : ''}`} />
+          ))}
+        </div>
+        <span className="ap-count">{ap} / {world.maxActionPoints}</span>
+      </div>
+
+      {/* Weekly Event */}
+      {hasEvent && (
+        <div className="event-card">
+          <div className="event-kicker">This Week's Issue</div>
+          <h4 className="event-headline">{world.weeklyEvent!.headline}</h4>
+          <p className="event-desc">{world.weeklyEvent!.description}</p>
+          <div className="event-choices">
+            {world.weeklyEvent!.choices.map((choice, index) => (
+              <button
+                key={index}
+                className="event-choice-btn"
+                type="button"
+                disabled={ap < 1}
+                onClick={() => onAction({
+                  type: 'respond_event',
+                  label: choice.label,
+                  description: choice.description,
+                  apCost: 1,
+                  eventChoiceIndex: index,
+                })}
+              >
+                <strong>{choice.label}</strong>
+                <span>{choice.description}</span>
+                <small className="ap-cost-label">1 AP</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action type selector */}
+      <div className="action-type-row">
+        {(['canvass', 'ads', 'rally', 'smear', 'policy_shift'] as const).map((t) => {
+          const cost = apCosts[t] ?? 0
+          const affordable = ap >= cost
+          const isOnce = t === 'policy_shift' && world.policyShiftUsedThisCycle
+          return (
+            <button
+              key={t}
+              type="button"
+              className={`action-type-btn${actionType === t ? ' is-active' : ''}${!affordable || isOnce ? ' is-disabled' : ''}`}
+              onClick={() => !isOnce && setActionType(t)}
+            >
+              <span>{actionTypeLabels[t]}</span>
+              <span className="action-ap-badge">{cost === 0 ? isOnce ? 'USED' : 'FREE' : `${cost}AP`}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Ward selector (not needed for policy shift) */}
+      {actionType !== 'policy_shift' && (
+        <div className="action-config">
+          <label className="action-field">
+            <span>Target Ward</span>
+            <select value={focusWardId} onChange={(e) => setFocusWardId(e.target.value)}>
+              {world.constituencies.map((c) => {
+                const isBattleground = world.stats.battlegroundWardIds.includes(c.id)
+                const playerResult = c.results.find((r) => r.partyId === world.playerPartyId)
+                const margin = c.margin.toFixed(1)
+                return (
+                  <option key={c.id} value={c.id}>
+                    {isBattleground ? '⚡ ' : ''}{c.name} ({playerResult?.voteShare.toFixed(0) ?? 0}%, {c.leadingPartyId === world.playerPartyId ? `+${margin}` : `-${margin}`})
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+
+          {actionType === 'smear' && (
+            <label className="action-field">
+              <span>Target Party</span>
+              <select value={smearTargetId} onChange={(e) => setSmearTargetId(e.target.value)}>
+                <option value="">Select opponent...</option>
+                {opponents.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Policy shift config */}
+      {actionType === 'policy_shift' && !world.policyShiftUsedThisCycle && (
+        <div className="action-config">
+          <label className="action-field">
+            <span>Policy Axis</span>
+            <select value={policyAxis} onChange={(e) => setPolicyAxis(e.target.value as 'change' | 'growth' | 'services')}>
+              <option value="change">Reform / Change</option>
+              <option value="growth">Economic Growth</option>
+              <option value="services">Public Services</option>
+            </select>
+          </label>
+          <div className="policy-dir-row">
+            <button
+              type="button"
+              className={`policy-dir-btn${policyDir === 1 ? ' is-active' : ''}`}
+              onClick={() => setPolicyDir(1)}
+            >
+              More
+            </button>
+            <button
+              type="button"
+              className={`policy-dir-btn${policyDir === -1 ? ' is-active' : ''}`}
+              onClick={() => setPolicyDir(-1)}
+            >
+              Less
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Ward preview */}
+      {focusWard && actionType !== 'policy_shift' && (
+        <div className="ward-action-preview">
+          <div className="ward-preview-name">{focusWard.name}</div>
+          <div className="ward-preview-results">
+            {focusWard.results.slice(0, 3).map((r) => (
+              <div key={r.partyId} className={`ward-mini-result${r.partyId === world.playerPartyId ? ' is-player' : ''}`}>
+                <span className="mini-swatch" style={{ background: r.colour }} />
+                <span>{r.partyName}</span>
+                <strong>{r.voteShare.toFixed(1)}%</strong>
+              </div>
+            ))}
+          </div>
+          {world.stats.battlegroundWardIds.includes(focusWard.id) && (
+            <div className="battleground-badge">BATTLEGROUND — {focusWard.margin.toFixed(1)}pt margin</div>
+          )}
+        </div>
+      )}
+
+      {/* Submit button */}
+      {actionType !== 'respond_event' && (
+        <button
+          className="ink-button action-submit-btn"
+          type="button"
+          disabled={!canAfford || (actionType === 'smear' && !smearTargetId) || (actionType === 'policy_shift' && world.policyShiftUsedThisCycle)}
+          onClick={handleSubmit}
+        >
+          {!canAfford ? `Need ${currentCost} AP` : `${actionTypeLabels[actionType]} (${currentCost === 0 ? 'Free' : `${currentCost} AP`})`}
+        </button>
+      )}
+
+      {/* This week's actions log */}
+      {world.actionsThisWeek.length > 0 && (
+        <div className="week-actions-log">
+          <div className="log-label">This week</div>
+          {world.actionsThisWeek.map((a, i) => (
+            <div key={i} className={`log-entry log-${a.outcome}`}>
+              {a.outcome === 'success' ? '✓' : a.outcome === 'backfire' ? '✗' : '~'} {a.description}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── History chart (simple SVG sparklines) ───────────────────────────────────
+function VoteHistoryChart({ world }: { world: World }) {
+  const history = world.voteHistory
+  if (history.length < 2) {
+    return <div className="history-empty">Advance a few weeks to see vote trends.</div>
+  }
+
+  const width = 560
+  const height = 100
+  const padL = 28
+  const padR = 8
+  const padT = 6
+  const padB = 16
+  const chartW = width - padL - padR
+  const chartH = height - padT - padB
+
+  const weeks = history.map((h) => h.week)
+  const minWeek = Math.min(...weeks)
+  const maxWeek = Math.max(...weeks)
+
+  const topParties = world.nationalResults.slice(0, 4)
+
+  // Find actual max share across all tracked parties + history, then ceiling to nearest 5%
+  const allShares = history.flatMap((h) =>
+    topParties.map((p) => h.partyShares[p.partyId] ?? 0),
+  )
+  const rawMax = Math.max(...allShares, 5)
+  // Round up to nearest 10
+  const yMax = Math.ceil(rawMax / 10) * 10
+
+  // Pick 2–3 sensible gridline values
+  const gridlines = yMax <= 30
+    ? [Math.round(yMax / 2), yMax]
+    : yMax <= 60
+      ? [Math.round(yMax / 3), Math.round((yMax * 2) / 3), yMax]
+      : [25, 50, yMax]
+
+  function x(week: number) {
+    if (maxWeek === minWeek) return padL + chartW / 2
+    return padL + ((week - minWeek) / (maxWeek - minWeek)) * chartW
+  }
+
+  function y(share: number) {
+    return padT + chartH - (share / yMax) * chartH
+  }
+
+  return (
+    <div className="history-chart-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} className="history-svg">
+        {/* Gridlines + axis labels */}
+        {gridlines.map((pct) => (
+          <g key={pct}>
+            <line x1={padL} x2={padL + chartW} y1={y(pct)} y2={y(pct)} className="chart-gridline" />
+            <text x={padL - 4} y={y(pct) + 3} className="chart-axis-label" textAnchor="end">{pct}</text>
+          </g>
+        ))}
+        {/* Zero baseline */}
+        <line x1={padL} x2={padL + chartW} y1={y(0)} y2={y(0)} className="chart-gridline" strokeOpacity={0.4} />
+
+        {topParties.map((party) => {
+          const points = history
+            .map((h) => ({ week: h.week, share: h.partyShares[party.partyId] ?? 0 }))
+            .filter((p) => p.share > 0)
+          if (points.length < 2) return null
+          const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.week).toFixed(1)} ${y(p.share).toFixed(1)}`).join(' ')
+          const last = points[points.length - 1]
+          const isPlayer = party.partyId === world.playerPartyId
+          return (
+            <g key={party.partyId}>
+              <path d={d} fill="none" stroke={party.colour} strokeWidth={isPlayer ? 2.4 : 1.4} strokeOpacity={isPlayer ? 0.95 : 0.7} />
+              <circle cx={x(last.week)} cy={y(last.share)} r={isPlayer ? 3.5 : 2.5} fill={party.colour} />
+              {/* Party label at right end */}
+              <text
+                x={x(last.week) + 5}
+                y={y(last.share) + 3}
+                className="chart-axis-label"
+                style={{ fontSize: 8, fill: party.colour, fontWeight: isPlayer ? 700 : 400 }}
+              >
+                {last.share.toFixed(0)}%
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+
+      <div className="chart-legend">
+        {topParties.map((p) => (
+          <span key={p.partyId} className={`legend-item${p.partyId === world.playerPartyId ? ' is-player' : ''}`}>
+            <span className="legend-swatch" style={{ background: p.colour }} />
+            {p.partyName}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [constituencyCount, setConstituencyCount] = useState(8)
+  const [customParties, setCustomParties] = useState<CustomPartyDraft[]>([])
+  const [world, setWorld] = useState<World | null>(null)
+  const [previousWorld, setPreviousWorld] = useState<World | null>(null)
+  const [selectedConstituencyId, setSelectedConstituencyId] = useState('')
+  const [selectedBlocId, setSelectedBlocId] = useState('')
+  const [selectedTileId, setSelectedTileId] = useState('')
+  const [mapMode, setMapMode] = useState<MapMode>('ward')
+  const [menuOpen, setMenuOpen] = useState(true)
+  const [rightPanel, setRightPanel] = useState<RightPanel>('race')
+  const [lastActionResult, setLastActionResult] = useState<ActionResult | null>(null)
+  const [showElectionNight, setShowElectionNight] = useState(false)
+  const [showGovernance, setShowGovernance] = useState(false)
+  const newsRef = useRef<HTMLDivElement>(null)
+
+  // ── Derived ──────────────────────────────────────────────────────────────────
+  const selectedConstituency = useMemo(
+    () => world?.constituencies.find((seat) => seat.id === selectedConstituencyId),
+    [world, selectedConstituencyId],
+  )
+
+  const blocColours = useMemo(
+    () => Object.fromEntries((world?.blocs ?? []).map((bloc, index) => [bloc.id, blocPalette[index % blocPalette.length]])),
+    [world],
+  )
+
+  const selectedTile = useMemo(
+    () => world?.tiles.find((tile) => tile.id === selectedTileId),
+    [selectedTileId, world],
+  )
+
+  const constituencyTiles = useMemo(
+    () => world?.tiles.filter((tile) => tile.constituencyId === selectedConstituencyId).sort((a, b) => b.population - a.population) ?? [],
+    [selectedConstituencyId, world],
+  )
+
+  const tilePreferenceById = useMemo(() => {
+    if (!world) return new Map()
+    return new Map(world.tiles.map((tile) => [tile.id, estimateTilePreference(world, tile)]))
+  }, [world])
+
+  const selectedTileEstimate = selectedTile ? tilePreferenceById.get(selectedTile.id) ?? null : null
+
+  const previousNationalById = useMemo(
+    () => new Map((previousWorld?.nationalResults ?? []).map((result) => [result.partyId, result])),
+    [previousWorld],
+  )
+
+  const playerParty = world?.parties.find((party) => party.id === world.playerPartyId)
+  const playerResult = world?.nationalResults.find((r) => r.partyId === world.playerPartyId)
+
+  // ── Selection cleanup effects ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!world) {
+      setSelectedBlocId('')
+      setSelectedTileId('')
+      return
+    }
+    if (!selectedConstituencyId || !world.constituencies.some((seat) => seat.id === selectedConstituencyId)) {
+      setSelectedConstituencyId(world.constituencies[0]?.id ?? '')
+    }
+  }, [selectedConstituencyId, world])
+
+  useEffect(() => {
+    if (!selectedConstituency) return
+    const defaultBlocId = dominantBlocId(selectedConstituency.blocMix)
+    if (!selectedBlocId || !world?.blocs.some((bloc) => bloc.id === selectedBlocId)) {
+      setSelectedBlocId(defaultBlocId)
+    }
+    if (!selectedTileId || !constituencyTiles.some((tile) => tile.id === selectedTileId)) {
+      setSelectedTileId(constituencyTiles[0]?.id ?? '')
+    }
+  }, [constituencyTiles, selectedBlocId, selectedConstituency, selectedTileId, world])
+
+  // Show election night when it activates — only trigger once per election
+  useEffect(() => {
+    if (world?.electionNightActive && !showElectionNight) {
+      setShowElectionNight(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world?.electionNightActive])
+
+  // Show governance when it activates
+  useEffect(() => {
+    if (world?.isGoverning && world.governanceDecisions.some((d) => !d.resolved)) {
+      setShowGovernance(true)
+    }
+  }, [world?.isGoverning, world?.governanceDecisions])
+
+  // ── World builders ────────────────────────────────────────────────────────────
+  const buildWorld = useCallback((seed: number, playerPartyId?: string, partyDrafts?: CustomPartyDraft[]) => {
+    const nextWorld = generateWorld({
+      seed,
+      constituencyCount,
+      customParties: partyDrafts ?? customParties,
+      playerPartyId,
+    })
+    setPreviousWorld(null)
+    setWorld(nextWorld)
+    setShowElectionNight(false)
+    setShowGovernance(false)
+    setLastActionResult(null)
+    setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
+    setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
+    setSelectedTileId(nextWorld.tiles.find((tile) => tile.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
+  }, [constituencyCount, customParties])
+
+  const generateFreshWorld = () => {
+    buildWorld(Date.now())
+    setMenuOpen(false)
+  }
+
+  const applyMenuChanges = () => {
+    if (!world) { generateFreshWorld(); return }
+    buildWorld(world.seed, world.playerPartyId)
+    setMenuOpen(false)
+  }
+
+  const advanceWeek = () => {
+    if (!world) return
+    setPreviousWorld(world)
+    setWorld(simulateWeek(world))
+    setRightPanel('actions')
+  }
+
+  const handleAction = (action: CampaignAction) => {
+    if (!world) return
+    const { world: nextWorld, result } = applyCampaignAction(world, action)
+    setWorld(nextWorld)
+    setLastActionResult(result)
+  }
+
+  const handleGovernanceDecision = (decisionId: string, choiceIndex: number) => {
+    if (!world) return
+    const nextDecisions = world.governanceDecisions.map((d) =>
+      d.id === decisionId ? { ...d, resolved: true, chosenIndex: choiceIndex } : d,
+    )
+    const decision = world.governanceDecisions.find((d) => d.id === decisionId)
+    const choice = decision?.choices[choiceIndex]
+    let updatedParties = world.parties.map((p) => {
+      if (p.id !== world.playerPartyId || !choice) return p
+      return {
+        ...p,
+        baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta),
+      }
+    })
+    const newsFeedLine = `Week ${world.week}: Council decision — ${decision?.headline ?? 'decision made'} — you chose "${choice?.label ?? '?'}".`
+    setWorld({
+      ...world,
+      parties: updatedParties,
+      governanceDecisions: nextDecisions,
+      newsFeed: [newsFeedLine, ...world.newsFeed].slice(0, 30),
+    })
+    const stillPending = nextDecisions.filter((d) => !d.resolved)
+    if (stillPending.length === 0) setShowGovernance(false)
+  }
+
+  const focusTile = (tileId: string) => {
+    if (!world) return
+    const tile = world.tiles.find((entry) => entry.id === tileId)
+    if (!tile) return
+    setSelectedTileId(tile.id)
+    setSelectedBlocId(dominantBlocId(tile.blocMix))
+    if (tile.constituencyId) setSelectedConstituencyId(tile.constituencyId)
+  }
+
+  const electionIn = world?.weeksUntilElection ?? 0
+  const majority = world?.stats.councilMajority ?? 0
+  const playerSeats = playerResult?.seatsWon ?? 0
+  const seatsNeeded = majority - playerSeats
+  const isBattleground = world ? world.stats.battlegroundWardIds.length > 0 : false
+
+  return (
+    <div className="newspaper-shell">
+      {/* Masthead */}
+      <header className="masthead">
+        <div className="masthead-rule" />
+        <div className="masthead-inner">
+          <h1>Electland Gazette</h1>
+          {world && (
+            <div className="masthead-meta">
+              <span>{world.townName} Council</span>
+              <span>Week {world.week}</span>
+              <span className={`election-countdown${electionIn <= 4 ? ' urgent' : ''}`}>
+                {electionIn === 0 ? 'Election today!' : `Election in ${electionIn} week${electionIn !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="masthead-rule" />
+      </header>
+
+      <main className="front-page">
+        {/* Menu overlay */}
+        {menuOpen && (
+          <section className="menu-overlay">
+            <div className="menu-shell panel">
+              <div className="menu-layout">
+                <section className="menu-intro-panel">
+                  <div className="panel-kicker">Town Hall Setup</div>
+                  <h3>Start a New Council Race</h3>
+                  <p>
+                    A tiny English town, {constituencyCount} wards, and a cast of local characters. You play as the underdog party. Can you win a majority before election day?
+                  </p>
+                  <div className="control-strip">
+                    <label>
+                      <span>Wards</span>
+                      <input
+                        type="range"
+                        min={5}
+                        max={12}
+                        value={constituencyCount}
+                        onChange={(event) => setConstituencyCount(Number(event.target.value))}
+                      />
+                      <strong>{constituencyCount}</strong>
+                    </label>
+                    <button className="ink-button" type="button" onClick={generateFreshWorld}>
+                      New Town
+                    </button>
+                    <button className="ink-button secondary" type="button" onClick={applyMenuChanges}>
+                      {world ? 'Apply Changes' : 'Start Race'}
+                    </button>
+                  </div>
+                  {world && (
+                    <div className="menu-world-note">
+                      <strong>Current:</strong> {world.townName}, week {world.week}, {world.constituencies.length} wards.
+                    </div>
+                  )}
+                </section>
+                <PartyWorkbench
+                  customParties={customParties}
+                  parties={world?.parties ?? []}
+                  playerPartyId={world?.playerPartyId ?? ''}
+                  showPlayerPicker={Boolean(world)}
+                  onCreateParty={(party) => {
+                    const next = [...customParties, party]
+                    setCustomParties(next)
+                    if (world) buildWorld(world.seed, world.playerPartyId, next)
+                  }}
+                  onRemoveParty={(name) => {
+                    const next = customParties.filter((p) => p.name !== name)
+                    setCustomParties(next)
+                    if (world) buildWorld(world.seed, world.playerPartyId, next)
+                  }}
+                  onSelectPlayerParty={(partyId) => {
+                    if (!world) return
+                    setWorld({ ...world, playerPartyId: partyId })
+                  }}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Top bar */}
+        {world && (
+          <div className="game-topbar">
+            {/* Player party status */}
+            <div className="topbar-party-block" style={{ borderLeftColor: playerParty?.colour ?? '#888' }}>
+              {playerParty && (
+                <>
+                  <div className="party-initials-badge" style={{ background: playerParty.colour }}>
+                    {playerParty.leader.split(' ').map((n) => n[0]).join('')}
+                  </div>
+                  <div>
+                    <strong>{playerParty.name}</strong>
+                    <small>{playerParty.leader} · {playerSeats} seat{playerSeats !== 1 ? 's' : ''}{seatsNeeded > 0 ? ` · need ${seatsNeeded} more` : ' · MAJORITY!'}</small>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* AP bar */}
+            <div className="topbar-ap-block">
+              <span className="ap-label-small">AP</span>
+              <div className="ap-pips-small">
+                {Array.from({ length: world.maxActionPoints }).map((_, i) => (
+                  <span key={i} className={`ap-pip-small${i < world.playerActionPoints ? ' filled' : ''}`} />
+                ))}
+              </div>
+              <span className="ap-count-small">{world.playerActionPoints}/{world.maxActionPoints}</span>
+            </div>
+
+            {/* Election countdown */}
+            <div className={`topbar-countdown${electionIn <= 4 ? ' urgent' : ''}`}>
+              <span className="countdown-number">{electionIn}</span>
+              <span className="countdown-label">week{electionIn !== 1 ? 's' : ''} to election</span>
+            </div>
+
+            {/* Battleground alert */}
+            {isBattleground && (
+              <div className="battleground-alert">
+                {world.stats.battlegroundWardIds.length} battleground ward{world.stats.battlegroundWardIds.length !== 1 ? 's' : ''}
+              </div>
+            )}
+
+            <div className="topbar-actions">
+              <button className="ink-button secondary small" type="button" onClick={() => setMenuOpen(true)}>Menu</button>
+              <button className="ink-button small" type="button" onClick={advanceWeek}>
+                Advance Week →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main layout */}
+        <div className="dashboard-layout">
+          {world ? (
+            <>
+              {/* Map panel */}
+              <section className="panel map-panel">
+                <div className="map-panel-header">
+                  <div>
+                    <div className="panel-kicker">Campaign Map</div>
+                    <h3>{world.townName}</h3>
+                  </div>
+                  <div className="map-mode-row">
+                    {(['ward', 'bloc', 'voter'] as MapMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={`mode-btn${mode === mapMode ? ' is-active' : ''}`}
+                        onClick={() => setMapMode(mode)}
+                      >
+                        {mode === 'ward' ? 'Wards' : mode === 'bloc' ? 'Blocs' : 'Clusters'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Issues strip */}
+                <div className="currents-strip">
+                  {world.currents.map((current, i) => (
+                    <span key={`${current.id}-${i}`} className="current-pill">
+                      <span className="current-dot" />
+                      {current.label}
+                    </span>
+                  ))}
+                </div>
+
+                <MapFigure
+                  world={world}
+                  mapMode={mapMode}
+                  selectedConstituencyId={selectedConstituencyId}
+                  selectedBlocId={selectedBlocId}
+                  selectedTileId={selectedTileId}
+                  blocColours={blocColours}
+                  tilePreferenceById={tilePreferenceById}
+                  onSelectConstituency={(id) => { setSelectedConstituencyId(id); setRightPanel('race') }}
+                  onSelectBloc={setSelectedBlocId}
+                  onSelectTile={focusTile}
+                />
+
+                {/* Vote history chart */}
+                {world.voteHistory.length >= 2 && (
+                  <div className="history-section">
+                    <div className="section-label">Vote share over time</div>
+                    <VoteHistoryChart world={world} />
+                  </div>
+                )}
+              </section>
+
+              {/* Right column */}
+              <div className="right-column">
+                {/* Right panel tabs */}
+                <div className="right-tabs">
+                  {(['race', 'actions', 'news'] as RightPanel[]).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      className={`right-tab${rightPanel === tab ? ' is-active' : ''}`}
+                      onClick={() => setRightPanel(tab)}
+                    >
+                      {tab === 'race' ? 'Standings' : tab === 'actions' ? `Campaign${world.playerActionPoints > 0 ? ` (${world.playerActionPoints}AP)` : ''}` : 'News'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Race panel */}
+                {rightPanel === 'race' && (
+                  <section className="panel right-panel race-panel">
+                    {/* Key stats */}
+                    <div className="key-stats-row">
+                      <div className="key-stat accent">
+                        <span>Projected Winner</span>
+                        <strong>{world.stats.projectedMayorLeader}</strong>
+                        <small>{world.stats.projectedMayorParty} · {world.stats.projectedMayorWards} seats</small>
+                      </div>
+                      <div className="key-stat">
+                        <span>Current Mayor</span>
+                        <strong>{world.stats.currentMayorLeader}</strong>
+                        <small>{world.stats.currentMayorParty}</small>
+                      </div>
+                    </div>
+
+                    {/* Tightest race */}
+                    <div className="tightest-race-card">
+                      <span className="tightest-label">Tightest race</span>
+                      <strong>{world.stats.closestWardName}</strong>
+                      <div className="margin-bar-wrap">
+                        <div className="margin-bar" style={{ width: `${Math.min(100, world.stats.closestWardMargin * 4)}%` }} />
+                      </div>
+                      <small>{world.stats.closestWardMargin.toFixed(1)}pt margin</small>
+                    </div>
+
+                    {/* Party standings */}
+                    <div className="standings-list">
+                      {world.nationalResults.map((result, rank) => {
+                        const previous = previousNationalById.get(result.partyId)
+                        const voteDelta = previous ? result.voteShare - previous.voteShare : null
+                        const seatDelta = previous ? result.seatsWon - previous.seatsWon : null
+                        const isPlayer = result.partyId === world.playerPartyId
+                        const atMajority = result.seatsWon >= majority
+                        return (
+                          <div key={result.partyId} className={`standing-row${isPlayer ? ' is-player' : ''}${atMajority ? ' at-majority' : ''}`}>
+                            <span className="standing-rank">#{rank + 1}</span>
+                            <span className="standing-swatch" style={{ background: result.colour }} />
+                            <div className="standing-info">
+                              <strong>{result.partyName}</strong>
+                              <small>{result.leader}</small>
+                            </div>
+                            <div className="standing-numbers">
+                              <strong>{result.voteShare.toFixed(1)}%</strong>
+                              <span className="seats-count">{result.seatsWon} seats</span>
+                              {voteDelta !== null && (
+                                <span className={`mini-trend ${trendDirection(voteDelta)}`}>
+                                  {voteDelta > 0.05 ? '▲' : voteDelta < -0.05 ? '▼' : '—'} {Math.abs(voteDelta).toFixed(1)}
+                                </span>
+                              )}
+                              {seatDelta !== null && seatDelta !== 0 && (
+                                <span className={`seat-delta ${seatDelta > 0 ? 'up' : 'down'}`}>
+                                  {seatDelta > 0 ? '+' : ''}{seatDelta}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Majority meter */}
+                    <div className="majority-meter">
+                      <span className="meter-label">Majority: {majority} seats needed</span>
+                      <div className="meter-track">
+                        {world.nationalResults.map((r) => (
+                          <div
+                            key={r.partyId}
+                            className={`meter-segment${r.partyId === world.playerPartyId ? ' is-player' : ''}`}
+                            style={{
+                              width: `${(r.seatsWon / world.constituencies.length) * 100}%`,
+                              background: r.colour,
+                            }}
+                            title={`${r.partyName}: ${r.seatsWon}`}
+                          />
+                        ))}
+                      </div>
+                      <div
+                        className="majority-line"
+                        style={{ left: `${(majority / world.constituencies.length) * 100}%` }}
+                      />
+                    </div>
+                  </section>
+                )}
+
+                {/* Campaign actions panel */}
+                {rightPanel === 'actions' && (
+                  <section className="panel right-panel actions-panel-wrap">
+                    <CampaignActionsPanel
+                      world={world}
+                      selectedWardId={selectedConstituencyId}
+                      onAction={handleAction}
+                    />
+                  </section>
+                )}
+
+                {/* News feed */}
+                {rightPanel === 'news' && (
+                  <section className="panel right-panel news-panel" ref={newsRef}>
+                    <div className="panel-kicker">Town Bulletin</div>
+                    <h4>Latest from {world.townName}</h4>
+
+                    {/* Headlines */}
+                    <div className="headlines-block">
+                      {world.headlines.map((line, i) => (
+                        <p key={i} className="headline-line">{line}</p>
+                      ))}
+                    </div>
+
+                    {/* News feed */}
+                    <div className="news-feed-list">
+                      {world.newsFeed.map((line, i) => (
+                        <div key={i} className="news-feed-item">
+                          <span className="news-tick">§</span>
+                          <span>{line}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Ward inspector */}
+                <ConstituencyInspector
+                  world={world}
+                  previousWorld={previousWorld}
+                  constituency={selectedConstituency}
+                  mapMode={mapMode}
+                  selectedBlocId={selectedBlocId}
+                  selectedTile={selectedTile as PopulationTile | undefined}
+                  selectedTileEstimate={selectedTileEstimate}
+                />
+              </div>
+            </>
+          ) : (
+            <section className="panel empty-panel">
+              <h2>The presses await.</h2>
+              <p>Open the menu, set your ward count, and start a fresh race.</p>
+            </section>
+          )}
+        </div>
+      </main>
+
+      {/* Action flash */}
+      {lastActionResult && (
+        <ActionFlash result={lastActionResult} onDismiss={() => setLastActionResult(null)} />
+      )}
+
+      {/* Election night modal */}
+      {showElectionNight && world && (
+        <ElectionNightModal
+          world={world}
+          onReveal={() => setWorld((w) => w ? { ...w, electionNightRevealIndex: Math.min(w.electionNightRevealIndex + 1, w.electionNightResults.length) } : w)}
+          onClose={() => {
+            setShowElectionNight(false)
+            // Clear electionNightActive on the world so the useEffect doesn't re-open immediately
+            setWorld((w) => {
+              if (!w) return w
+              const nextWorld = { ...w, electionNightActive: false, playerLost: false }
+              if (w.isGoverning && w.governanceDecisions.some((d) => !d.resolved)) {
+                setShowGovernance(true)
+              }
+              return nextWorld
+            })
+          }}
+        />
+      )}
+
+      {/* Governance modal */}
+      {showGovernance && world && (
+        <GovernanceModal
+          world={world}
+          decisions={world.governanceDecisions}
+          onDecide={handleGovernanceDecision}
+          onClose={() => setShowGovernance(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+export default App

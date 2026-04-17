@@ -1,0 +1,45 @@
+:root {
+  color: #2c1f0e;
+  background: #e8d9aa;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Baskerville, Georgia, serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Legacy vars kept for any remaining references */
+  --ink-heavy: #2c1f0e;
+  --ink-soft: #7a6040;
+  --ink-border: rgba(87, 63, 39, 0.38);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #ede0b8, #d4c090);
+}
+
+#root {
+  width: 100%;
+}
+
+h1, h2, h3, h4, p, figure {
+  margin-block-start: 0;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Baskerville Old Face', 'Iowan Old Style', 'Palatino Linotype', serif;
+  color: #2c1f0e;
+  line-height: 1.1;
+}
+
+p { margin-block-end: 0; }
+strong { color: #2c1f0e; }
+
+button, input, textarea, select { font: inherit; }
