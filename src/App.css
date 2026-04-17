@@ -262,13 +262,23 @@ button, input, select, textarea { font: inherit; }
 /* ─── Dashboard layout ──────────────────────────────────────────────────────── */
 .dashboard-layout {
   display: grid;
+  /* seat bar spans full width, map + right column below */
   grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'seatbar seatbar'
+    'map right';
   gap: 6px;
   min-height: calc(100vh - 110px);
   align-items: start;
 }
 
+.seat-bar-row {
+  grid-area: seatbar;
+}
+
 .map-panel {
+  grid-area: map;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -277,10 +287,147 @@ button, input, select, textarea { font: inherit; }
 }
 
 .right-column {
+  grid-area: right;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
+/* ─── Seat bar ────────────────────────────────────────────────────────────── */
+.seat-bar-wrap {
+  position: relative;
+}
+
+.seat-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(253,248,238,0.97), rgba(245,236,204,0.99));
+  border: 1px solid var(--ink-border);
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  transition: background 120ms ease;
+}
+.seat-bar:hover { background: linear-gradient(180deg, #fff8ea, #f0e4c2); }
+
+.seat-bar-label {
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.seat-bar-track {
+  flex: 1;
+  height: 22px;
+  display: flex;
+  border: 1px solid var(--ink-faint);
+  overflow: hidden;
+  position: relative;
+}
+
+.seat-bar-segment {
+  height: 100%;
+  transition: width 400ms ease;
+  min-width: 1px;
+}
+.seat-bar-segment.is-player { outline: 2px solid rgba(0,0,0,0.3); outline-offset: -2px; }
+.seat-bar-segment.empty { background: rgba(0,0,0,0.07); }
+
+.seat-bar-majority-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink);
+  transform: translateX(-1px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.seat-bar-majority-label {
+  font-size: 0.64rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.seat-bar-expand-hint {
+  font-size: 0.6rem;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+/* Expanded standings dropdown */
+.seat-bar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(44,31,14,0.18);
+  border-top: none;
+}
+
+.sbd-header { margin-bottom: 8px; }
+.sbd-title { font-size: 0.82rem; font-weight: 700; display: block; }
+.sbd-subtitle { font-size: 0.68rem; color: var(--ink-soft); }
+
+.sbd-rows { display: flex; flex-direction: column; gap: 4px; }
+
+.sbd-row {
+  display: grid;
+  grid-template-columns: 22px 12px 1fr 100px 40px 36px auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 7px;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.4);
+}
+.sbd-row.is-player { background: rgba(122,96,48,0.1); border-color: var(--ink-mid); }
+.sbd-row.at-majority { border-color: var(--safe); }
+.sbd-rank { font-size: 0.68rem; color: var(--ink-soft); font-weight: 700; }
+.sbd-swatch { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(44,31,14,0.35); }
+.sbd-info strong { display: block; font-size: 0.8rem; line-height: 1.2; }
+.sbd-info small { display: block; font-size: 0.67rem; color: var(--ink-soft); }
+.sbd-mini-bar-wrap { height: 6px; background: rgba(0,0,0,0.07); border-radius: 3px; overflow: hidden; }
+.sbd-mini-bar { height: 100%; border-radius: 3px; transition: width 400ms ease; }
+.sbd-seats { font-size: 0.8rem; font-weight: 700; text-align: right; }
+.sbd-share { font-size: 0.72rem; color: var(--ink-soft); text-align: right; }
+.sbd-trends { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 52px; }
+.sbd-battleground-note {
+  margin-top: 8px;
+  padding: 5px 7px;
+  background: rgba(230,92,0,0.07);
+  border: 1px solid rgba(230,92,0,0.3);
+  font-size: 0.76rem;
+  color: var(--battleground);
+}
+
+/* Vote history chart inside the standings dropdown */
+.sbd-history {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ink-faint);
+}
+.sbd-history-label {
+  font-size: 0.63rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+/* ─── Campaign panel (always visible) ────────────────────────────────────── */
+.campaign-panel-wrap { overflow: auto; max-height: 56vh; }
+.campaign-panel { display: flex; flex-direction: column; gap: 8px; }
 
 /* ─── Map panel ─────────────────────────────────────────────────────────────── */
 .map-panel-header {
@@ -428,6 +575,7 @@ button, input, select, textarea { font: inherit; }
 }
 .history-chart-wrap { display: flex; flex-direction: column; gap: 4px; }
 .history-svg { width: 100%; height: 100px; }
+.history-svg.tall { height: 180px; }
 .chart-gridline { stroke: var(--ink-faint); stroke-width: 0.8; }
 .chart-axis-label { font-size: 9px; fill: var(--ink-soft); }
 .chart-election-line { stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -564,107 +712,290 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* ─── Campaign actions panel ──────────────────────────────────────────────────── */
-.actions-panel-wrap { }
-.actions-panel { display: flex; flex-direction: column; gap: 8px; }
-
-.ap-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: rgba(255,255,255,0.5);
-  border: 1px solid var(--ink-faint);
-}
-.ap-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
-.ap-pips { display: flex; gap: 4px; flex: 1; }
-.ap-pip {
-  flex: 1;
-  height: 12px;
-  border-radius: 2px;
-  border: 1.5px solid var(--ink-mid);
-  background: rgba(255,255,255,0.3);
-  transition: background 200ms ease;
-}
-.ap-pip.filled { background: var(--ink-mid); }
-.ap-count { font-size: 0.78rem; font-weight: 700; color: var(--ink-mid); }
-
-/* Weekly event card */
-.event-card {
-  padding: 8px;
-  background: linear-gradient(180deg, rgba(255,230,180,0.4), rgba(255,220,140,0.3));
-  border: 1px solid rgba(184,134,11,0.4);
-}
-.event-kicker { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent-gold); margin-bottom: 2px; }
-.event-headline { margin: 0 0 4px; font-size: 0.9rem; }
-.event-desc { margin: 0 0 6px; font-size: 0.78rem; color: var(--ink-soft); }
-.event-choices { display: flex; flex-direction: column; gap: 4px; }
-.event-choice-btn {
-  appearance: none;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.65);
-  padding: 7px 8px;
-  text-align: left;
-  cursor: pointer;
+/* ─── Ward picker ─────────────────────────────────────────────────────────── */
+.ward-picker { display: flex; flex-direction: column; gap: 4px; }
+.ward-picker-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
+.ward-picker-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background 150ms ease;
-}
-.event-choice-btn:hover:not(:disabled) { background: rgba(255,255,255,0.9); border-color: var(--ink-mid); }
-.event-choice-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.event-choice-btn strong { font-size: 0.8rem; }
-.event-choice-btn span { font-size: 0.72rem; color: var(--ink-soft); }
-.ap-cost-label { font-size: 0.62rem; color: var(--accent-gold); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
-
-.action-type-row {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 3px;
-}
-.action-type-btn {
-  appearance: none;
+  max-height: 130px;
+  overflow-y: auto;
   border: 1px solid var(--ink-faint);
-  background: rgba(255,251,238,0.7);
-  padding: 5px 4px;
-  cursor: pointer;
+  background: rgba(255,255,255,0.25);
+}
+.ward-pick-btn {
+  appearance: none;
+  border: none;
+  border-bottom: 1px solid var(--ink-faint);
+  background: transparent;
+  padding: 5px 8px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-mid);
-  transition: background 140ms ease;
-}
-.action-type-btn span:first-child { font-size: 0.62rem; }
-.action-type-btn.is-active { background: var(--ink-mid); color: #f8f0dd; border-color: var(--ink); }
-.action-type-btn.is-disabled { opacity: 0.4; cursor: not-allowed; }
-.action-ap-badge {
-  font-size: 0.58rem;
-  padding: 0 3px;
-  background: rgba(0,0,0,0.1);
-  border-radius: 2px;
-}
-.action-type-btn.is-active .action-ap-badge { background: rgba(255,255,255,0.2); }
-
-.action-config { display: flex; flex-direction: column; gap: 6px; }
-.action-field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  gap: 6px;
+  cursor: pointer;
+  font: inherit;
   font-size: 0.76rem;
+  color: var(--ink);
+  text-align: left;
+  transition: background 120ms ease;
 }
-.action-field > span { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
-.action-field select,
-.action-field input[type='text'] {
+.ward-pick-btn:last-child { border-bottom: none; }
+.ward-pick-btn:hover { background: rgba(255,255,255,0.55); }
+.ward-pick-btn.is-active { background: rgba(122,96,48,0.1); font-weight: 700; }
+.ward-pick-btn.is-battleground { background: rgba(230,92,0,0.05); }
+.ward-pick-btn.is-battleground.is-active { background: rgba(230,92,0,0.12); }
+.ward-pick-btn.is-leading .wpb-name { font-weight: 700; }
+.wpb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wpb-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wpb-share { font-size: 0.7rem; color: var(--ink-soft); flex-shrink: 0; }
+.wpb-bg-mark { font-size: 0.7rem; flex-shrink: 0; }
+
+/* ─── Focus ward poll ─────────────────────────────────────────────────────── */
+.focus-ward-poll {
+  background: rgba(255,255,255,0.38);
   border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.7);
-  padding: 5px 7px;
-  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.focus-ward-poll.is-battleground {
+  background: rgba(230,92,0,0.04);
+  border-color: rgba(230,92,0,0.3);
+}
+
+/* Header row */
+.fwp-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px 5px;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.fwp-targeting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fwp-targeting-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+}
+.fwp-ward-name {
+  font-size: 0.92rem;
+  font-weight: 700;
   color: var(--ink);
 }
+.fwp-hint {
+  font-size: 0.62rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* Candidate bar rows — each candidate gets their own row with identity + bar */
+.fwp-candidate-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fwp-cand-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: center;
+  min-height: 34px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.fwp-cand-row.is-winner { background: rgba(255,255,255,0.55); }
+.fwp-cand-row.is-player { background: rgba(122,96,48,0.07); }
+.fwp-cand-row.is-player.is-winner { background: rgba(122,96,48,0.12); }
+
+.fwp-cand-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 10px;
+  border-right: 1px solid var(--ink-faint);
+  min-width: 0;
+}
+.fwp-cand-initials {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 900;
+  font-size: 0.62rem;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255,255,255,0.3);
+}
+.fwp-cand-names { min-width: 0; }
+.fwp-cand-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.fwp-cand-party {
+  display: block;
+  font-size: 0.64rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.fwp-cand-bar-col {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px 5px 8px;
+}
+.fwp-cand-bar-track {
+  height: 10px;
+  background: rgba(0,0,0,0.07);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.fwp-cand-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 350ms ease;
+}
+.fwp-cand-pct {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Status footer */
+.fwp-status {
+  padding: 5px 10px;
+  border-top: 1px solid var(--ink-faint);
+  font-size: 0.74rem;
+  background: rgba(255,255,255,0.18);
+}
+.fwp-margin-leading { color: var(--safe); font-weight: 700; }
+.fwp-margin-trailing { color: var(--battleground); font-weight: 700; }
+.campaign-no-ward { font-size: 0.78rem; color: var(--ink-soft); font-style: italic; text-align: center; padding: 10px 0; margin: 0; }
+
+/* ─── Action cards ────────────────────────────────────────────────────────── */
+.action-cards { display: flex; flex-direction: column; gap: 4px; }
+
+.action-card {
+  appearance: none;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.5);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  transition: background 130ms ease, border-color 130ms ease;
+  display: flex;
+  flex-direction: column;
+}
+.action-card:not(.is-disabled):hover { background: rgba(255,255,255,0.82); border-color: var(--ink-mid); }
+.action-card.is-disabled { opacity: 0.42; cursor: not-allowed; }
+.action-card.is-used { opacity: 0.55; }
+
+/* action-card as direct button */
+button.action-card { padding: 8px 10px; }
+button.action-card .ac-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+button.action-card .ac-name { font-size: 0.82rem; font-weight: 700; }
+button.action-card .ac-desc { font-size: 0.72rem; color: var(--ink-soft); }
+
+/* action-card as div (contains an expand toggle + config) */
+div.action-card { }
+.ac-expand-toggle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ac-expand-toggle .ac-header { display: flex; justify-content: space-between; align-items: baseline; }
+.ac-expand-toggle .ac-name { font-size: 0.82rem; font-weight: 700; }
+.ac-expand-toggle .ac-desc { font-size: 0.72rem; color: var(--ink-soft); }
+
+.ac-cost {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: rgba(0,0,0,0.07);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.ac-cost.cant-afford { color: var(--accent-red); background: rgba(155,28,28,0.08); }
+.ac-cost.ac-free { color: var(--safe); background: rgba(47,110,47,0.1); }
+.ac-cost.ac-used { color: var(--ink-soft); }
+
+.ac-config {
+  padding: 0 10px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--ink-faint);
+  margin-top: 2px;
+  padding-top: 7px;
+}
+.ac-select {
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.75);
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink);
+  width: 100%;
+}
+.ap-cost-badge {
+  font-size: 0.62rem;
+  color: var(--accent-gold);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  align-self: flex-start;
+  border: 1px solid rgba(184,134,11,0.3);
+  padding: 0 4px;
+}
+
+/* Rally = slightly bolder card */
+.action-card-rally:not(.is-disabled) {
+  border-color: rgba(87,63,39,0.35);
+  background: rgba(255,248,230,0.6);
+}
+/* Smear = reddish tint */
+.action-card-smear:not(.is-disabled) {
+  background: rgba(155,28,28,0.04);
+}
+
+.week-actions-log { border-top: 1px solid var(--ink-faint); padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.log-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
+.log-entry { font-size: 0.73rem; color: var(--ink-soft); line-height: 1.3; }
+.log-success { color: #1a5c2a; }
+.log-backfire { color: var(--accent-red); }
+
+/* Policy direction buttons */
 .policy-dir-row { display: flex; gap: 4px; }
 .policy-dir-btn {
   appearance: none;
@@ -682,42 +1013,35 @@ button, input, select, textarea { font: inherit; }
 }
 .policy-dir-btn.is-active { background: var(--ink-mid); color: #f8f0dd; border-color: var(--ink); }
 
-.ward-action-preview {
-  padding: 6px 8px;
+/* Weekly event card */
+.event-card {
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(255,230,180,0.4), rgba(255,220,140,0.3));
+  border: 1px solid rgba(184,134,11,0.4);
+}
+.event-kicker { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent-gold); margin-bottom: 2px; }
+.event-headline { margin: 0 0 4px; font-size: 0.88rem; font-weight: 700; }
+.event-desc { margin: 0 0 6px; font-size: 0.76rem; color: var(--ink-soft); }
+.event-choices { display: flex; flex-direction: column; gap: 4px; }
+.event-choice-btn {
+  appearance: none;
   border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.65);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  transition: background 150ms ease;
+  width: 100%;
+  position: relative;
 }
-.ward-preview-name { font-size: 0.85rem; font-weight: 700; }
-.ward-preview-results { display: flex; flex-direction: column; gap: 2px; }
-.ward-mini-result {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.75rem;
-}
-.ward-mini-result.is-player { font-weight: 700; }
-.mini-swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.ward-mini-result strong { margin-left: auto; }
-.battleground-badge {
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--battleground);
-  border: 1px solid var(--battleground);
-  padding: 1px 5px;
-  align-self: flex-start;
-}
-.action-submit-btn { width: 100%; }
-
-.week-actions-log { border-top: 1px solid var(--ink-faint); padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
-.log-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
-.log-entry { font-size: 0.74rem; color: var(--ink-soft); line-height: 1.3; }
-.log-success { color: #1a5c2a; }
-.log-backfire { color: var(--accent-red); }
+.event-choice-btn:hover:not(.is-disabled) { background: rgba(255,255,255,0.9); border-color: var(--ink-mid); }
+.event-choice-btn.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.event-choice-btn strong { font-size: 0.8rem; }
+.event-choice-btn span { font-size: 0.72rem; color: var(--ink-soft); }
 
 /* ─── News panel ────────────────────────────────────────────────────────────── */
 .news-panel { display: flex; flex-direction: column; gap: 8px; }
@@ -777,61 +1101,127 @@ button, input, select, textarea { font: inherit; }
   flex-direction: column;
   gap: 7px;
   font-size: 0.85rem;
-  overflow: auto;
-  max-height: 55vh;
+  overflow: visible;
 }
 .constituency-panel h3 { margin: 0; font-size: 1rem; }
 .constituency-panel h4 { margin: 0 0 4px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); }
 .ward-mood { margin: 0; font-size: 0.78rem; color: var(--ink-soft); }
 
-.candidate-row {
+/* ─── Ward poll (wide bar style, replaces candidate-row layout) ─────────── */
+.ward-poll {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.32);
+  overflow: hidden;
+}
+.ward-poll.is-battleground {
+  border-color: rgba(230,92,0,0.35);
+  background: rgba(230,92,0,0.03);
+}
+
+.ward-poll-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0;
+  align-items: stretch;
+  min-height: 32px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.ward-poll-row.is-winner { background: rgba(255,255,255,0.55); }
+.ward-poll-row.is-player { background: rgba(122,96,48,0.07); }
+.ward-poll-row.is-player.is-winner { background: rgba(122,96,48,0.12); }
+
+.wpr-identity {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 7px;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.45);
+  padding: 5px 8px;
+  border-right: 1px solid var(--ink-faint);
 }
-.candidate-row.is-winner { border-color: rgba(44,31,14,0.5); background: rgba(255,255,255,0.65); }
-.candidate-row.is-player-party { border-color: rgba(122,96,48,0.4); background: rgba(122,96,48,0.07); }
-.candidate-initials {
-  width: 26px;
-  height: 26px;
+.wpr-initials {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-weight: 900;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   flex-shrink: 0;
 }
-.candidate-name { font-size: 0.8rem; font-weight: 700; }
-.candidate-party { font-size: 0.68rem; color: var(--ink-soft); }
-.candidate-share { margin-left: auto; font-size: 0.85rem; font-weight: 700; }
-.candidate-bar-wrap { width: 60px; height: 5px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-.candidate-bar { height: 100%; border-radius: 3px; }
-
-.ward-margin-meter {
-  padding: 6px 8px;
-  background: rgba(255,255,255,0.4);
-  border: 1px solid var(--ink-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.wpr-names { min-width: 0; }
+.wpr-candidate {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
-.margin-meter-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.13em; color: var(--ink-soft); }
-.margin-meter-track {
-  height: 10px;
+.wpr-party {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.wpr-bar-col {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 8px 5px 6px;
+}
+.wpr-bar-track {
+  height: 8px;
   background: rgba(0,0,0,0.07);
-  border-radius: 5px;
-  position: relative;
+  border-radius: 4px;
   overflow: hidden;
 }
-.margin-meter-fill { height: 100%; border-radius: 5px; transition: width 400ms ease; }
-.margin-meter-value { font-size: 0.82rem; font-weight: 700; }
-.margin-battleground { color: var(--battleground); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
-.margin-safe { color: var(--safe); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+.wpr-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 350ms ease;
+}
+.wpr-pct {
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 34px;
+  text-align: right;
+}
+.wpr-delta {
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+}
+.wpr-delta.up { color: #1a5c2a; }
+.wpr-delta.down { color: var(--accent-red); }
+
+.ward-poll-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+  border-top: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.2);
+  font-size: 0.72rem;
+}
+.wpm-leading { color: var(--safe); font-weight: 700; }
+.wpm-trailing { color: var(--battleground); font-weight: 700; }
+
+/* Keep ward-margin-meter for any remaining refs, but de-emphasise */
+.ward-margin-meter { display: none; }
 
 .ward-history-list { display: flex; flex-direction: column; gap: 2px; }
 .history-item {

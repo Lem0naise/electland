@@ -5,7 +5,6 @@ type MapMode = 'ward' | 'bloc' | 'voter'
 
 interface ConstituencyInspectorProps {
   world: World | null
-  previousWorld: World | null
   constituency: Constituency | undefined
   mapMode: MapMode
   selectedBlocId: string
@@ -19,7 +18,6 @@ function valueFit(a: { change: number; growth: number; services: number }, b: { 
 
 export function ConstituencyInspector({
   world,
-  previousWorld,
   constituency,
   mapMode,
   selectedBlocId,
@@ -37,21 +35,14 @@ export function ConstituencyInspector({
 
   const selectedBloc = world.blocs.find((bloc) => bloc.id === selectedBlocId)
   const selectedWard = constituency ?? (selectedTile ? world.constituencies.find((c) => c.id === selectedTile.constituencyId) : undefined)
-  const previousWard = selectedWard ? previousWorld?.constituencies.find((c) => c.id === selectedWard.id) : undefined
   const blocs = selectedWard ? topBlocEntries(selectedWard.blocMix) : []
 
-  const wardMarginDelta = selectedWard && previousWard ? selectedWard.margin - previousWard.margin : null
   const matchingCurrents = selectedWard
     ? world.currents.filter((c) => c.tags.some((tag) => selectedWard.tags.includes(tag)))
     : []
 
   const isBattleground = selectedWard ? world.stats.battlegroundWardIds.includes(selectedWard.id) : false
   const playerPartyId = world.playerPartyId
-  const playerResult = selectedWard?.results.find((r) => r.partyId === playerPartyId)
-  const previousPlayerResult = previousWard?.results.find((r) => r.partyId === playerPartyId)
-  const playerDelta = playerResult && previousPlayerResult
-    ? playerResult.voteShare - previousPlayerResult.voteShare
-    : null
 
   const blocStrongholds = selectedBloc
     ? [...world.constituencies]
@@ -87,80 +78,6 @@ export function ConstituencyInspector({
           <p className="ward-mood">
             Pop. {formatPopulation(selectedWard.population)} · {describeValues(selectedWard.values)} · {(selectedWard.urbanity * 100).toFixed(0)}% urban
           </p>
-
-          {/* Margin meter */}
-          <div className="ward-margin-meter">
-            <span className="margin-meter-label">
-              Lead margin
-              {isBattleground
-                ? <span className="margin-battleground"> — IN PLAY</span>
-                : selectedWard.margin > 20
-                  ? <span className="margin-safe"> — SAFE</span>
-                  : null}
-            </span>
-            <div className="margin-meter-track">
-              <div
-                className="margin-meter-fill"
-                style={{
-                  width: `${Math.min(100, selectedWard.margin * 2.5)}%`,
-                  background: selectedWard.results[0] ? selectedWard.results[0].colour : '#888',
-                }}
-              />
-            </div>
-            <div className="margin-value-row">
-              <strong className="margin-meter-value">{selectedWard.margin.toFixed(1)} pts</strong>
-              {wardMarginDelta !== null && (
-                <span className={`mini-trend ${wardMarginDelta > 0.05 ? 'up' : wardMarginDelta < -0.05 ? 'down' : 'flat'}`}>
-                  {wardMarginDelta > 0.05 ? '▲' : wardMarginDelta < -0.05 ? '▼' : '—'} {Math.abs(wardMarginDelta).toFixed(1)} this week
-                </span>
-              )}
-            </div>
-            {playerDelta !== null && (
-              <div className={`player-delta-line ${playerDelta > 0.2 ? 'positive' : playerDelta < -0.2 ? 'negative' : ''}`}>
-                Your party: {playerDelta > 0 ? '+' : ''}{playerDelta.toFixed(1)}pp this week
-              </div>
-            )}
-          </div>
-
-          {/* Named candidates */}
-          <div>
-            <h4>Candidates</h4>
-            <div className="candidates-list">
-              {(() => {
-                const topResults = selectedWard.results.slice(0, 5)
-                // Scale bars relative to the winner's share so leader = 100% width
-                const leaderShare = topResults[0]?.voteShare ?? 1
-                return topResults.map((result, rank) => {
-                  const candidate = selectedWard.candidates.find((c) => c.partyId === result.partyId)
-                  const isWinner = rank === 0
-                  const isPlayer = result.partyId === playerPartyId
-                  if (!candidate) return null
-                  const barWidth = Math.min(100, (result.voteShare / leaderShare) * 100)
-                  return (
-                    <div
-                      key={result.partyId}
-                      className={`candidate-row${isWinner ? ' is-winner' : ''}${isPlayer ? ' is-player-party' : ''}`}
-                    >
-                      <span className="candidate-initials" style={{ background: result.colour }}>
-                        {candidate.initials}
-                      </span>
-                      <div className="candidate-info">
-                        <span className="candidate-name">{candidate.name}</span>
-                        <span className="candidate-party">{result.partyName}</span>
-                      </div>
-                      <div className="candidate-bar-wrap">
-                        <div
-                          className="candidate-bar"
-                          style={{ width: `${barWidth}%`, background: result.colour }}
-                        />
-                      </div>
-                      <strong className="candidate-share">{result.voteShare.toFixed(1)}%</strong>
-                    </div>
-                  )
-                })
-              })()}
-            </div>
-          </div>
 
           {/* Neighbourhood demographics */}
           <div className="bloc-mix-section">

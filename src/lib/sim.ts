@@ -927,50 +927,255 @@ function strategyTagsForValues(values: PoliticalValues) {
   return [...tags].slice(0, 3)
 }
 
-function partyNameForBloc(
-  rng: () => number, 
-  bloc: { label: string }, 
-  tier: 'major' | 'minor' | 'indie',
-  localWardOrTown: string = 'Town' // Pass in a local place name for extra flavor!
-) {
-  // Clean the bloc label (e.g., turning "Conservative Party" into just "Conservative")
-  const coreIdeology = bloc.label.replace(/\b(Party|Group|Alliance)\b/gi, '').trim() || bloc.label;
+// ─── Party naming ────────────────────────────────────────────────────────────
+//
+// Derives a short, plausible party name from the party's political values.
+// Major parties: 1–2 words, feel like real parties ("Conservatives", "Labour",
+//   "Reform Party", "The Greens", "Progress Alliance").
+// Minor parties: local/single-issue flavour ("Brindleford Residents",
+//   "Save Our Streets", "Market Quarter Alliance", "Independent Voices").
+//
+// Political axes:
+//   change:   negative = conservative/traditionalist, positive = reformist/progressive
+//   growth:   positive = pro-business/enterprise, negative = anti-growth/careful
+//   services: positive = high public services / welfare, negative = low-tax minimal
 
-  const prefixes = tier === 'major'
-    ? ['Bright', 'Forward', 'New', 'Civic', 'Traditional', 'Progressive']
-    : ['True', 'Independent', 'Radical', 'Pocket', 'Grassroots', 'Local']
-  
-  const suffixes = tier === 'major'
-    ? ['Alliance', 'Party', 'Union', 'Democrats', 'Coalition']
-    : ['Action', 'Focus', 'Voice', 'List', 'Forum', 'Network', 'Movement']
+// Maps a party's values to a core ideology word or phrase
+function ideologyWordFromValues(rng: () => number, values: PoliticalValues): string {
+  const { change, growth, services } = values
 
-  // Define patterns based on tier
-  const patterns = tier === 'major' ? [
-    // e.g., "Bright Conservative Alliance"
-    () => `${pickOne(rng, prefixes)} ${coreIdeology} ${pickOne(rng, suffixes)}`,
-    // e.g., "The Progressive Labour Party"
-    () => `The ${pickOne(rng, prefixes)} ${coreIdeology} Party`,
-    // e.g., "Conservatives For Brindleford"
-    () => `${coreIdeology}s For ${localWardOrTown}`,
-  ] : [
-    // e.g., "Millpond Independent Voice"
-    () => `${localWardOrTown} ${pickOne(rng, prefixes)} ${pickOne(rng, suffixes)}`,
-    // e.g., "Save Our Green" (If they are a single-issue minor bloc)
-    () => `Save Our ${localWardOrTown}`,
-    // e.g., "Radical Green Action"
-    () => `${pickOne(rng, prefixes)} ${coreIdeology} ${pickOne(rng, suffixes)}`,
-    // e.g., "The Shambles Residents Association"
-    () => `${localWardOrTown} Residents Association`,
-  ];
+  // Conservative/traditionalist: low change, any growth, low-to-mid services
+  if (change < -15 && services < 30) {
+    if (growth > 15) return pickOne(rng, ['Conservative', 'Unionist', 'Traditional', 'Moderate'])
+    return pickOne(rng, ['Conservative', 'Traditional', 'Heritage', 'Unionist'])
+  }
 
-  return pickOne(rng, patterns)();
+  // Pro-business / enterprise: pro-growth, moderate change, low services
+  if (growth > 25 && change > -20 && services < 30) {
+    return pickOne(rng, ['Enterprise', 'Progress', 'Reform', 'Prosperity', 'Business'])
+  }
+
+  // Labour / working class: high services, pro-worker
+  if (services > 30 && change >= -10 && growth < 30) {
+    return pickOne(rng, ['Labour', 'Workers', 'Community', 'Solidarity', 'People\'s'])
+  }
+
+  // Progressive / reform: high change, moderate services
+  if (change > 25 && services >= 10) {
+    return pickOne(rng, ['Progressive', 'Forward', 'Reform', 'New Democrats', 'Radical'])
+  }
+
+  // Green / environment: high change, low growth
+  if (change > 20 && growth < 0) {
+    return pickOne(rng, ['Green', 'Ecology', 'Sustainable', 'Environment'])
+  }
+
+  // Liberal / centrist: moderate on all axes
+  if (Math.abs(change) < 20 && Math.abs(growth) < 20 && Math.abs(services) < 20) {
+    return pickOne(rng, ['Liberal', 'Democratic', 'Civic', 'Alliance', 'Centre'])
+  }
+
+  // Default fallback
+  return pickOne(rng, ['Independent', 'Local', 'Residents', 'Community'])
 }
 
-function createGeneratedParties(rng: () => number, blocs: FictionalBloc[]) {
+// Build a short, punchy major party name
+function majorPartyName(rng: () => number, values: PoliticalValues): string {
+  const ideologyWord = ideologyWordFromValues(rng, values)
+  const r = rng()
+
+  if (r < 0.30) {
+    // Pluralised noun: "Conservatives", "Greens", "Progressives"
+    const plurals: Record<string, string> = {
+      Conservative: 'Conservatives',
+      Labour: 'Labour',
+      Green: 'Greens',
+      Liberal: 'Liberals',
+      Progressive: 'Progressives',
+      Reform: 'Reform',
+      Enterprise: 'Enterprise',
+      Unionist: 'Unionists',
+      Traditional: 'Traditionalists',
+      Heritage: 'Heritage',
+      Workers: 'Workers',
+      Community: 'Community',
+      Solidarity: 'Solidarity',
+      Forward: 'Forward',
+      Democratic: 'Democrats',
+      Civic: 'Civic',
+      Alliance: 'Alliance',
+      Centre: 'Centrists',
+      'New Democrats': 'New Democrats',
+      Prosperity: 'Prosperity',
+      Ecology: 'Ecologists',
+      Sustainable: 'Sustainability',
+      Environment: 'Environmentalists',
+      Independent: 'Independents',
+      Local: 'Local',
+      Residents: 'Residents',
+      "People's": "People's Party",
+      Radical: 'Radicals',
+      Business: 'Business Party',
+      Moderate: 'Moderates',
+    }
+    return plurals[ideologyWord] ?? `${ideologyWord} Party`
+  }
+
+  if (r < 0.55) {
+    // "[Ideology] Party"
+    return `${ideologyWord} Party`
+  }
+
+  if (r < 0.75) {
+    // "[Ideology] Alliance" / "[Ideology] Democrats" etc
+    const suffixes = ['Alliance', 'Democrats', 'Union', 'Coalition']
+    return `${ideologyWord} ${pickOne(rng, suffixes)}`
+  }
+
+  // "The [Ideology] [Short Suffix]"
+  const shortSuffixes = ['Party', 'Group', 'Alliance']
+  return `The ${ideologyWord} ${pickOne(rng, shortSuffixes)}`
+}
+
+// Build a local-flavoured minor party name
+function minorPartyName(rng: () => number, values: PoliticalValues, townName: string): string {
+  const r = rng()
+
+  if (r < 0.28) {
+    // Town-named: "Brindleford Independents", "Coppergate Residents"
+    const localSuffixes = ['Independents', 'Residents', 'Ratepayers', 'Community Group', 'First']
+    return `${townName} ${pickOne(rng, localSuffixes)}`
+  }
+
+  if (r < 0.52) {
+    // Single-issue feel: "Residents First", "Save Our Streets", "Local Voice"
+    const singleIssue = [
+      'Residents First',
+      'Local Voice',
+      'Save Our Streets',
+      'Residents United',
+      'Neighbours First',
+      'Our Town',
+      'Community First',
+      'Independent Residents',
+      'Ratepayers Alliance',
+      'Local Alliance',
+      'The Residents\' Party',
+      'Streets Ahead',
+    ]
+    return pickOne(rng, singleIssue)
+  }
+
+  if (r < 0.72) {
+    // Slightly ideological minor: pull a softer adjective from values
+    const { change, services } = values
+    const adj = change > 20
+      ? pickOne(rng, ['Forward', 'Progressive', 'Independent', 'Reform'])
+      : services > 25
+        ? pickOne(rng, ['Community', 'Local', 'Residents', 'Welfare'])
+        : pickOne(rng, ['Independent', 'Local', 'Residents', 'Neighbourhood'])
+    const minorSuffixes = ['Action', 'Voice', 'Forum', 'Network', 'Movement']
+    return `${adj} ${pickOne(rng, minorSuffixes)}`
+  }
+
+  // "[Town] [Issue]" style
+  const issueSuffixes = ['Greens', 'Independents', 'Residents Association', 'Alliance', 'Residents']
+  return `${townName} ${pickOne(rng, issueSuffixes)}`
+}
+
+// Derive an ideology-matched slogan
+function sloganFromValues(rng: () => number, values: PoliticalValues, tier: 'major' | 'minor' | 'custom'): string {
+  const { change, growth, services } = values
+
+  if (tier === 'minor') {
+    return pickOne(rng, [
+      'Your street, your voice.',
+      'Small party, real results.',
+      'Locals know best.',
+      'One ward at a time.',
+      'No party whips. Just common sense.',
+      'For the people who live here.',
+      'We actually turned up.',
+    ])
+  }
+
+  // Ideology-matched for majors
+  if (change < -15 && services < 30) {
+    return pickOne(rng, [
+      'Keep what works.',
+      'Steady hands for steady streets.',
+      'No grand experiments.',
+      'Tradition, community, common sense.',
+      'If it ain\'t broke, don\'t fix it.',
+    ])
+  }
+  if (growth > 25 && services < 30) {
+    return pickOne(rng, [
+      'Open for business.',
+      'Growth that works for all.',
+      'A town that earns its keep.',
+      'Enterprise, not excuses.',
+      'More jobs, lower rates.',
+    ])
+  }
+  if (services > 30 && change >= -10) {
+    return pickOne(rng, [
+      'Invest in every street.',
+      'Good services, fair town.',
+      'No one left behind.',
+      'The council that delivers.',
+      'Better services, full stop.',
+    ])
+  }
+  if (change > 25) {
+    return pickOne(rng, [
+      'Time for a change.',
+      'Bold ideas, real results.',
+      'The old way isn\'t working.',
+      'Let\'s do things differently.',
+      'This town deserves better.',
+    ])
+  }
+  if (change > 10 && growth < 0) {
+    return pickOne(rng, [
+      'People before profit.',
+      'Protect what we love.',
+      'Green streets, clean future.',
+      'Our parks, our promise.',
+    ])
+  }
+
+  // Centrist fallback
+  return pickOne(rng, [
+    'Getting things done.',
+    'Sensible. Local. Effective.',
+    'For every ward, every week.',
+    'A friendlier town hall.',
+    'Practical politics for real people.',
+  ])
+}
+
+function createGeneratedParties(rng: () => number, blocs: FictionalBloc[], townName: string) {
   const sorted = [...blocs].sort((a, b) => b.weight - a.weight)
   const majorBlocs = sorted.slice(0, Math.min(3, sorted.length))
   const minorBlocs = sorted.slice(3)
   const parties: PartyDefinition[] = []
+  const usedNames = new Set<string>()
+
+  // Generate a unique name, retrying up to 8 times if there's a collision
+  function uniqueName(gen: () => string): string {
+    for (let i = 0; i < 8; i++) {
+      const name = gen()
+      if (!usedNames.has(name)) {
+        usedNames.add(name)
+        return name
+      }
+    }
+    // Fallback: append a number
+    const base = gen()
+    usedNames.add(base)
+    return base
+  }
 
   majorBlocs.forEach((bloc, index) => {
     const values = addValues(bloc.center, {
@@ -980,7 +1185,7 @@ function createGeneratedParties(rng: () => number, blocs: FictionalBloc[]) {
     })
     parties.push({
       id: `party-major-${index + 1}`,
-      name: partyNameForBloc(rng, bloc, 'major'),
+      name: uniqueName(() => majorPartyName(rng, values)),
       leader: createLeaderName(rng),
       colour: colourPalette[index % colourPalette.length],
       values,
@@ -992,7 +1197,7 @@ function createGeneratedParties(rng: () => number, blocs: FictionalBloc[]) {
       baseUtility: 0.06,
       momentum: 0,
       focusSeatIds: [],
-      slogan: pickOne(rng, ['Fix the footpaths!', 'Cheer up the square!', 'More for every ward!', 'A friendlier town hall!']),
+      slogan: sloganFromValues(rng, values, 'major'),
       aiActionPoints: 3,
       wardBoosts: {},
     })
@@ -1006,7 +1211,7 @@ function createGeneratedParties(rng: () => number, blocs: FictionalBloc[]) {
     })
     parties.push({
       id: `party-minor-${index + 1}`,
-      name: partyNameForBloc(rng, bloc, 'minor'),
+      name: uniqueName(() => minorPartyName(rng, values, townName)),
       leader: createLeaderName(rng),
       colour: colourPalette[(index + majorBlocs.length) % colourPalette.length],
       values,
@@ -1018,7 +1223,7 @@ function createGeneratedParties(rng: () => number, blocs: FictionalBloc[]) {
       baseUtility: -0.12,
       momentum: 0,
       focusSeatIds: [],
-      slogan: pickOne(rng, ['One ward at a time!', 'Tiny but mighty!', 'For our corner of town!', 'A louder local voice!']),
+      slogan: sloganFromValues(rng, values, 'minor'),
       aiActionPoints: 2,
       wardBoosts: {},
     })
@@ -1530,7 +1735,7 @@ export function generateWorld(options: WorldOptions): World {
   const blocs = generateBlocs(rng)
 
   // Create parties first (before constituencies, since constituencies need candidates)
-  let parties = [...createGeneratedParties(rng, blocs), ...convertCustomParties(options.customParties)]
+  let parties = [...createGeneratedParties(rng, blocs, townName), ...convertCustomParties(options.customParties)]
 
   const tiles = createPopulationTiles(rng, landmass.points, centers, blocs)
   const constituencies = createConstituencies(rng, tiles, options.constituencyCount, parties)
