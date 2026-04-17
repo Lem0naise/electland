@@ -1567,9 +1567,17 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 .result-candidate-name { font-size: 0.78rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-party-name { font-size: 0.62rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.result-card-stats { display: flex; align-items: baseline; gap: 6px; }
+.result-card-stats { display: flex; flex-direction: column; gap: 2px; }
+.result-pct-row { display: flex; align-items: baseline; gap: 6px; }
 .result-pct { font-size: 0.85rem; font-weight: 700; }
 .result-margin { font-size: 0.7rem; color: var(--ink-soft); }
+.result-swing {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.swing-up { color: #1a5c2a; }
+.swing-down { color: var(--accent-red); }
 /* Change of hands line */
 .result-card-change { font-size: 0.68rem; margin-top: 1px; }
 .change-gain { color: #1a5c2a; font-weight: 700; }

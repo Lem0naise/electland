@@ -1461,15 +1461,17 @@ function driftTiles(world: World, rng: () => number) {
     let values = cloneValues(tile.values)
     world.currents.forEach((current) => {
       if (current.tags.some((tag) => tile.tags.includes(tag))) {
-        values = addValues(values, current.effect, current.intensity * 0.14)
+        // Subtler current effect: builds slowly over several weeks rather than slamming each week
+        values = addValues(values, current.effect, current.intensity * 0.03)
       }
     })
     return {
       ...tile,
+      // Tiny weekly noise — just enough to prevent perfectly frozen polls
       values: addValues(values, {
-        change: gaussian(rng, 0, 0.8),
-        growth: gaussian(rng, 0, 0.8),
-        services: gaussian(rng, 0, 0.8),
+        change: gaussian(rng, 0, 0.25),
+        growth: gaussian(rng, 0, 0.25),
+        services: gaussian(rng, 0, 0.25),
       }),
     }
   })
@@ -1480,16 +1482,19 @@ function evolveParties(parties: PartyDefinition[], constituencies: Constituency[
     const isPlayer = party.id === playerPartyId
     return {
       ...party,
+      // Tiny random walk in baseUtility — barely perceptible week-to-week
+      // Slow decay (0.95) keeps it near its natural long-run mean
       baseUtility: clamp(
-        party.baseUtility * 0.82 + gaussian(rng, 0, party.tier === 'major' ? 0.08 : 0.05),
+        party.baseUtility * 0.95 + gaussian(rng, 0, party.tier === 'major' ? 0.02 : 0.015),
         -1.2, 1.2,
       ),
-      momentum: clamp(party.momentum * 0.5 + gaussian(rng, 0, 0.08), -0.7, 0.7),
+      // Momentum also much calmer — only noticeable after a rally or event response
+      momentum: clamp(party.momentum * 0.65 + gaussian(rng, 0, 0.03), -0.7, 0.7),
       // Reset AI action points each week (players get theirs in App)
       aiActionPoints: isPlayer ? party.aiActionPoints : (party.tier === 'major' ? 3 : 2),
-      // Decay ward boosts slightly each week
+      // Decay ward boosts more slowly — canvass effect lasts ~4 weeks
       wardBoosts: Object.fromEntries(
-        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.7]),
+        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.78]),
       ),
     }
   })
@@ -1515,8 +1520,8 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
     while (ap > 0 && targetWards.length > 0) {
       const ward = pickOne(rng, targetWards.slice(0, 3))
       if (!ward) break
-      // Canvass (cost 1 AP)
-      boosts[ward.id] = clamp((boosts[ward.id] ?? 0) + 0.06, 0, 0.35)
+      // Canvass (cost 1 AP) — smaller than player canvass to keep AI from dominating
+      boosts[ward.id] = clamp((boosts[ward.id] ?? 0) + 0.04, 0, 0.25)
       ap -= 1
       if (rng() < 0.3) {
         newsFeedLines.push(`${party.name} campaigners spotted knocking doors in ${ward.name}.`)
@@ -1913,24 +1918,30 @@ export function simulateWeek(world: World): World {
         const prevWinnerCandidate = prevElectionEntry?.winner
         // The ward changed hands if the new winner differs from the last election winner
         const wasHeld = prevWinnerPartyId != null && seat.leadingPartyId !== prevWinnerPartyId
-        // Previous margin: use the last entry before the election in this ward's history
-        const prevMarginEntry = seat.history[seat.history.length - 1]
+        // Swing = winner's vote share this election minus their vote share last election
+        // Only meaningful when we have a previous election to compare against
+        const prevWinnerShareLastTime = prevElectionEntry?.results.find(
+          (r) => r.partyId === seat.leadingPartyId,
+        )?.voteShare
+        const swingFromLastElection = prevElectionEntry != null && prevWinnerShareLastTime != null
+          ? seat.results.find((r) => r.partyId === seat.leadingPartyId)!.voteShare - prevWinnerShareLastTime
+          : undefined
+        // Previous margin: winner's lead at last election
+        const previousMargin = prevElectionEntry?.results[0]
+          ? prevElectionEntry.results[0].voteShare - (prevElectionEntry.results[1]?.voteShare ?? 0)
+          : undefined
         return {
           wardId: seat.id,
           wardName: seat.name,
           winner: winner ?? seat.candidates[0],
           results: seat.results,
-          swingFromLastElection: prevMarginEntry
-            ? seat.margin - prevMarginEntry.margin
-            : undefined,
+          swingFromLastElection,
           wasHeld,
           previousWinnerPartyId: prevWinnerPartyId,
           previousWinnerPartyName: prevWinnerParty?.name,
           previousWinnerCandidateName: prevWinnerCandidate?.name,
           previousWinnerColour: prevWinnerParty?.colour,
-          previousMargin: prevElectionEntry?.results[0]
-            ? prevElectionEntry.results[0].voteShare - (prevElectionEntry.results[1]?.voteShare ?? 0)
-            : undefined,
+          previousMargin,
         }
       })
     : world.electionNightResults

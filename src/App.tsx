@@ -108,10 +108,17 @@ function ElectionNightModal({ world, onReveal, onClose }: {
                   </div>
                 )}
                 <div className="result-card-stats">
-                  {r.results[0] && <strong className="result-pct">{r.results[0].voteShare.toFixed(1)}%</strong>}
-                  {r.results[1] && (
-                    <span className="result-margin">
-                      +{(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)}pts
+                  {r.results[0] && (
+                    <span className="result-pct-row">
+                      <strong className="result-pct">{r.results[0].voteShare.toFixed(1)}%</strong>
+                      {r.results[1] && (
+                        <span className="result-margin">+{(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)} pts</span>
+                      )}
+                    </span>
+                  )}
+                  {r.swingFromLastElection != null && (
+                    <span className={`result-swing ${r.swingFromLastElection >= 0 ? 'swing-up' : 'swing-down'}`}>
+                      {r.swingFromLastElection >= 0 ? '▲' : '▼'} {Math.abs(r.swingFromLastElection).toFixed(1)}pp swing
                     </span>
                   )}
                 </div>
