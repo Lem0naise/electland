@@ -16,6 +16,7 @@ import type {
   ActionResult,
   CampaignAction,
   GovernanceDecision,
+  PartyDefinition,
   PopulationTile,
   World,
 } from './types/sim'
@@ -909,49 +910,64 @@ function SetupScreen({
   onSetConstituencyCount,
   onGenerate,
   onStart,
+  onSavePartyEdit,
   onClose,
 }: {
   world: World | null
   constituencyCount: number
   onSetConstituencyCount: (n: number) => void
   onGenerate: () => void
-  onStart: (seed?: number, playerPartyId?: string, edits?: Record<string, PartyEdit>) => void
+  onStart: (seed?: number, playerPartyId?: string) => void
+  onSavePartyEdit: (edit: PartyEdit) => void
   onClose?: () => void
 }) {
   const isFirstTime = world === null
   const [selectedPartyId, setSelectedPartyId] = useState<string>(world?.playerPartyId ?? '')
   const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
-  // Editable overrides for generated parties (name/leader/colour only)
+  // Local edits buffer — initialised from world.parties and kept in sync when world changes
   const [partyEdits, setPartyEdits] = useState<Record<string, PartyEdit>>(() => {
     if (!world) return {}
     return Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }]))
   })
 
-  // If world changes (e.g. new town generated), reset edits and selection
+  // Re-initialise edits whenever a new world is set (new town or first load)
+  // Use the full world object as dependency so mid-campaign menu reopens also sync
+  const worldRef = world
   useEffect(() => {
-    if (!world) {
+    if (!worldRef) {
       setPartyEdits({})
       setSelectedPartyId('')
       return
     }
-    setPartyEdits(Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])))
-    setSelectedPartyId(world.playerPartyId)
-  }, [world?.seed])  // only reset when town seed changes
+    // Merge: keep any locally-typed values but add new party ids from world
+    setPartyEdits(Object.fromEntries(
+      worldRef.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])
+    ))
+    setSelectedPartyId(worldRef.playerPartyId)
+  }, [worldRef?.seed])  // reset on new town seed
 
   const parties = world?.parties ?? []
   const majorParties = parties.filter((p) => p.tier === 'major' || p.tier === 'custom')
   const minorParties = parties.filter((p) => p.tier === 'minor')
 
-  function editFor(partyId: string): PartyEdit | undefined {
-    return partyEdits[partyId]
+  function editFor(partyId: string): PartyEdit {
+    return partyEdits[partyId] ?? { id: partyId, name: '', leader: '', colour: '#888888' }
   }
 
   function updateEdit(partyId: string, changes: Partial<PartyEdit>) {
     setPartyEdits((prev) => ({ ...prev, [partyId]: { ...prev[partyId], ...changes } }))
   }
 
+  // Save a single party edit immediately to world (called on blur or colour change)
+  function saveEdit(partyId: string) {
+    const edit = partyEdits[partyId]
+    if (edit) onSavePartyEdit(edit)
+  }
+
   function handleStart() {
-    onStart(world?.seed, selectedPartyId || world?.playerPartyId, partyEdits)
+    // Flush any pending edits for all parties before starting
+    Object.values(partyEdits).forEach((edit) => onSavePartyEdit(edit))
+    onStart(world?.seed, selectedPartyId || world?.playerPartyId)
   }
 
   function handleNewTown() {
@@ -1038,7 +1054,7 @@ function SetupScreen({
                 {/* Major parties */}
                 <div className="setup-party-group">
                   {majorParties.map((party) => {
-                    const edit = editFor(party.id) ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour }
+                    const edit = editFor(party.id)
                     const isSelected = selectedPartyId === party.id || (!selectedPartyId && party.id === world?.playerPartyId)
                     const isExpanded = expandedPartyId === party.id
                     return (
@@ -1081,6 +1097,7 @@ function SetupScreen({
                               <input
                                 value={edit.name}
                                 onChange={(e) => updateEdit(party.id, { name: e.target.value })}
+                                onBlur={() => saveEdit(party.id)}
                                 placeholder={party.name}
                               />
                             </label>
@@ -1089,6 +1106,7 @@ function SetupScreen({
                               <input
                                 value={edit.leader}
                                 onChange={(e) => updateEdit(party.id, { leader: e.target.value })}
+                                onBlur={() => saveEdit(party.id)}
                                 placeholder={party.leader}
                               />
                             </label>
@@ -1097,7 +1115,10 @@ function SetupScreen({
                               <input
                                 type="color"
                                 value={edit.colour}
-                                onChange={(e) => updateEdit(party.id, { colour: e.target.value })}
+                                onChange={(e) => {
+                                  updateEdit(party.id, { colour: e.target.value })
+                                  onSavePartyEdit({ ...edit, colour: e.target.value })
+                                }}
                               />
                               <span className="colour-preview" style={{ background: edit.colour }} />
                             </label>
@@ -1114,7 +1135,7 @@ function SetupScreen({
                     <div className="setup-minor-label">Minor parties</div>
                     <div className="setup-party-group minor">
                       {minorParties.map((party) => {
-                        const edit = editFor(party.id) ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour }
+                        const edit = editFor(party.id)
                         const isSelected = selectedPartyId === party.id
                         const isExpanded = expandedPartyId === party.id
                         return (
@@ -1150,15 +1171,30 @@ function SetupScreen({
                               <div className="setup-party-edit">
                                 <label className="setup-edit-field">
                                   <span>Party name</span>
-                                  <input value={edit.name} onChange={(e) => updateEdit(party.id, { name: e.target.value })} />
+                                  <input
+                                    value={edit.name}
+                                    onChange={(e) => updateEdit(party.id, { name: e.target.value })}
+                                    onBlur={() => saveEdit(party.id)}
+                                  />
                                 </label>
                                 <label className="setup-edit-field">
                                   <span>Leader</span>
-                                  <input value={edit.leader} onChange={(e) => updateEdit(party.id, { leader: e.target.value })} />
+                                  <input
+                                    value={edit.leader}
+                                    onChange={(e) => updateEdit(party.id, { leader: e.target.value })}
+                                    onBlur={() => saveEdit(party.id)}
+                                  />
                                 </label>
                                 <label className="setup-edit-field setup-edit-colour">
                                   <span>Colour</span>
-                                  <input type="color" value={edit.colour} onChange={(e) => updateEdit(party.id, { colour: e.target.value })} />
+                                  <input
+                                    type="color"
+                                    value={edit.colour}
+                                    onChange={(e) => {
+                                      updateEdit(party.id, { colour: e.target.value })
+                                      onSavePartyEdit({ ...edit, colour: e.target.value })
+                                    }}
+                                  />
                                   <span className="colour-preview" style={{ background: edit.colour }} />
                                 </label>
                               </div>
@@ -1265,61 +1301,42 @@ function App() {
   }, [world?.isGoverning, world?.governanceDecisions])
 
   // ── World builders ────────────────────────────────────────────────────────────
-  // Called by SetupScreen — applies party name/leader/colour edits to the world and closes menu
-  const handleSetupStart = useCallback((seed?: number, playerPartyId?: string, edits?: Record<string, PartyEdit>) => {
+  // Called on blur/colour-change from SetupScreen — immediately writes a single party's
+  // name/leader/colour into world so edits persist without pressing "Start Race"
+  const handleSavePartyEdit = useCallback((edit: PartyEdit) => {
+    if (!world) return
+    const patchParty = (p: PartyDefinition) =>
+      p.id !== edit.id ? p : { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
+    setWorld({
+      ...world,
+      parties: world.parties.map(patchParty),
+      constituencies: world.constituencies.map((c) => ({
+        ...c,
+        candidates: c.candidates.map((cand) =>
+          cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
+        ),
+      })),
+    })
+  }, [world])
+
+  // Called by SetupScreen Start Race button — updates player party selection and closes menu
+  const handleSetupStart = useCallback((seed?: number, playerPartyId?: string) => {
     // If a new seed is provided, regenerate entirely
     if (seed !== undefined && seed !== world?.seed) {
       const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId })
-      // Apply any edits immediately after generation
-      const withEdits: World = edits && Object.keys(edits).length > 0
-        ? {
-            ...nextWorld,
-            playerPartyId: playerPartyId ?? nextWorld.playerPartyId,
-            parties: nextWorld.parties.map((p) => {
-              const edit = edits[p.id]
-              return edit ? { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour } : p
-            }),
-          }
-        : nextWorld
-      // Also patch candidate partyName/partyColour in constituencies to match edits
-      const patched: World = {
-        ...withEdits,
-        constituencies: withEdits.constituencies.map((c) => ({
-          ...c,
-          candidates: c.candidates.map((cand) => {
-            const edit = edits?.[cand.partyId]
-            return edit ? { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour } : cand
-          }),
-        })),
-      }
       setPreviousWorld(null)
-      setWorld(patched)
+      setWorld(nextWorld)
       setShowElectionNight(false)
       setShowGovernance(false)
       setLastActionResult(null)
-      setSelectedConstituencyId(patched.constituencies[0]?.id ?? '')
-      setSelectedBlocId(dominantBlocId(patched.constituencies[0]?.blocMix ?? {}))
-      setSelectedTileId(patched.tiles.find((t) => t.constituencyId === patched.constituencies[0]?.id)?.id ?? '')
+      setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
+      setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
+      setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
     } else if (world) {
-      // Just apply edits and player selection to existing world
-      const updatedParties = edits && Object.keys(edits).length > 0
-        ? world.parties.map((p) => {
-            const edit = edits[p.id]
-            return edit ? { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour } : p
-          })
-        : world.parties
-      setWorld({
-        ...world,
-        playerPartyId: playerPartyId ?? world.playerPartyId,
-        parties: updatedParties,
-        constituencies: world.constituencies.map((c) => ({
-          ...c,
-          candidates: c.candidates.map((cand) => {
-            const edit = edits?.[cand.partyId]
-            return edit ? { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour } : cand
-          }),
-        })),
-      })
+      // Just update player selection — party edits already applied via handleSavePartyEdit
+      if (playerPartyId && playerPartyId !== world.playerPartyId) {
+        setWorld({ ...world, playerPartyId })
+      }
     }
     setMenuOpen(false)
   }, [world, constituencyCount])
@@ -1420,6 +1437,7 @@ function App() {
               // menuOpen stays true — user must press Start Race to begin
             }}
             onStart={handleSetupStart}
+            onSavePartyEdit={handleSavePartyEdit}
             onClose={world ? () => setMenuOpen(false) : undefined}
           />
         )}
