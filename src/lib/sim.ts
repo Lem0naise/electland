@@ -689,7 +689,8 @@ function blocAffinity(bloc: FictionalBloc, tags: string[], point: { x: number; y
   const tagBonus = bloc.preferredTags.reduce((sum, tag) => sum + (tags.includes(tag) ? 0.42 : 0), 0)
   const tagPenalty = bloc.avoidedTags.reduce((sum, tag) => sum + (tags.includes(tag) ? 0.24 : 0), 0)
   const minDistance = anchors.reduce((best, anchor) => Math.min(best, Math.sqrt(distanceSq(anchor, point))), Number.POSITIVE_INFINITY)
-  const spread = lerp(260, 95, bloc.concentration)
+  // Tighter spread: concentrated blocs stay in their home territory instead of bleeding across the map
+  const spread = lerp(200, 60, bloc.concentration)
   const proximity = Math.exp(-((minDistance * minDistance) / (2 * spread * spread)))
   return tagBonus - tagPenalty + proximity * (0.8 + bloc.concentration)
 }
@@ -1285,16 +1286,34 @@ function partyEventBonus(party: PartyDefinition, current: GeographicCurrent, til
 }
 
 function scorePartyForTile(world: World, seat: Constituency | undefined, tile: PopulationTile, party: PartyDefinition) {
-  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 1.25 : 0.9) : 0.22
+  // 1. Amplified wardFit: stronger bloc match → much stronger home-ward advantage
+  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 1.8 : 0.9) : 0.22
   const focus = seat && party.focusSeatIds.includes(seat.id) ? 0.18 : 0
-  const organization = Math.log(party.organization + 1) * 0.38
-  const tagBonus = party.strategyTags.reduce((sum, tag) => sum + (tile.tags.includes(tag) ? 0.12 : 0), 0)
-  const issueFit = -valueDistance(tile.values, party.values, tile.salience) / 12000
+  // 2. Organization has more range: clearly separates well-organised from weak parties
+  const organization = Math.log(party.organization + 1) * 0.55
+  // 3. Tag bonus raised: home-turf tags meaningfully reinforce strength
+  const tagBonus = party.strategyTags.reduce((sum, tag) => sum + (tile.tags.includes(tag) ? 0.20 : 0), 0)
+  // 4. Tighter issueFit: ideological distance hurts more — mismatched parties lose real ground
+  const issueFit = -valueDistance(tile.values, party.values, tile.salience) / 7000
   const eventBonus = world.currents.reduce((sum, current) => sum + partyEventBonus(party, current, tile.tags), 0)
   // Campaign boost from canvassing/ads/rally
   const wardBoost = seat ? (party.wardBoosts[seat.id] ?? 0) : 0
   const tileBoost = (tile.campaignBoosts?.[party.id] ?? 0)
-  return wardFit + focus + organization + tagBonus + issueFit + eventBonus + party.baseUtility + party.momentum + wardBoost + tileBoost
+  // 5. Incumbency bonus — two tiers:
+  //    a) Current poll leader in this ward: tiny name-recognition advantage (+0.04)
+  //    b) Elected incumbent (won the seat at the last actual election): moderate boost (+0.10)
+  //    These stack, so an elected incumbent who is also currently leading gets +0.14 total.
+  //    Kept intentionally modest so sustained campaigning can realistically unseat them.
+  let incumbencyBonus = 0
+  if (seat) {
+    const isCurrentLeader = seat.leadingPartyId === party.id
+    if (isCurrentLeader) incumbencyBonus += 0.04
+    if (world.electionsHeld >= 1) {
+      const electedPartyId = world.electionNightResults.find((r) => r.wardId === seat.id)?.winner?.partyId
+      if (electedPartyId === party.id) incumbencyBonus += 0.10
+    }
+  }
+  return wardFit + focus + organization + tagBonus + issueFit + eventBonus + party.baseUtility + party.momentum + wardBoost + tileBoost + incumbencyBonus
 }
 
 export function estimateTilePreference(
