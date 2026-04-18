@@ -145,7 +145,7 @@ export function MapFigure({
                     const selected = seat.id === selectedConstituencyId
                     const leader = seat.results[0]
                     const isBattleground = battlegroundIds.has(seat.id)
-                    const alpha = selected ? 0.85 : marginToAlpha(seat.margin)
+                    const alpha = marginToAlpha(seat.margin)
                     return (
                       <path
                         key={seat.id}
@@ -236,13 +236,30 @@ export function MapFigure({
               )}
 
           {/* Settlement centres */}
-          {world.settlementCenters.map((center) => (
+                  {world.settlementCenters.map((center) => (
             <g key={center.id} className="settlement-mark">
               <circle cx={center.x} cy={center.y} r={6 + center.urbanity * 9} className="settlement-ring" />
               <circle cx={center.x} cy={center.y} r={1.6 + center.urbanity * 2.2} className="settlement-core" />
             </g>
           ))}
         </g>
+
+        {selectedSeat ? (
+          <g className="selection-marker is-selected" clipPath="url(#landmass-clip)">
+            <circle
+              cx={selectedSeat.seed.x}
+              cy={selectedSeat.seed.y}
+              r={11}
+              className="selection-marker-ring"
+            />
+            <circle
+              cx={selectedSeat.seed.x}
+              cy={selectedSeat.seed.y}
+              r={3.2}
+              className="selection-marker-core"
+            />
+          </g>
+        ) : null}
 
         <path d={world.landmass.path} className="landmass-outline" />
 

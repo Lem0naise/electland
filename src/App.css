@@ -1122,6 +1122,21 @@ button, input, select, textarea { font: inherit; }
 .constituency-cell.is-selected { stroke-width: 2.4; stroke: var(--ink); }
 .constituency-cell.is-battleground { stroke: var(--battleground); stroke-width: 1.8; }
 .constituency-cell.is-battleground.is-selected { stroke-width: 2.8; }
+.selection-marker {
+  pointer-events: none;
+}
+.selection-marker-ring {
+  fill: none;
+  stroke: rgba(30, 15, 0, 0.88);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+  animation: selected-constituency-pulse 1.4s ease-in-out infinite;
+}
+.selection-marker-core {
+  fill: var(--paper);
+  stroke: rgba(30, 15, 0, 0.95);
+  stroke-width: 1.5;
+}
 .constituency-outline {
   fill: rgba(255,251,241,0.06);
   stroke: rgba(44,31,14,0.3);
@@ -1156,6 +1171,16 @@ button, input, select, textarea { font: inherit; }
 }
 @keyframes battleground-dash {
   to { stroke-dashoffset: -16; }
+}
+@keyframes selected-constituency-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.78;
+  }
 }
 
 /* ─── Vote history chart ─────────────────────────────────────────────────────── */
@@ -2299,8 +2324,14 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 @media (max-width: 1100px) {
   .dashboard-layout {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      'seatbar'
+      'map'
+      'right';
+    gap: 12px;
   }
   .map-panel { position: static; }
+  .right-column { gap: 12px; }
   .menu-layout { grid-template-columns: 1fr; }
   .action-type-row { grid-template-columns: repeat(3, 1fr); }
 }
@@ -2308,11 +2339,33 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 @media (max-width: 720px) {
   .newspaper-shell { padding: 6px; }
   .masthead-inner { flex-direction: column; gap: 4px; }
-  .game-topbar { flex-direction: column; align-items: stretch; }
-  .topbar-actions { justify-content: stretch; }
-  .topbar-actions button { flex: 1; }
+  
+  .game-topbar { 
+    flex-direction: row; 
+    flex-wrap: wrap; 
+    align-items: center; 
+    gap: 8px; 
+  }
+  .topbar-party-block { flex: 1 1 100%; border-left: none; padding-left: 0; }
+  .topbar-ap-block { flex: 1 1 auto; }
+  .topbar-countdown { flex: 1 1 auto; }
+  .battleground-alert { flex: 1 1 100%; text-align: center; }
+
+  .topbar-actions { justify-content: stretch; width: 100%; margin-top: 4px; }
+  .topbar-actions button { flex: 1; padding: 10px; }
+
   .key-stats-row { grid-template-columns: 1fr; }
   .detail-strip { grid-template-columns: 1fr; }
   .election-night-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  .map-svg { height: min(55vh, 400px); min-height: 300px; }
+  .map-svg { height: min(45vh, 360px); min-height: 250px; }
+}
+
+@media (max-width: 600px) {
+  .setup-party-edit {
+    grid-template-columns: 1fr;
+  }
+  .setup-edit-colour {
+    flex-direction: row;
+    align-items: center;
+  }
 }
