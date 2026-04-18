@@ -644,8 +644,9 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
               <div className="fwp-status">
                 {playerIsLeading
                   ? <span className="fwp-margin-leading">You're leading by {focusWard.margin.toFixed(1)}pts</span>
-                  : <span className="fwp-margin-trailing">You're trailing by {focusWard.margin.toFixed(1)}pts</span>}
+                  : <span className="fwp-margin-trailing">Trailing the lead by {focusWard.margin.toFixed(1)}pts</span>}
               </div>
+              {/* to fix : it says 'you're tailing by x pts */}
             </div>
           )
         : <p className="campaign-no-ward">Click a ward on the map to target it.</p>}
