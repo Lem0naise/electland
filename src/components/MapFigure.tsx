@@ -255,7 +255,7 @@ export function MapFigure({
             <circle
               cx={selectedSeat.seed.x}
               cy={selectedSeat.seed.y}
-              r={3.2}
+              r={5.2}
               className="selection-marker-core"
             />
           </g>

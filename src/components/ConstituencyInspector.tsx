@@ -79,6 +79,60 @@ export function ConstituencyInspector({
             Pop. {formatPopulation(selectedWard.population)} · {(selectedWard.urbanity * 100).toFixed(0)}% urban
           </p>
 
+
+
+
+          {/* Quick stats */}
+          <div className="detail-strip">
+            <div className="detail-strip-item">
+              <span className="label">Turnout</span>
+              <strong>{(selectedWard.turnout * 100).toFixed(1)}%</strong>
+            </div>
+            <div className="detail-strip-item">
+              <span className="label">Character</span>
+              <strong>{selectedWard.tags.slice(0, 2).join(', ')}</strong>
+            </div>
+            <div className="detail-strip-item">
+              <span className="label">Issue</span>
+              <strong>{matchingCurrents[0]?.label ?? 'None active'}</strong>
+              {matchingCurrents[0] && <small>{matchingCurrents[0].description}</small>}
+            </div>
+          </div>
+          
+          
+          {/* Neighbourhood demographics */}
+          <div className="bloc-mix-section">
+            <h4>Who lives here</h4>
+            <p className="bloc-mix-explainer">Resident groups — not a poll, this is who makes up the ward's population.</p>
+            <div className="bloc-list">
+              {blocs.map((bloc) => {
+                const blocColourMap: Record<string, string> = {
+                  market_regulars: '#d94841',
+                  river_walkers: '#00798c',
+                  old_town_loyalists: '#edae49',
+                  workshop_crews: '#3d405b',
+                  hill_street_households: '#81b29a',
+                  college_corner: '#8d5524',
+                  pondside_peacemakers: '#c56b37',
+                }
+                return (
+                  <div key={bloc.key} className="bloc-row">
+                    <span className="bloc-dot" style={{ background: blocColourMap[bloc.key] ?? '#888' }} />
+                    <span className="bloc-label">{bloc.label}</span>
+                    <div className="bloc-bar-wrap">
+                      <div
+                        className="bloc-bar"
+                        style={{ width: `${Math.min(100, bloc.share)}%`, background: blocColourMap[bloc.key] ?? '#888' }}
+                      />
+                    </div>
+                    <span className="bloc-pct">{bloc.share.toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+
           {/* Ideology + fit block */}
           {(() => {
             const playerParty = world.parties.find((p) => p.id === playerPartyId)
@@ -147,55 +201,7 @@ export function ConstituencyInspector({
               </div>
             )
           })()}
-
-          {/* Neighbourhood demographics */}
-          <div className="bloc-mix-section">
-            <h4>Who lives here</h4>
-            <p className="bloc-mix-explainer">Resident groups — not a poll, this is who makes up the ward's population.</p>
-            <div className="bloc-list">
-              {blocs.map((bloc) => {
-                const blocColourMap: Record<string, string> = {
-                  market_regulars: '#d94841',
-                  river_walkers: '#00798c',
-                  old_town_loyalists: '#edae49',
-                  workshop_crews: '#3d405b',
-                  hill_street_households: '#81b29a',
-                  college_corner: '#8d5524',
-                  pondside_peacemakers: '#c56b37',
-                }
-                return (
-                  <div key={bloc.key} className="bloc-row">
-                    <span className="bloc-dot" style={{ background: blocColourMap[bloc.key] ?? '#888' }} />
-                    <span className="bloc-label">{bloc.label}</span>
-                    <div className="bloc-bar-wrap">
-                      <div
-                        className="bloc-bar"
-                        style={{ width: `${Math.min(100, bloc.share)}%`, background: blocColourMap[bloc.key] ?? '#888' }}
-                      />
-                    </div>
-                    <span className="bloc-pct">{bloc.share.toFixed(0)}%</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Quick stats */}
-          <div className="detail-strip">
-            <div className="detail-strip-item">
-              <span className="label">Turnout</span>
-              <strong>{(selectedWard.turnout * 100).toFixed(1)}%</strong>
-            </div>
-            <div className="detail-strip-item">
-              <span className="label">Character</span>
-              <strong>{selectedWard.tags.slice(0, 2).join(', ')}</strong>
-            </div>
-            <div className="detail-strip-item">
-              <span className="label">Issue</span>
-              <strong>{matchingCurrents[0]?.label ?? 'None active'}</strong>
-              {matchingCurrents[0] && <small>{matchingCurrents[0].description}</small>}
-            </div>
-          </div>
+          
 
           {/* Ward history */}
           {selectedWard.history.length > 0 && (

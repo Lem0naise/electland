@@ -106,6 +106,54 @@ const issueCurrents: Array<{
     effect: { services: 10, change: 8 },
     popularityEffect: { target: 'all', amount: 0.04 },
   },
+  {
+    id: 'bus-route-cuts',
+    label: 'Bus Route Cuts',
+    description: 'Reduced weekend buses leave peripheral wards isolated.',
+    tags: ['rural', 'suburban', 'industrial'],
+    effect: { services: -12, growth: -5 },
+    popularityEffect: { target: 'major', amount: -0.06 },
+  },
+  {
+    id: 'high-street-ghost-town',
+    label: 'High Street Vacancies',
+    description: 'Empty storefronts are making the town center look bleak.',
+    tags: ['market', 'center', 'oldtown'],
+    effect: { growth: -15, change: 5 },
+    popularityEffect: { target: 'all', amount: -0.05 },
+  },
+  {
+    id: 'youth-vandalism',
+    label: 'Anti-Social Behavior',
+    description: 'A spike in late-night vandalism has older residents worried.',
+    tags: ['park', 'center', 'south'],
+    effect: { services: 5, change: -10 },
+    popularityEffect: { target: 'minor', amount: -0.04 },
+  },
+  {
+    id: 'heritage-status',
+    label: 'Heritage Status Bid',
+    description: 'A campaign to protect historic buildings restricts new developments.',
+    tags: ['oldtown', 'hill', 'center'],
+    effect: { growth: -8, change: -12 },
+    popularityEffect: { target: 'major', amount: 0.05 },
+  },
+  {
+    id: 'air-quality-alert',
+    label: 'Air Quality Concerns',
+    description: 'Smog from the industrial estate is triggering health complaints.',
+    tags: ['industrial', 'school', 'east'],
+    effect: { services: 8, change: 10 },
+    popularityEffect: { target: 'minor', amount: 0.04 },
+  },
+  {
+    id: 'tech-hub-rumors',
+    label: 'Tech Hub Rumors',
+    description: 'Excitement builds over a tech firm eyeing an old warehouse.',
+    tags: ['metro', 'industrial', 'south'],
+    effect: { growth: 15, change: 12 },
+    popularityEffect: { target: 'minor', amount: 0.07 },
+  },
 ]
 
 // ─── Weekly events pool ─────────────────────────────────────────────────────
@@ -218,6 +266,78 @@ const weeklyEventPool: Array<Omit<WeeklyEvent, 'resolved' | 'chosenIndex'>> = [
       },
     ],
   },
+  {
+    id: 'evt-fly-tipping',
+    headline: 'Massive Fly-Tipping Incident',
+    description: 'Tons of construction waste have been dumped on a rural lane overnight.',
+    tags: ['rural', 'green', 'north'],
+    choices: [
+      {
+        label: 'Install covert cameras',
+        description: 'Tough on crime approach. Expensive, but popular with locals.',
+        effect: { tags: ['rural', 'north'], valueDrift: { services: 6, change: -4 }, playerBoost: 0.04, opponentBoost: 0 },
+      },
+      {
+        label: 'Organize community clear-up',
+        description: 'Cheaper, fosters community spirit, but doesn’t catch the culprits.',
+        effect: { tags: ['green'], valueDrift: { change: 4 }, playerBoost: 0.02, opponentBoost: 0.02 },
+      },
+    ],
+  },
+  {
+    id: 'evt-factory-closure',
+    headline: 'Major Employer Threatens Exit',
+    description: 'The canning factory says local taxes are too high and threatens to relocate.',
+    tags: ['industrial', 'east', 'suburban'],
+    choices: [
+      {
+        label: 'Offer emergency tax breaks',
+        description: 'Saves jobs, but drains council coffers and angers progressives.',
+        effect: { tags: ['industrial', 'suburban'], valueDrift: { growth: 10, change: -8 }, playerBoost: 0.05, opponentBoost: 0.03 },
+      },
+      {
+        label: 'Call their bluff',
+        description: 'Refuse corporate handouts. Very risky for local employment.',
+        effect: { tags: ['east'], valueDrift: { growth: -12, services: 4 }, playerBoost: -0.02, opponentBoost: 0.06 },
+      },
+    ],
+  },
+  {
+    id: 'evt-winter-grit',
+    headline: 'Winter Grit Shortage',
+    description: 'A sudden freeze hits, and the council is running out of road salt.',
+    tags: ['hill', 'rural', 'suburban'],
+    choices: [
+      {
+        label: 'Prioritize main roads only',
+        description: 'Logical, but leaves side streets and hills trapped in ice.',
+        effect: { tags: ['suburban'], valueDrift: { services: -4 }, playerBoost: 0.01, opponentBoost: 0.02 },
+      },
+      {
+        label: 'Buy emergency stock at premium',
+        description: 'Fixes the problem immediately but blows a hole in the contingency budget.',
+        effect: { tags: ['hill', 'rural'], valueDrift: { services: 8 }, playerBoost: 0.05, opponentBoost: 0 },
+      },
+    ],
+  },
+  {
+    id: 'evt-supermarket-chain',
+    headline: 'Mega-Mart Planning Application',
+    description: 'A giant retail chain wants to build out of town. Independent shops are terrified.',
+    tags: ['market', 'center', 'south'],
+    choices: [
+      {
+        label: 'Block the application',
+        description: 'Protect the high street. Market traders will love you; bargain hunters won\'t.',
+        effect: { tags: ['market', 'center'], valueDrift: { growth: -6, change: -8 }, playerBoost: 0.04, opponentBoost: 0.02 },
+      },
+      {
+        label: 'Welcome the investment',
+        description: 'Embrace job creation and cheap goods. A massive blow to the old town charm.',
+        effect: { tags: ['south', 'industrial'], valueDrift: { growth: 12, change: 10 }, playerBoost: 0.03, opponentBoost: 0.04 },
+      },
+    ],
+  },
 ]
 
 // ─── Governance decisions pool ───────────────────────────────────────────────
@@ -270,6 +390,74 @@ const governanceDecisionPool: Array<Omit<GovernanceDecision, 'resolved' | 'chose
         label: 'Small events in every ward',
         description: 'Less headline-grabbing but more broadly popular.',
         effect: { blocEffects: { workshop_crews: 0.03, pondside_peacemakers: 0.03, river_walkers: 0.02 }, playerUtilityDelta: 0.03 },
+      },
+    ],
+  },
+  {
+    id: 'gov-council-tax',
+    headline: 'Annual Council Tax Levy',
+    description: 'Inflation has stretched the budget. Do we raise council tax or slash services?',
+    choices: [
+      {
+        label: 'Raise the tax (3%)',
+        description: 'Protects services but hits residents directly in their wallets.',
+        effect: { blocEffects: { old_town_loyalists: -0.05, hill_street_households: -0.04, pondside_peacemakers: 0.03 }, playerUtilityDelta: -0.02 },
+      },
+      {
+        label: 'Freeze the tax',
+        description: 'Highly popular financially, but guarantees deep cuts to social care next quarter.',
+        effect: { blocEffects: { workshop_crews: 0.05, hill_street_households: 0.04, river_walkers: -0.06 }, playerUtilityDelta: 0.03 },
+      },
+    ],
+  },
+  {
+    id: 'gov-pedestrianization',
+    headline: 'High Street Pedestrianization',
+    description: 'A bold plan to ban cars from the town center on weekends to boost cafe culture.',
+    choices: [
+      {
+        label: 'Implement the car ban',
+        description: 'Great for pedestrians and atmosphere. Terrible for deliveries and elderly access.',
+        effect: { blocEffects: { college_corner: 0.06, river_walkers: 0.05, market_regulars: -0.05 }, playerUtilityDelta: 0.02 },
+      },
+      {
+        label: 'Keep roads open',
+        description: 'Maintains the status quo. Businesses keep their drive-up traffic.',
+        effect: { blocEffects: { market_regulars: 0.04, old_town_loyalists: 0.02, college_corner: -0.04 }, playerUtilityDelta: 0.01 },
+      },
+    ],
+  },
+  {
+    id: 'gov-streetlights',
+    headline: 'Midnight Streetlight Switch-Off',
+    description: 'To save energy and money, a proposal suggests turning off streetlights from 1 AM to 5 AM.',
+    choices: [
+      {
+        label: 'Turn them off',
+        description: 'Saves a fortune and reduces light pollution. Sparks massive crime fears.',
+        effect: { blocEffects: { river_walkers: 0.03, old_town_loyalists: -0.06, workshop_crews: -0.04 }, playerUtilityDelta: -0.01 },
+      },
+      {
+        label: 'Keep the lights on',
+        description: 'Reassures residents about safety, but forces budget cuts elsewhere.',
+        effect: { blocEffects: { old_town_loyalists: 0.05, workshop_crews: 0.03, river_walkers: -0.02 }, playerUtilityDelta: 0.03 },
+      },
+    ],
+  },
+  {
+    id: 'gov-zoning-youth',
+    headline: 'Empty Lot Zoning',
+    description: 'A vacant lot is owned by the council. Two different groups are lobbying for its use.',
+    choices: [
+      {
+        label: 'Build a Youth Skatepark',
+        description: 'Gives teens a place to go, reducing loitering. Upsets neighbors worried about noise.',
+        effect: { blocEffects: { college_corner: 0.05, workshop_crews: 0.02, old_town_loyalists: -0.04 }, playerUtilityDelta: 0.02 },
+      },
+      {
+        label: 'Build a Quiet Memorial Garden',
+        description: 'A peaceful space. Beloved by older residents, but ignores the youth issue entirely.',
+        effect: { blocEffects: { old_town_loyalists: 0.05, pondside_peacemakers: 0.04, college_corner: -0.03 }, playerUtilityDelta: 0.02 },
       },
     ],
   },
