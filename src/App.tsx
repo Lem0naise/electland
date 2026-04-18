@@ -55,17 +55,17 @@ function IdeologyWidget({ values, colour, compact = false }: {
             <span className={`ideology-pole left${intensity > 25 && val < 0 ? ' is-dominant' : ''}`}>
               {ax.leftLabel}
             </span>
-            <div className="ideology-track">
-              <div className="ideology-track-line" />
-              <div
-                className="ideology-dot"
-                style={{
-                  left: `${pct}%`,
-                  background: dotColour,
-                }}
-                title={`${ax.leftLabel} ↔ ${ax.rightLabel}: ${val > 0 ? '+' : ''}${val.toFixed(0)}`}
-              />
-            </div>
+              <div className="ideology-track">
+                <div className="ideology-track-line" />
+                <div
+                  className="ideology-dot"
+                  style={{
+                    left: `${pct}%`,
+                    background: dotColour,
+                  }}
+                  title={val > 15 ? `Strongly prefers ${ax.rightLabel}` : val < -15 ? `Strongly prefers ${ax.leftLabel}` : 'Balanced'}
+                />
+              </div>
             <span className={`ideology-pole right${intensity > 25 && val > 0 ? ' is-dominant' : ''}`}>
               {ax.rightLabel}
             </span>

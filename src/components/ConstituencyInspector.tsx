@@ -103,7 +103,6 @@ export function ConstituencyInspector({
           {/* Neighbourhood demographics */}
           <div className="bloc-mix-section">
             <h4>Who lives here</h4>
-            <p className="bloc-mix-explainer">Resident groups — not a poll, this is who makes up the ward's population.</p>
             <div className="bloc-list">
               {blocs.map((bloc) => {
                 const blocColourMap: Record<string, string> = {
@@ -157,14 +156,14 @@ export function ConstituencyInspector({
                           <span
                             className="wfa-dot wfa-ward"
                             style={{ left: `${wardPos}%` }}
-                            title={`Ward: ${wardVal > 0 ? ax.rightShort : ax.leftShort} (${wardVal.toFixed(0)})`}
+                            title={`Ward target`}
                           />
                           {/* Player party dot */}
                           {playerParty && (
                             <span
                               className="wfa-dot wfa-party"
                               style={{ left: `${partyPos}%`, background: playerParty.colour }}
-                              title={`You: ${partyVal > 0 ? ax.rightShort : ax.leftShort} (${partyVal.toFixed(0)})`}
+                              title={`Your position`}
                             />
                           )}
                           {/* Gap indicator */}
@@ -266,7 +265,7 @@ export function ConstituencyInspector({
               )}
               {blocs[0] && <li>{blocs[0].label} makes up {blocs[0].share.toFixed(0)}% of this ward and shapes its baseline mood.</li>}
               {matchingCurrents[0] && <li>{matchingCurrents[0].label} is active here.</li>}
-              <li>Voter values: {axisSummary(selectedWard.values).join(', ')}.</li>
+              <li>Voter values: {axisSummary(selectedWard.values).join('; ')}.</li>
             </ul>
           </details>
         </>
@@ -327,7 +326,7 @@ export function ConstituencyInspector({
           </div>
 
           <ul className="detail-bullets">
-            <li>{axisSummary(selectedBloc.center).join('. ')}.</li>
+            <li>{axisSummary(selectedBloc.center).join('; ')}.</li>
             <li>Cluster around {selectedBloc.preferredTags.join(', ')} areas.</li>
             {blocStrongholds[0] && <li>{blocStrongholds[0].seat.name} is their clearest base ({blocStrongholds[0].share.toFixed(0)}%).</li>}
           </ul>
@@ -366,16 +365,16 @@ export function ConstituencyInspector({
             <h4>Who lives here</h4>
             <p className="bloc-mix-explainer">Resident demographics — not a poll.</p>
             <div className="bloc-list">
-              {tileBlocs.map((bloc) => (
-                <div key={bloc.key} className="bloc-row">
-                  <span className="bloc-dot" style={{ background: '#7a6040' }} />
-                  <span className="bloc-label">{bloc.label}</span>
-                  <div className="bloc-bar-wrap">
-                    <div className="bloc-bar" style={{ width: `${Math.min(100, bloc.share)}%`, background: '#7a6040' }} />
+              {tileBlocs.map((bloc, index) => {
+                const rankText = index === 0 ? 'Dominant' : index === 1 ? 'Significant' : 'Present'
+                return (
+                  <div key={bloc.key} className="bloc-row ranked-bloc">
+                    <span className="bloc-dot" style={{ background: '#7a6040' }} />
+                    <span className="bloc-label" style={{ fontWeight: index === 0 ? 600 : 400 }}>{index + 1}. {bloc.label}</span>
+                    <span className="bloc-rank" style={{ color: '#888', fontSize: '0.85em', marginLeft: 'auto' }}>{rankText}</span>
                   </div>
-                  <span className="bloc-pct">{bloc.share.toFixed(0)}%</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -397,7 +396,7 @@ export function ConstituencyInspector({
           <ul className="detail-bullets">
             <li>{topTileParty?.partyName ?? 'No party'} leads with {secondTileParty && tileLeadMargin !== null ? `${tileLeadMargin.toFixed(1)} pts over ${secondTileParty.partyName}.` : 'no close challenger.'}</li>
             <li>{tileBlocs[0]?.label ?? 'No bloc'} is the dominant bloc here.</li>
-            <li>{axisSummary(selectedTile.values).join('. ')}.</li>
+            <li>{axisSummary(selectedTile.values).join('; ')}.</li>
           </ul>
         </>
       )}

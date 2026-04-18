@@ -2358,10 +2358,22 @@ export function wardFitSentence(
 
 export function axisSummary(values: PoliticalValues) {
   const lines: string[] = []
-  if (Math.abs(values.change) > 15) lines.push(`${values.change > 0 ? 'Reform' : 'Tradition'}: ${Math.abs(values.change).toFixed(0)}`)
-  if (Math.abs(values.growth) > 15) lines.push(`${values.growth > 0 ? 'Enterprise' : 'Caution'}: ${Math.abs(values.growth).toFixed(0)}`)
-  if (Math.abs(values.services) > 15) lines.push(`${values.services > 0 ? 'Services' : 'Thrift'}: ${Math.abs(values.services).toFixed(0)}`)
-  return lines.length > 0 ? lines : ['Centrist across all axes']
+  if (values.change > 25) lines.push('Strongly favors Reform')
+  else if (values.change > 10) lines.push('Leans towards Reform')
+  else if (values.change < -25) lines.push('Staunchly Traditional')
+  else if (values.change < -10) lines.push('Leans towards Tradition')
+
+  if (values.growth > 25) lines.push('Hungry for Growth')
+  else if (values.growth > 10) lines.push('Pro-enterprise')
+  else if (values.growth < -25) lines.push('Highly Cautious')
+  else if (values.growth < -10) lines.push('Leans towards Caution')
+
+  if (values.services > 25) lines.push('Public Service Focus')
+  else if (values.services > 10) lines.push('Prefers strong services')
+  else if (values.services < -25) lines.push('Fiscally Conservative')
+  else if (values.services < -10) lines.push('Leans towards Thrift')
+
+  return lines.length > 0 ? lines : ['Broadly Centrist']
 }
 
 export function getAvailableActions(world: World): CampaignAction[] {
