@@ -174,13 +174,15 @@ export interface TownStats {
 }
 
 // Campaign actions the player can take
-export type CampaignActionType = 'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event'
+export type CampaignActionType = 'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event' | 'fix_potholes' | 'improve_bins' | 'ward_festival'
 
 export interface CampaignAction {
   type: CampaignActionType
   label: string
   description: string
   apCost: number
+  isPermanent?: boolean
+  permanentApCost?: number
   // For ward-targeted actions
   wardId?: string
   // For smear: target party
@@ -274,6 +276,15 @@ export interface GovernanceDecision {
   chosenIndex?: number
 }
 
+export interface ActiveCampaign {
+  id: string
+  type: CampaignActionType
+  label: string
+  apCostPerTurn: number
+  wardId?: string
+  targetPartyId?: string
+}
+
 export interface World {
   seed: number
   week: number
@@ -301,6 +312,8 @@ export interface World {
   // Campaign resources
   playerActionPoints: number
   maxActionPoints: number
+  // Active permanent campaigns
+  activeCampaigns: ActiveCampaign[]
   // Actions taken this week (cleared at start of each week)
   actionsThisWeek: ActionResult[]
   // Weekly event (one per week, optional)

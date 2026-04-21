@@ -3,6 +3,7 @@ import { Delaunay } from 'd3-delaunay'
 import {
   VALUE_KEYS,
   type ActionResult,
+  type ActiveCampaign,
   type CampaignAction,
   type Constituency,
   type ConstituencyResult,
@@ -1884,6 +1885,69 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       description = `Your party shifted its stance to emphasise ${dirLabel} ${axisLabel}. Some voters are paying attention.`
       break
     }
+    case 'fix_potholes': {
+      if (!targetWard) break
+      updatedParties = updatedParties.map((p) =>
+        p.id === world.playerPartyId
+          ? { ...p, wardBoosts: { ...p.wardBoosts, [targetWard.id]: clamp((p.wardBoosts[targetWard.id] ?? 0) + 0.09, 0, 0.45) } }
+          : p,
+      )
+      // Services-leaning tiles get a bonus
+      updatedTiles = updatedTiles.map((tile) => {
+        if (tile.constituencyId !== targetWard.id) return tile
+        return {
+          ...tile,
+          campaignBoosts: {
+            ...tile.campaignBoosts,
+            [world.playerPartyId]: clamp((tile.campaignBoosts?.[world.playerPartyId] ?? 0) + 0.05, 0, 0.4),
+          },
+        }
+      })
+      voteShareDelta = 4
+      description = `Your team organised a pothole blitz in ${targetWard.name}. Residents actually noticed.`
+      break
+    }
+    case 'improve_bins': {
+      if (!targetWard) break
+      updatedParties = updatedParties.map((p) =>
+        p.id === world.playerPartyId
+          ? { ...p, wardBoosts: { ...p.wardBoosts, [targetWard.id]: clamp((p.wardBoosts[targetWard.id] ?? 0) + 0.08, 0, 0.45) } }
+          : p,
+      )
+      voteShareDelta = 3
+      description = `You personally lobbied the bin lorry depot. Collections improved in ${targetWard.name}. Small win, big gratitude.`
+      break
+    }
+    case 'ward_festival': {
+      if (!targetWard) break
+      // Higher risk/reward — can fall flat or be a hit
+      const successChance = 0.55
+      const success = createRng(world.seed + world.week * 777 + Date.now() % 999)() < successChance
+      if (success) {
+        updatedParties = updatedParties.map((p) =>
+          p.id === world.playerPartyId
+            ? {
+                ...p,
+                wardBoosts: { ...p.wardBoosts, [targetWard.id]: clamp((p.wardBoosts[targetWard.id] ?? 0) + 0.18, 0, 0.55) },
+                momentum: clamp(p.momentum + 0.1, -0.7, 0.7),
+              }
+            : p,
+        )
+        voteShareDelta = 8
+        description = `The ${targetWard.name} Ward Festival was a smash hit. Your team were everywhere — and everyone noticed.`
+        outcome = 'success'
+      } else {
+        updatedParties = updatedParties.map((p) =>
+          p.id === world.playerPartyId
+            ? { ...p, momentum: clamp(p.momentum - 0.06, -0.7, 0.7) }
+            : p,
+        )
+        voteShareDelta = -1
+        description = `The festival in ${targetWard.name} was a bit of a damp squib. The bunting fell down and the DJ cancelled.`
+        outcome = 'backfire'
+      }
+      break
+    }
   }
 
   const updatedWorld: World = {
@@ -2001,6 +2065,7 @@ export function generateWorld(options: WorldOptions): World {
     weeksUntilElection,
     playerActionPoints: 5,
     maxActionPoints: 5,
+    activeCampaigns: [] as ActiveCampaign[],
     actionsThisWeek: [] as ActionResult[],
     weeklyEvent: pickWeeklyEvent(rng),
     newsFeed: [`Welcome to ${townName}. Your campaign begins now. Election in ${weeksUntilElection} weeks.`],
@@ -2076,8 +2141,8 @@ export function simulateWeek(world: World): World {
     parties: partiesEvolved,
     constituencies: constituenciesWithHistory,
     weeksUntilElection: world.weeksUntilElection > 0 ? world.weeksUntilElection - 1 : world.electionCycleWeeks,
-    // Reset player AP for new week
-    playerActionPoints: world.maxActionPoints,
+    // Reset player AP for new week, then subtract permanent campaign drains (capped at 3 AP/week)
+    playerActionPoints: Math.max(0, world.maxActionPoints - Math.min(3, world.activeCampaigns.reduce((sum, c) => sum + c.apCostPerTurn, 0))),
     actionsThisWeek: [] as ActionResult[],
     // New weekly event
     weeklyEvent: pickWeeklyEvent(rng),
@@ -2085,9 +2150,29 @@ export function simulateWeek(world: World): World {
     voteHistory: [...world.voteHistory, historyEntry].slice(-52),
   }
 
+  // Apply permanent campaign boosts (ward boosts carry-forward through evolveParties decay, so re-apply each week)
+  const provisionalWithCampaigns = (() => {
+    if (world.activeCampaigns.length === 0) return provisional as World
+    let partiesWithBoosts = [...provisional.parties]
+    for (const campaign of world.activeCampaigns) {
+      if (!campaign.wardId) continue
+      const boostAmount = campaign.type === 'canvass' ? 0.06
+        : campaign.type === 'ads' ? 0.08
+        : campaign.type === 'fix_potholes' ? 0.05
+        : campaign.type === 'improve_bins' ? 0.04
+        : 0.05
+      partiesWithBoosts = partiesWithBoosts.map((p) =>
+        p.id === world.playerPartyId
+          ? { ...p, wardBoosts: { ...p.wardBoosts, [campaign.wardId!]: clamp((p.wardBoosts[campaign.wardId!] ?? 0) + boostAmount, 0, 0.55) } }
+          : p,
+      )
+    }
+    return { ...provisional, parties: partiesWithBoosts } as World
+  })()
+
   // Run AI campaigns
-  const { parties: partiesAfterAI, newsFeedLines: aiNews } = runAICampaigns(provisional as World, rng)
-  const provisionalWithAI = { ...provisional, parties: partiesAfterAI }
+  const { parties: partiesAfterAI, newsFeedLines: aiNews } = runAICampaigns(provisionalWithCampaigns, rng)
+  const provisionalWithAI = { ...provisionalWithCampaigns, parties: partiesAfterAI }
 
   const results = calculateResults(provisionalWithAI as World)
   const seatLeader = results.nationalResults[0]
@@ -2228,8 +2313,53 @@ export function simulateWeek(world: World): World {
     }
   }
 
+  // ── Cancel auto-campaigns in wards that changed hands ────────────────────
+  // Collect ward IDs where the leading party changed (mid-cycle or election night)
+  const flippedWardIds = new Set<string>()
+  if (electionHappening) {
+    for (const r of electionNightResults) {
+      const prevWinner = world.electionNightResults.find((p) => p.wardId === r.wardId)?.winner?.partyId
+      if (prevWinner !== undefined && r.winner?.partyId !== prevWinner) {
+        flippedWardIds.add(r.wardId)
+      }
+    }
+  } else {
+    for (const newSeat of results.constituencies) {
+      const oldSeat = world.constituencies.find((c) => c.id === newSeat.id)
+      if (oldSeat && oldSeat.leadingPartyId !== newSeat.leadingPartyId) {
+        flippedWardIds.add(newSeat.id)
+      }
+    }
+  }
+  const activeCampaignsAfterFlips = flippedWardIds.size > 0
+    ? provisionalWithAI.activeCampaigns.filter((c) => !c.wardId || !flippedWardIds.has(c.wardId))
+    : provisionalWithAI.activeCampaigns
+
+  const flippedPlayerWards = electionHappening
+    ? electionNightResults.filter((r) => {
+        const prev = world.electionNightResults.find((p) => p.wardId === r.wardId)?.winner?.partyId
+        return prev !== undefined && r.winner?.partyId !== prev &&
+          (r.winner?.partyId === world.playerPartyId || prev === world.playerPartyId)
+      }).map((r) => r.wardId)
+    : results.constituencies
+        .filter((s) => {
+          const old = world.constituencies.find((c) => c.id === s.id)
+          return old && old.leadingPartyId !== s.leadingPartyId &&
+            (s.leadingPartyId === world.playerPartyId || old.leadingPartyId === world.playerPartyId)
+        })
+        .map((s) => s.id)
+
+  if (flippedPlayerWards.length > 0) {
+    const cancelledNames = flippedPlayerWards
+      .map((id) => world.constituencies.find((c) => c.id === id)?.name ?? id)
+    cancelledNames.forEach((name) => {
+      newsFeedLines.push(`Auto-campaigns in ${name} stopped — ward changed hands.`)
+    })
+  }
+
   const merged = {
     ...provisionalWithAI,
+    activeCampaigns: activeCampaignsAfterFlips,
     constituencies: results.constituencies.map((seat) => ({
       ...seat,
       history: constituenciesWithHistory.find((c) => c.id === seat.id)?.history ?? seat.history,
@@ -2380,46 +2510,102 @@ export function getAvailableActions(world: World): CampaignAction[] {
   const actions: CampaignAction[] = []
   const ap = world.playerActionPoints
 
-  // Canvass: cost 1 AP
-  if (ap >= 1) {
-    world.constituencies.forEach((ward) => {
+  // Helper: which ward did the player win at the last election?
+  const playerHeldWards = new Set<string>()
+  if (world.electionsHeld >= 1) {
+    world.electionNightResults.forEach((r) => {
+      if (r.winner?.partyId === world.playerPartyId) playerHeldWards.add(r.wardId)
+    })
+  }
+
+  world.constituencies.forEach((ward) => {
+    const isIncumbent = playerHeldWards.has(ward.id)
+
+    if (isIncumbent) {
+      // ── Governance / incumbent actions ────────────────────────────────────
+      // Fix Potholes: cost 1 AP, can be permanent (1 AP/week drain)
+      actions.push({
+        type: 'fix_potholes',
+        label: `Fix the potholes in ${ward.name}`,
+        description: 'Get the roads sorted. Visible action that keeps residents happy.',
+        apCost: 1,
+        isPermanent: true,
+        permanentApCost: 1,
+        wardId: ward.id,
+      })
+
+      // Improve Bins: cost 1 AP, can be permanent
+      actions.push({
+        type: 'improve_bins',
+        label: `Improve bin collections in ${ward.name}`,
+        description: 'Sort out the missed collections. Dull work, but voters love a full wheelie bin.',
+        apCost: 1,
+        isPermanent: true,
+        permanentApCost: 1,
+        wardId: ward.id,
+      })
+
+      // Ward Festival: cost 3 AP, one-off (high risk/reward)
+      if (ap >= 3) {
+        actions.push({
+          type: 'ward_festival',
+          label: `Host a ward festival in ${ward.name}`,
+          description: 'A community event in your own backyard. Big boost if it works — embarrassing if it flops.',
+          apCost: 3,
+          wardId: ward.id,
+        })
+      }
+
+      // Canvass still available (cost 1 AP, permanent)
+      actions.push({
+        type: 'canvass',
+        label: `Canvass ${ward.name}`,
+        description: 'Keep the volunteers out knocking. Steady support as your ward councillor.',
+        apCost: 1,
+        isPermanent: true,
+        permanentApCost: 1,
+        wardId: ward.id,
+      })
+    } else {
+      // ── Challenger / campaign actions ──────────────────────────────────────
+      // Canvass: cost 1 AP, can be permanent
       actions.push({
         type: 'canvass',
         label: `Canvass ${ward.name}`,
         description: 'Send volunteers door-to-door. Steady, reliable boost to support.',
         apCost: 1,
+        isPermanent: true,
+        permanentApCost: 1,
         wardId: ward.id,
       })
-    })
-  }
 
-  // Ads: cost 2 AP
-  if (ap >= 2) {
-    world.constituencies.forEach((ward) => {
-      actions.push({
-        type: 'ads',
-        label: `Run ads in ${ward.name}`,
-        description: 'Flood local social and print with targeted ads. Bigger boost than canvassing.',
-        apCost: 2,
-        wardId: ward.id,
-      })
-    })
-  }
+      // Ads: cost 2 AP, can be permanent
+      if (ap >= 2) {
+        actions.push({
+          type: 'ads',
+          label: `Run ads in ${ward.name}`,
+          description: 'Flood local social and print with targeted ads. Bigger boost than canvassing.',
+          apCost: 2,
+          isPermanent: true,
+          permanentApCost: 2,
+          wardId: ward.id,
+        })
+      }
 
-  // Rally: cost 3 AP (risk/reward)
-  if (ap >= 3) {
-    world.constituencies.forEach((ward) => {
-      actions.push({
-        type: 'rally',
-        label: `Hold a rally in ${ward.name}`,
-        description: 'Big public event. Can go brilliantly — or fall flat.',
-        apCost: 3,
-        wardId: ward.id,
-      })
-    })
-  }
+      // Rally: cost 3 AP, one-off (risk/reward)
+      if (ap >= 3) {
+        actions.push({
+          type: 'rally',
+          label: `Hold a rally in ${ward.name}`,
+          description: 'Big public event. Can go brilliantly — or fall flat.',
+          apCost: 3,
+          wardId: ward.id,
+        })
+      }
+    }
+  })
 
-  // Smear: cost 2 AP
+  // Smear: cost 2 AP, challenger only (or any ward)
   if (ap >= 2) {
     const opponents = world.parties.filter((p) => p.id !== world.playerPartyId)
     world.constituencies.forEach((ward) => {

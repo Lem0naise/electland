@@ -30,9 +30,8 @@ body {
 button, input, select, textarea { font: inherit; }
 
 /* ─── Shell ────────────────────────────────────────────────────────────────── */
+/* (full layout rules at bottom of file — non-scrolling desktop shell) */
 .newspaper-shell {
-  min-height: 100vh;
-  padding: 6px 10px 12px;
   max-width: 1600px;
   margin: 0 auto;
 }
@@ -109,11 +108,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* ─── Front page ────────────────────────────────────────────────────────────── */
-.front-page {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* .front-page — flex rules at bottom of file */
 
 /* ─── Menu overlay ──────────────────────────────────────────────────────────── */
 /* ─── Setup / Start screen ──────────────────────────────────────────────────── */
@@ -854,38 +849,14 @@ button, input, select, textarea { font: inherit; }
 .topbar-actions { display: flex; gap: 6px; margin-left: auto; }
 
 /* ─── Dashboard layout ──────────────────────────────────────────────────────── */
-.dashboard-layout {
-  display: grid;
-  /* seat bar spans full width, map + right column below */
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr);
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    'seatbar seatbar'
-    'map right';
-  gap: 6px;
-  min-height: calc(100vh - 110px);
-  align-items: start;
-}
-
+/* (full grid rules at bottom of file) */
 .seat-bar-row {
   grid-area: seatbar;
 }
 
-.map-panel {
-  grid-area: map;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  position: sticky;
-  top: 6px;
-}
+/* .map-panel rules at bottom */
 
-.right-column {
-  grid-area: right;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* .right-column rules at bottom */
 
 /* ─── Seat bar ────────────────────────────────────────────────────────────── */
 .seat-bar-wrap {
@@ -1020,7 +991,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* ─── Campaign panel (always visible) ────────────────────────────────────── */
-.campaign-panel-wrap { overflow: auto; max-height: 56vh; }
+.campaign-panel-wrap { overflow: visible; }
 .campaign-panel { display: flex; flex-direction: column; gap: 8px; }
 
 /* ─── Map panel ─────────────────────────────────────────────────────────────── */
@@ -2313,35 +2284,23 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .empty-panel p { margin: 0; color: var(--ink-soft); }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .dashboard-layout {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'seatbar'
-      'map'
-      'right';
-    gap: 12px;
-  }
-  .map-panel { position: static; }
-  .right-column { gap: 12px; }
-  .menu-layout { grid-template-columns: 1fr; }
-  .action-type-row { grid-template-columns: repeat(3, 1fr); }
-}
-
 @media (max-width: 720px) {
   .newspaper-shell { padding: 6px; }
   .masthead-inner { flex-direction: column; gap: 4px; }
-  
-  .game-topbar { 
-    flex-direction: row; 
-    flex-wrap: wrap; 
-    align-items: center; 
-    gap: 8px; 
+
+  /* Sticky topbar on mobile */
+  .game-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
   .topbar-party-block { flex: 1 1 100%; border-left: none; padding-left: 0; }
   .topbar-ap-block { flex: 1 1 auto; }
   .topbar-countdown { flex: 1 1 auto; }
-  .battleground-alert { flex: 1 1 100%; text-align: center; }
 
   .topbar-actions { justify-content: stretch; width: 100%; margin-top: 4px; }
   .topbar-actions button { flex: 1; padding: 10px; }
@@ -2349,7 +2308,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   .key-stats-row { grid-template-columns: 1fr; }
   .detail-strip { grid-template-columns: 1fr; }
   .election-night-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  .map-svg { height: min(45vh, 360px); min-height: 250px; }
+  .map-svg { height: min(55vw, 360px); min-height: 240px; }
 }
 
 @media (max-width: 600px) {
@@ -2360,4 +2319,221 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
     flex-direction: row;
     align-items: center;
   }
+}
+/* ─── Dashboard layout — mobile-first single column ─────────────────────── */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    'seatbar'
+    'map'
+    'right';
+  gap: 10px;
+  align-items: start;
+}
+.map-panel {
+  grid-area: map;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.right-column {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.campaign-panel-wrap {
+  overflow: visible;
+}
+
+/* ─── Desktop: two-column side-by-side + non-scrolling fixed shell ───────── */
+@media (min-width: 1101px) {
+  body {
+    overflow: hidden;
+    height: 100vh;
+  }
+  .newspaper-shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px 6px;
+    overflow: hidden;
+  }
+  .front-page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .dashboard-layout {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'seatbar seatbar'
+      'map right';
+    gap: 6px;
+  }
+  .map-panel {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .map-panel .map-svg {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  .right-column {
+    overflow-y: auto;
+    min-height: 0;
+    max-height: 100%;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-faint) transparent;
+  }
+  .right-column::-webkit-scrollbar { width: 5px; }
+  .right-column::-webkit-scrollbar-thumb { background: var(--ink-faint); border-radius: 3px; }
+}
+
+/* ─── Advance Week button — large and prominent ─────────────────────────── */
+.advance-week-btn {
+  font-size: 0.95rem !important;
+  font-weight: 900 !important;
+  padding: 10px 22px !important;
+  background: linear-gradient(180deg, #7a5430 0%, #4a3118 100%) !important;
+  border: 2px solid var(--ink) !important;
+  letter-spacing: 0.06em !important;
+  box-shadow: 0 3px 10px rgba(44,31,14,0.35) !important;
+  transition: all 140ms ease !important;
+  white-space: nowrap;
+}
+.advance-week-btn:hover {
+  background: linear-gradient(180deg, #9a6840 0%, #5c3f1e 100%) !important;
+  box-shadow: 0 5px 14px rgba(44,31,14,0.45) !important;
+  transform: translateY(-1px);
+}
+.topbar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  align-items: center;
+}
+
+/* ─── Permanent toggle row on action cards ──────────────────────────────── */
+.ac-permanent-row {
+  border-top: 1px solid var(--ink-faint);
+  padding: 4px 10px 6px;
+  background: rgba(255,255,255,0.2);
+}
+.ac-permanent-toggle {
+  appearance: none;
+  border: 1px dashed var(--ink-faint);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 130ms ease;
+  width: 100%;
+  text-align: left;
+}
+.ac-permanent-toggle:hover {
+  background: rgba(122,96,48,0.08);
+  border-color: var(--ink-mid);
+  color: var(--ink-mid);
+}
+.ac-permanent-toggle.is-on {
+  border-style: solid;
+  border-color: #1a5c2a;
+  background: rgba(26,92,42,0.08);
+  color: #1a5c2a;
+}
+
+/* Permanent active card highlight */
+.action-card.is-permanent-active {
+  border-color: rgba(26,92,42,0.45);
+  background: rgba(26,92,42,0.04);
+}
+
+/* Permanent drain notice */
+.permanent-drain-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(26,92,42,0.07);
+  border: 1px solid rgba(26,92,42,0.25);
+  font-size: 0.72rem;
+  color: #1a5c2a;
+}
+.pdn-icon { font-size: 0.9rem; flex-shrink: 0; }
+.pdn-text { font-weight: 600; }
+
+/* Action section label (incumbent mode header) */
+.action-section-label {
+  padding: 5px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.asl-kicker {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--safe);
+  font-weight: 700;
+}
+.asl-desc {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Governance / incumbent action card tint */
+.action-card-gov:not(.is-disabled):not(.is-permanent-active) {
+  background: rgba(240,255,240,0.45);
+  border-color: rgba(26,92,42,0.2);
+}
+.action-card-gov:not(.is-disabled):hover {
+  background: rgba(240,255,240,0.75);
+  border-color: rgba(26,92,42,0.35);
+}
+
+/* Your ward badge (incumbent indicator in the poll header) */
+.incumbent-ward-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  padding: 1px 5px;
+  border: 1.5px solid var(--safe);
+  color: var(--safe);
+  background: rgba(47,110,47,0.09);
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+/* Battleground badge (kept for the poll header) */
+.battleground-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  padding: 1px 5px;
+  border: 1.5px solid var(--battleground);
+  color: var(--battleground);
+  background: rgba(230,92,0,0.07);
+  border-radius: 2px;
+  text-transform: uppercase;
 }

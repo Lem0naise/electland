@@ -14,6 +14,7 @@ import {
 } from './lib/sim'
 import type {
   ActionResult,
+  ActiveCampaign,
   CampaignAction,
   GovernanceDecision,
   PartyDefinition,
@@ -517,10 +518,11 @@ function SeatBar({ world, previousNationalById }: {
 
 // ─── Campaign Actions Panel ───────────────────────────────────────────────────
 // Always visible, no tabs. Ward picker (battlegrounds first), big action cards.
-function CampaignActionsPanel({ world, selectedWardId, onAction }: {
+function CampaignActionsPanel({ world, selectedWardId, onAction, onTogglePermanent }: {
   world: World
   selectedWardId: string
   onAction: (action: CampaignAction) => void
+  onTogglePermanent: (campaign: ActiveCampaign) => void
 }) {
   const [focusWardId, setFocusWardId] = useState(selectedWardId)
   const [smearTargetId, setSmearTargetId] = useState('')
@@ -540,6 +542,21 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
   const isBattleground = focusWard ? world.stats.battlegroundWardIds.includes(focusWard.id) : false
   const playerIsLeading = focusWard?.leadingPartyId === world.playerPartyId
 
+  // Incumbent check: did the player win this ward at the last election?
+  const playerHeldWards = new Set<string>()
+  if (world.electionsHeld >= 1) {
+    world.electionNightResults.forEach((r) => {
+      if (r.winner?.partyId === world.playerPartyId) playerHeldWards.add(r.wardId)
+    })
+  }
+  const isIncumbentInFocusWard = focusWard ? playerHeldWards.has(focusWard.id) : false
+
+  // Active permanent campaigns for the focus ward
+  const activePermanentIds = new Set(
+    world.activeCampaigns.filter((c) => c.wardId === focusWardId).map((c) => c.type)
+  )
+  const totalPermanentDrain = world.activeCampaigns.reduce((sum, c) => sum + c.apCostPerTurn, 0)
+
   function doAction(type: CampaignAction['type'], overrides: Partial<CampaignAction> = {}) {
     const match = actions.find((a) =>
       a.type === type &&
@@ -548,6 +565,25 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
       (type !== 'policy_shift' || (a.policyAxis === policyAxis && a.policyDirection === policyDir)),
     )
     if (match) onAction({ ...match, ...overrides })
+  }
+
+  function togglePermanent(action: CampaignAction) {
+    if (!action.wardId) return
+    const existing = world.activeCampaigns.find((c) => c.wardId === action.wardId && c.type === action.type)
+    if (existing) {
+      // Toggle off — remove
+      onTogglePermanent(existing)
+    } else {
+      // Toggle on — add
+      const newCampaign: ActiveCampaign = {
+        id: `${action.type}-${action.wardId}-${Date.now()}`,
+        type: action.type,
+        label: action.label,
+        apCostPerTurn: action.permanentApCost ?? 1,
+        wardId: action.wardId,
+      }
+      onTogglePermanent(newCampaign)
+    }
   }
 
   const hasEvent = world.weeklyEvent && !world.weeklyEvent.resolved
@@ -584,6 +620,16 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
         </div>
       )}
 
+      {/* Permanent campaign drain notice */}
+      {world.activeCampaigns.length > 0 && (
+        <div className="permanent-drain-notice">
+          <span className="pdn-icon">⟳</span>
+          <span className="pdn-text">
+            {world.activeCampaigns.length} auto-campaign{world.activeCampaigns.length !== 1 ? 's' : ''} running — draining {Math.min(3, totalPermanentDrain)} AP/week
+          </span>
+        </div>
+      )}
+
       {/* Selected ward poll — driven by map click */}
       {focusWard
         ? (
@@ -594,6 +640,7 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
                   <span className="fwp-targeting-label">Targeting</span>
                   <strong className="fwp-ward-name">{focusWard.name}</strong>
                   {isBattleground && <span className="battleground-badge">BATTLEGROUND</span>}
+                  {isIncumbentInFocusWard && <span className="incumbent-ward-badge">YOUR WARD</span>}
                 </div>
                 <span className="fwp-hint">click map to change</span>
               </div>
@@ -643,59 +690,204 @@ function CampaignActionsPanel({ world, selectedWardId, onAction }: {
               {/* Leading / trailing summary */}
               <div className="fwp-status">
                 {playerIsLeading
-                  ? <span className="fwp-margin-leading">You're leading by {focusWard.margin.toFixed(1)}pts</span>
-                  : <span className="fwp-margin-trailing">Trailing the lead by {focusWard.margin.toFixed(1)}pts</span>}
+                  ? <span className="fwp-margin-leading">Leading by {focusWard.margin.toFixed(1)}pts</span>
+                  : <span className="fwp-margin-trailing">Trailing by {focusWard.margin.toFixed(1)}pts</span>}
               </div>
-              {/* to fix : it says 'you're tailing by x pts */}
             </div>
           )
         : <p className="campaign-no-ward">Click a ward on the map to target it.</p>}
 
-      {/* Action cards */}
+      {/* Action cards — incumbent vs challenger */}
       <div className="action-cards">
-        {/* Canvass */}
-        <button
-          type="button"
-          className={`action-card${ap < 1 ? ' is-disabled' : ''}`}
-          disabled={ap < 1}
-          onClick={() => doAction('canvass')}
-        >
-          <div className="ac-header">
-            <span className="ac-name">Canvass doors</span>
-            <span className={`ac-cost${ap < 1 ? ' cant-afford' : ''}`}>1 AP</span>
-          </div>
-          <span className="ac-desc">Steady support boost in {focusWard?.name ?? 'ward'}. Safe bet.</span>
-        </button>
+        {isIncumbentInFocusWard ? (
+          /* ── Incumbent (governance) actions ── */
+          <>
+            <div className="action-section-label">
+              <span className="asl-kicker">Your ward</span>
+              <span className="asl-desc">You hold {focusWard?.name ?? 'this ward'} — use your position.</span>
+            </div>
 
-        {/* Ads */}
-        <button
-          type="button"
-          className={`action-card${ap < 2 ? ' is-disabled' : ''}`}
-          disabled={ap < 2}
-          onClick={() => doAction('ads')}
-        >
-          <div className="ac-header">
-            <span className="ac-name">Run local ads</span>
-            <span className={`ac-cost${ap < 2 ? ' cant-afford' : ''}`}>2 AP</span>
-          </div>
-          <span className="ac-desc">Bigger boost than canvassing. Good for closing a gap.</span>
-        </button>
+            {/* Fix Potholes */}
+            {(() => {
+              const isPermanentActive = activePermanentIds.has('fix_potholes')
+              const canAfford = ap >= 1
+              return (
+                <div className={`action-card action-card-gov${!canAfford && !isPermanentActive ? ' is-disabled' : ''}${isPermanentActive ? ' is-permanent-active' : ''}`}>
+                  <button type="button" className="ac-expand-toggle" onClick={() => doAction('fix_potholes')} disabled={!canAfford && !isPermanentActive}>
+                    <div className="ac-header">
+                      <span className="ac-name">Fix the potholes</span>
+                      <span className={`ac-cost${!canAfford ? ' cant-afford' : ''}`}>1 AP</span>
+                    </div>
+                    <span className="ac-desc">Get the roads sorted. Visible action, grateful residents.</span>
+                  </button>
+                  <div className="ac-permanent-row">
+                    <button
+                      type="button"
+                      className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
+                      onClick={() => {
+                        const action = actions.find((a) => a.type === 'fix_potholes' && a.wardId === focusWardId)
+                        if (action) togglePermanent(action)
+                      }}
+                      title={isPermanentActive ? 'Stop automated action' : 'Run automatically each week (1 AP/week)'}
+                    >
+                      {isPermanentActive ? '⟳ Auto ON — 1 AP/wk' : '⟳ Set to auto'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
 
-        {/* Rally */}
-        <button
-          type="button"
-          className={`action-card action-card-rally${ap < 3 ? ' is-disabled' : ''}`}
-          disabled={ap < 3}
-          onClick={() => doAction('rally')}
-        >
-          <div className="ac-header">
-            <span className="ac-name">Hold a rally</span>
-            <span className={`ac-cost${ap < 3 ? ' cant-afford' : ''}`}>3 AP</span>
-          </div>
-          <span className="ac-desc">High risk, high reward. Could surge — or fall flat.</span>
-        </button>
+            {/* Improve Bins */}
+            {(() => {
+              const isPermanentActive = activePermanentIds.has('improve_bins')
+              const canAfford = ap >= 1
+              return (
+                <div className={`action-card action-card-gov${!canAfford && !isPermanentActive ? ' is-disabled' : ''}${isPermanentActive ? ' is-permanent-active' : ''}`}>
+                  <button type="button" className="ac-expand-toggle" onClick={() => doAction('improve_bins')} disabled={!canAfford && !isPermanentActive}>
+                    <div className="ac-header">
+                      <span className="ac-name">Improve bin collections</span>
+                      <span className={`ac-cost${!canAfford ? ' cant-afford' : ''}`}>1 AP</span>
+                    </div>
+                    <span className="ac-desc">Sort out the missed collections. Dull, but voters notice.</span>
+                  </button>
+                  <div className="ac-permanent-row">
+                    <button
+                      type="button"
+                      className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
+                      onClick={() => {
+                        const action = actions.find((a) => a.type === 'improve_bins' && a.wardId === focusWardId)
+                        if (action) togglePermanent(action)
+                      }}
+                      title={isPermanentActive ? 'Stop automated action' : 'Run automatically each week (1 AP/week)'}
+                    >
+                      {isPermanentActive ? '⟳ Auto ON — 1 AP/wk' : '⟳ Set to auto'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
 
-        {/* Smear */}
+            {/* Ward Festival */}
+            <button
+              type="button"
+              className={`action-card action-card-rally${ap < 3 ? ' is-disabled' : ''}`}
+              disabled={ap < 3}
+              onClick={() => doAction('ward_festival')}
+            >
+              <div className="ac-header">
+                <span className="ac-name">Host a ward festival</span>
+                <span className={`ac-cost${ap < 3 ? ' cant-afford' : ''}`}>3 AP</span>
+              </div>
+              <span className="ac-desc">Big community event. Brilliant if it lands — embarrassing if it flops.</span>
+            </button>
+
+            {/* Canvass (still available) */}
+            {(() => {
+              const isPermanentActive = activePermanentIds.has('canvass')
+              const canAfford = ap >= 1
+              return (
+                <div className={`action-card${!canAfford && !isPermanentActive ? ' is-disabled' : ''}${isPermanentActive ? ' is-permanent-active' : ''}`}>
+                  <button type="button" className="ac-expand-toggle" onClick={() => doAction('canvass')} disabled={!canAfford && !isPermanentActive}>
+                    <div className="ac-header">
+                      <span className="ac-name">Canvass doors</span>
+                      <span className={`ac-cost${!canAfford ? ' cant-afford' : ''}`}>1 AP</span>
+                    </div>
+                    <span className="ac-desc">Keep the volunteers knocking. Good incumbent maintenance.</span>
+                  </button>
+                  <div className="ac-permanent-row">
+                    <button
+                      type="button"
+                      className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
+                      onClick={() => {
+                        const action = actions.find((a) => a.type === 'canvass' && a.wardId === focusWardId)
+                        if (action) togglePermanent(action)
+                      }}
+                    >
+                      {isPermanentActive ? '⟳ Auto ON — 1 AP/wk' : '⟳ Set to auto'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+          </>
+        ) : (
+          /* ── Challenger actions ── */
+          <>
+            {/* Canvass */}
+            {(() => {
+              const isPermanentActive = activePermanentIds.has('canvass')
+              const canAfford = ap >= 1
+              return (
+                <div className={`action-card${!canAfford && !isPermanentActive ? ' is-disabled' : ''}${isPermanentActive ? ' is-permanent-active' : ''}`}>
+                  <button type="button" className="ac-expand-toggle" onClick={() => doAction('canvass')} disabled={!canAfford && !isPermanentActive}>
+                    <div className="ac-header">
+                      <span className="ac-name">Canvass doors</span>
+                      <span className={`ac-cost${!canAfford ? ' cant-afford' : ''}`}>1 AP</span>
+                    </div>
+                    <span className="ac-desc">Steady support boost in {focusWard?.name ?? 'ward'}. Safe bet.</span>
+                  </button>
+                  <div className="ac-permanent-row">
+                    <button
+                      type="button"
+                      className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
+                      onClick={() => {
+                        const action = actions.find((a) => a.type === 'canvass' && a.wardId === focusWardId)
+                        if (action) togglePermanent(action)
+                      }}
+                    >
+                      {isPermanentActive ? '⟳ Auto ON — 1 AP/wk' : '⟳ Set to auto'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Ads */}
+            {(() => {
+              const isPermanentActive = activePermanentIds.has('ads')
+              const canAfford = ap >= 2
+              return (
+                <div className={`action-card${!canAfford && !isPermanentActive ? ' is-disabled' : ''}${isPermanentActive ? ' is-permanent-active' : ''}`}>
+                  <button type="button" className="ac-expand-toggle" onClick={() => doAction('ads')} disabled={!canAfford && !isPermanentActive}>
+                    <div className="ac-header">
+                      <span className="ac-name">Run local ads</span>
+                      <span className={`ac-cost${!canAfford ? ' cant-afford' : ''}`}>2 AP</span>
+                    </div>
+                    <span className="ac-desc">Bigger boost than canvassing. Good for closing a gap.</span>
+                  </button>
+                  <div className="ac-permanent-row">
+                    <button
+                      type="button"
+                      className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
+                      onClick={() => {
+                        const action = actions.find((a) => a.type === 'ads' && a.wardId === focusWardId)
+                        if (action) togglePermanent(action)
+                      }}
+                    >
+                      {isPermanentActive ? '⟳ Auto ON — 2 AP/wk' : '⟳ Set to auto'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Rally */}
+            <button
+              type="button"
+              className={`action-card action-card-rally${ap < 3 ? ' is-disabled' : ''}`}
+              disabled={ap < 3}
+              onClick={() => doAction('rally')}
+            >
+              <div className="ac-header">
+                <span className="ac-name">Hold a rally</span>
+                <span className={`ac-cost${ap < 3 ? ' cant-afford' : ''}`}>3 AP</span>
+              </div>
+              <span className="ac-desc">High risk, high reward. Could surge — or fall flat.</span>
+            </button>
+          </>
+        )}
+
+        {/* Smear — always available */}
         <div className={`action-card action-card-smear${ap < 2 ? ' is-disabled' : ''}`}>
           <button
             type="button"
@@ -1355,6 +1547,24 @@ function App() {
     setLastActionResult(result)
   }
 
+  const handleTogglePermanent = (campaign: ActiveCampaign) => {
+    if (!world) return
+    const existing = world.activeCampaigns.find((c) => c.id === campaign.id || (c.wardId === campaign.wardId && c.type === campaign.type))
+    if (existing) {
+      // Remove — toggle off
+      setWorld({ ...world, activeCampaigns: world.activeCampaigns.filter((c) => c !== existing) })
+    } else {
+      // Add — deduct upfront AP cost (same as apCostPerTurn), then add to active list
+      const upfrontCost = campaign.apCostPerTurn
+      if (world.playerActionPoints < upfrontCost) return // can't afford
+      setWorld({
+        ...world,
+        playerActionPoints: world.playerActionPoints - upfrontCost,
+        activeCampaigns: [...world.activeCampaigns, campaign],
+      })
+    }
+  }
+
   const handleGovernanceDecision = (decisionId: string, choiceIndex: number) => {
     if (!world) return
     const nextDecisions = world.governanceDecisions.map((d) =>
@@ -1393,7 +1603,6 @@ function App() {
   const majority = world?.stats.councilMajority ?? 0
   const playerSeats = playerResult?.seatsWon ?? 0
   const seatsNeeded = majority - playerSeats
-  const isBattleground = world ? world.stats.battlegroundWardIds.length > 0 : false
 
   return (
     <div className="newspaper-shell">
@@ -1478,16 +1687,9 @@ function App() {
               <span className="countdown-label">week{electionIn !== 1 ? 's' : ''} to election</span>
             </div>
 
-            {/* Battleground alert */}
-            {isBattleground && (
-              <div className="battleground-alert">
-                {world.stats.battlegroundWardIds.length} battleground ward{world.stats.battlegroundWardIds.length !== 1 ? 's' : ''}
-              </div>
-            )}
-
             <div className="topbar-actions">
               <button className="ink-button secondary small" type="button" onClick={() => setMenuOpen(true)}>Menu</button>
-              <button className="ink-button small" type="button" onClick={advanceWeek}>
+              <button className="ink-button advance-week-btn" type="button" onClick={advanceWeek}>
                 Advance Week →
               </button>
             </div>
@@ -1556,6 +1758,7 @@ function App() {
                     world={world}
                     selectedWardId={selectedConstituencyId}
                     onAction={handleAction}
+                    onTogglePermanent={handleTogglePermanent}
                   />
                 </section>
 
