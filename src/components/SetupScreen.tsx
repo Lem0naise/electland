@@ -67,6 +67,44 @@ export function SetupScreen({
     onGenerate()
   }
 
+  function applyUKNames() {
+    if (!world) return
+    const ukMappings: Array<{ colour: string; name: string; leader: string }> = [
+      { colour: '#0087DC', name: 'Local Conservatives', leader: 'Cllr Nigel Pemberton' },
+      { colour: '#E4003B', name: 'Labour', leader: 'Cllr Diane Ashworth' },
+      { colour: '#FAA61A', name: 'Lib Dems', leader: 'Cllr Tim Farley' },
+      { colour: '#02A95B', name: 'Green Party', leader: 'Cllr Robin Sycamore' },
+      { colour: '#70147A', name: 'Reform UK', leader: 'Mr Keith Loxley' },
+    ]
+
+    function hexDist(a: string, b: string) {
+      const pa = parseInt(a.replace('#', ''), 16)
+      const pb = parseInt(b.replace('#', ''), 16)
+      const dr = ((pa >> 16) & 255) - ((pb >> 16) & 255)
+      const dg = ((pa >> 8) & 255) - ((pb >> 8) & 255)
+      const db = (pa & 255) - (pb & 255)
+      return dr * dr + dg * dg + db * db
+    }
+
+    const nextEdits = { ...partyEdits }
+    for (const party of world.parties) {
+      let best: { name: string; leader: string; dist: number } | null = null
+      for (const uk of ukMappings) {
+        const dist = hexDist(party.colour, uk.colour)
+        if (!best || dist < best.dist) {
+          best = { name: uk.name, leader: uk.leader, dist }
+        }
+      }
+      if (best && best.dist < 3600) {
+        nextEdits[party.id] = { ...editFor(party.id), name: best.name, leader: best.leader }
+      }
+    }
+    setPartyEdits(nextEdits)
+    for (const edit of Object.values(nextEdits)) {
+      onSavePartyEdit(edit)
+    }
+  }
+
   const wardCounts = [5, 6, 7, 8, 9, 10, 11, 12]
 
   return (
@@ -283,6 +321,17 @@ export function SetupScreen({
                       })}
                     </div>
                   </div>
+                )}
+
+                {world && (
+                  <button
+                    type="button"
+                    className="setup-uk-names-btn"
+                    onClick={applyUKNames}
+                    title="Rename parties to classic UK party names"
+                  >
+                    {'\uD83C\uDDEC\uD83C\uDDE7'} Use UK party names
+                  </button>
                 )}
               </>
             )}
