@@ -362,3 +362,14 @@ export interface PartyEdit {
   leader: string
   colour: string
 }
+
+export interface CouncillorTenure {
+  wardId: string
+  wardName: string
+  name: string
+  partyName: string
+  colour: string
+  termsServed: number
+  firstElectedWeek: number
+  lastElectedWeek: number
+}

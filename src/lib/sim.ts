@@ -7,6 +7,7 @@ import {
   type CampaignAction,
   type Constituency,
   type ConstituencyResult,
+  type CouncillorTenure,
   type CustomPartyDraft,
   type FictionalBloc,
   type GeographicCurrent,
@@ -1041,6 +1042,28 @@ function createWardCandidates(rng: () => number, parties: PartyDefinition[]): Wa
       partyName: party.name,
       partyColour: party.colour,
       name,
+      initials: `${first[0]}${last[0]}`,
+    }
+  })
+}
+
+function rotateCandidates(
+  rng: () => number,
+  candidates: WardCandidate[],
+  incumbentPartyId: string,
+  parties: PartyDefinition[],
+): WardCandidate[] {
+  return candidates.map((cand) => {
+    if (cand.partyId === incumbentPartyId) return cand
+    if (rng() >= 0.5) return cand
+    const first = pickOne(rng, firstNames)
+    const last = pickOne(rng, lastNames)
+    const party = parties.find((p) => p.id === cand.partyId)
+    return {
+      partyId: cand.partyId,
+      partyName: party?.name ?? cand.partyName,
+      partyColour: party?.colour ?? cand.partyColour,
+      name: `${first} ${last}`,
       initials: `${first[0]}${last[0]}`,
     }
   })
@@ -2363,6 +2386,9 @@ export function simulateWeek(world: World): World {
     constituencies: results.constituencies.map((seat) => ({
       ...seat,
       history: constituenciesWithHistory.find((c) => c.id === seat.id)?.history ?? seat.history,
+      candidates: electionHappening
+        ? rotateCandidates(rng, seat.candidates, seat.leadingPartyId, provisionalWithAI.parties)
+        : seat.candidates,
     })),
     nationalResults: results.nationalResults,
     currentMayorParty: electionHappening && seatLeader ? seatLeader.partyName : world.currentMayorParty,
@@ -2379,6 +2405,17 @@ export function simulateWeek(world: World): World {
       ? [pickGovernanceDecision(rng), pickGovernanceDecision(rng)]
       : world.governanceDecisions,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
+  }
+
+  if (electionHappening) {
+    const tenureResults = electionNightResults.map((r) => ({
+      wardId: r.wardId,
+      wardName: r.wardName,
+      winnerName: r.winner.name,
+      winnerParty: r.winner.partyName,
+      winnerColour: r.winner.partyColour,
+    }))
+    updateCouncillorTenure(merged.seed, merged.week, tenureResults)
   }
 
   const stats = buildStats(merged)
@@ -2668,4 +2705,59 @@ export function getAvailableActions(world: World): CampaignAction[] {
   }
 
   return actions
+}
+
+// ─── Councillor tenure tracking ────────────────────────────────────────────
+const COUNCILLOR_TENURE_PREFIX = 'electland_councillors_'
+
+function tenureKey(seed: number) {
+  return `${COUNCILLOR_TENURE_PREFIX}${seed}`
+}
+
+export function loadCouncillorTenure(seed: number): Record<string, CouncillorTenure> {
+  try {
+    const raw = localStorage.getItem(tenureKey(seed))
+    if (!raw) return {}
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
+}
+
+function saveCouncillorTenure(seed: number, registry: Record<string, CouncillorTenure>) {
+  try {
+    localStorage.setItem(tenureKey(seed), JSON.stringify(registry))
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+export function updateCouncillorTenure(seed: number, week: number, results: Array<{ wardId: string; wardName: string; winnerName: string; winnerParty: string; winnerColour: string }>) {
+  const registry = loadCouncillorTenure(seed)
+
+  for (const r of results) {
+    const existing = registry[r.wardId]
+    if (existing && existing.name === r.winnerName) {
+      registry[r.wardId] = {
+        ...existing,
+        termsServed: existing.termsServed + 1,
+        lastElectedWeek: week,
+        partyName: r.winnerParty,
+        colour: r.winnerColour,
+      }
+    } else {
+      registry[r.wardId] = {
+        wardId: r.wardId,
+        wardName: r.wardName,
+        name: r.winnerName,
+        partyName: r.winnerParty,
+        colour: r.winnerColour,
+        termsServed: 1,
+        firstElectedWeek: week,
+        lastElectedWeek: week,
+      }
+    }
+  }
+
+  saveCouncillorTenure(seed, registry)
 }

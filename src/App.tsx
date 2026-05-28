@@ -115,24 +115,26 @@ function App() {
   }, [world?.isGoverning, world?.governanceDecisions])
 
   const handleSavePartyEdit = useCallback((edit: PartyEdit) => {
-    if (!world) return
-    const patchParty = (p: PartyDefinition) =>
-      p.id !== edit.id ? p : { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
-    setWorld({
-      ...world,
-      parties: world.parties.map(patchParty),
-      constituencies: world.constituencies.map((c) => ({
-        ...c,
-        candidates: c.candidates.map((cand) =>
-          cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
-        ),
-      })),
+    setWorld((prev) => {
+      if (!prev) return prev
+      const patchParty = (p: PartyDefinition) =>
+        p.id !== edit.id ? p : { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
+      return {
+        ...prev,
+        parties: prev.parties.map(patchParty),
+        constituencies: prev.constituencies.map((c) => ({
+          ...c,
+          candidates: c.candidates.map((cand) =>
+            cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
+          ),
+        })),
+      }
     })
-  }, [world])
+  }, [])
 
-  const handleSetupStart = useCallback((seed?: number, playerPartyId?: string) => {
+  const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string) => {
     if (seed !== undefined && seed !== world?.seed) {
-      const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId })
+      const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId: playerPartyIdArg })
       setPreviousWorld(null)
       setWorld(nextWorld)
       setShowElectionNight(false)
@@ -141,13 +143,17 @@ function App() {
       setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
       setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
       setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
-    } else if (world) {
-      if (playerPartyId && playerPartyId !== world.playerPartyId) {
-        setWorld({ ...world, playerPartyId })
-      }
+    } else {
+      setWorld((prev) => {
+        if (!prev) return prev
+        if (playerPartyIdArg && playerPartyIdArg !== prev.playerPartyId) {
+          return { ...prev, playerPartyId: playerPartyIdArg }
+        }
+        return prev
+      })
     }
     setMenuOpen(false)
-  }, [world, constituencyCount])
+  }, [world?.seed, constituencyCount])
 
   const advanceWeek = () => {
     if (!world) return

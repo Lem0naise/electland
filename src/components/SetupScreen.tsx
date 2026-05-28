@@ -69,12 +69,12 @@ export function SetupScreen({
 
   function applyUKNames() {
     if (!world) return
-    const ukMappings: Array<{ colour: string; name: string; leader: string }> = [
-      { colour: '#0087DC', name: 'Local Conservatives', leader: 'Cllr Nigel Pemberton' },
-      { colour: '#E4003B', name: 'Labour', leader: 'Cllr Diane Ashworth' },
-      { colour: '#FAA61A', name: 'Lib Dems', leader: 'Cllr Tim Farley' },
-      { colour: '#02A95B', name: 'Green Party', leader: 'Cllr Robin Sycamore' },
-      { colour: '#70147A', name: 'Reform UK', leader: 'Mr Keith Loxley' },
+    const ukColourNames: Array<{ colour: string; name: string }> = [
+      { colour: '#0087DC', name: 'Local Conservatives' },
+      { colour: '#E4003B', name: 'Labour' },
+      { colour: '#FAA61A', name: 'Lib Dems' },
+      { colour: '#02A95B', name: 'Green Party' },
+      { colour: '#70147A', name: 'Reform UK' },
     ]
 
     function hexDist(a: string, b: string) {
@@ -88,15 +88,15 @@ export function SetupScreen({
 
     const nextEdits = { ...partyEdits }
     for (const party of world.parties) {
-      let best: { name: string; leader: string; dist: number } | null = null
-      for (const uk of ukMappings) {
+      let best: { name: string; dist: number } | null = null
+      for (const uk of ukColourNames) {
         const dist = hexDist(party.colour, uk.colour)
         if (!best || dist < best.dist) {
-          best = { name: uk.name, leader: uk.leader, dist }
+          best = { name: uk.name, dist }
         }
       }
       if (best && best.dist < 3600) {
-        nextEdits[party.id] = { ...editFor(party.id), name: best.name, leader: best.leader }
+        nextEdits[party.id] = { ...editFor(party.id), name: best.name }
       }
     }
     setPartyEdits(nextEdits)
@@ -136,7 +136,7 @@ export function SetupScreen({
                 ))}
               </div>
               <p className="setup-hint">
-                {constituencyCount <= 6 ? 'Intimate — every vote is visible.' : constituencyCount <= 9 ? 'Classic — tight but strategic.' : 'Large — harder to manage, more drama.'}
+                {constituencyCount <= 6 ? 'Big wards - fragmented vote, landslides possible' : constituencyCount <= 9 ? 'Classic - balanced, with reasonable margins.' : 'Lots of wards - harder to manage, but clearer strongholds.'}
               </p>
             </div>
 
