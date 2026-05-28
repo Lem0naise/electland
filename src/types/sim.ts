@@ -353,3 +353,12 @@ export interface WorldOptions {
   customParties: CustomPartyDraft[]
   playerPartyId?: string
 }
+
+export type MapMode = 'ward' | 'bloc' | 'voter'
+
+export interface PartyEdit {
+  id: string
+  name: string
+  leader: string
+  colour: string
+}

@@ -489,34 +489,6 @@ button, input, select, textarea { font: inherit; }
 .ideology-widget.light .ideology-track-line { background: rgba(0,0,0,0.1); }
 .ideology-widget.light .ideology-track-line::after { background: rgba(0,0,0,0.15); }
 
-/* ─── Ward fit sentence in campaign poll ──────────────────────────────────── */
-.fwp-fit-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--ink-faint);
-  font-size: 0.74rem;
-}
-.fwp-fit-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.fwp-fit-sentence { color: var(--ink-soft); flex: 1; }
-
-.fwp-fit-good .fwp-fit-dot { background: var(--safe); }
-.fwp-fit-good .fwp-fit-sentence { color: var(--safe); font-weight: 600; }
-.fwp-fit-good { background: rgba(47,110,47,0.06); }
-
-.fwp-fit-neutral .fwp-fit-dot { background: var(--accent-gold); }
-.fwp-fit-neutral { background: rgba(184,134,11,0.04); }
-
-.fwp-fit-poor .fwp-fit-dot { background: var(--accent-red); }
-.fwp-fit-poor .fwp-fit-sentence { color: var(--accent-red); font-weight: 600; }
-.fwp-fit-poor { background: rgba(155,28,28,0.05); }
-
 /* ─── Ward fit block in ward detail ──────────────────────────────────────── */
 .ward-fit-block {
   border: 1px solid var(--ink-faint);
@@ -622,16 +594,6 @@ button, input, select, textarea { font: inherit; }
 .ward-fit-good  .ward-fit-verdict { color: var(--safe); }
 .ward-fit-poor  .ward-fit-verdict { color: var(--accent-red); }
 
-/* Legacy / old classes (kept for no orphan errors) */
-.ward-ideology-line {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--ink-soft);
-  line-height: 1.45;
-}
-.ward-ideology-line strong { color: var(--ink); }
-.ward-fit-sentence { font-style: italic; }
-
 /* Inline edit panel */
 .setup-party-edit {
   border-top: 1px solid rgba(248,240,221,0.1);
@@ -703,39 +665,6 @@ button, input, select, textarea { font: inherit; }
   .setup-body { grid-template-columns: 1fr; }
   .setup-parties { order: -1; }
 }
-
-/* Keep old menu classes but neutralise — no longer used but avoid orphan errors */
-.menu-overlay { position: relative; }
-.menu-shell { padding: 12px 14px; }
-.menu-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-  gap: 12px;
-  margin-top: 6px;
-}
-.menu-intro-panel h3 { margin: 0 0 8px; font-size: 1.2rem; }
-.menu-intro-panel p { margin: 0 0 10px; color: var(--ink-soft); font-size: 0.85rem; }
-.menu-world-note {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--ink-faint);
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-}
-.control-strip {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: end;
-  margin: 0 0 8px;
-}
-.control-strip label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 0.82rem;
-}
-.control-strip input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 
 /* ─── Buttons ────────────────────────────────────────────────────────────────── */
 .ink-button {
@@ -835,17 +764,6 @@ button, input, select, textarea { font: inherit; }
 .countdown-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); }
 .topbar-countdown.urgent .countdown-number { color: var(--accent-red); }
 
-.battleground-alert {
-  padding: 4px 8px;
-  background: rgba(230, 92, 0, 0.12);
-  border: 1px solid var(--battleground);
-  color: var(--battleground);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  animation: pulse-text 1.4s ease-in-out infinite;
-}
 .topbar-actions { display: flex; gap: 6px; margin-left: auto; }
 
 /* ─── Dashboard layout ──────────────────────────────────────────────────────── */
@@ -905,17 +823,6 @@ button, input, select, textarea { font: inherit; }
 .seat-bar-segment.is-player { outline: 2px solid rgba(0,0,0,0.3); outline-offset: -2px; }
 .seat-bar-segment.empty { background: rgba(0,0,0,0.07); }
 
-.seat-bar-majority-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--ink);
-  transform: translateX(-1px);
-  pointer-events: none;
-  z-index: 2;
-}
-
 .seat-bar-majority-label {
   font-size: 0.64rem;
   color: var(--ink-soft);
@@ -927,67 +834,6 @@ button, input, select, textarea { font: inherit; }
   font-size: 0.6rem;
   color: var(--ink-soft);
   flex-shrink: 0;
-}
-
-/* Expanded standings dropdown */
-.seat-bar-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  padding: 10px 12px;
-  box-shadow: 0 8px 24px rgba(44,31,14,0.18);
-  border-top: none;
-}
-
-.sbd-header { margin-bottom: 8px; }
-.sbd-title { font-size: 0.82rem; font-weight: 700; display: block; }
-.sbd-subtitle { font-size: 0.68rem; color: var(--ink-soft); }
-
-.sbd-rows { display: flex; flex-direction: column; gap: 4px; }
-
-.sbd-row {
-  display: grid;
-  grid-template-columns: 22px 12px 1fr 100px 40px 36px auto;
-  gap: 6px;
-  align-items: center;
-  padding: 5px 7px;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.4);
-}
-.sbd-row.is-player { background: rgba(122,96,48,0.1); border-color: var(--ink-mid); }
-.sbd-row.at-majority { border-color: var(--safe); }
-.sbd-rank { font-size: 0.68rem; color: var(--ink-soft); font-weight: 700; }
-.sbd-swatch { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(44,31,14,0.35); }
-.sbd-info strong { display: block; font-size: 0.8rem; line-height: 1.2; }
-.sbd-info small { display: block; font-size: 0.67rem; color: var(--ink-soft); }
-.sbd-mini-bar-wrap { height: 6px; background: rgba(0,0,0,0.07); border-radius: 3px; overflow: hidden; }
-.sbd-mini-bar { height: 100%; border-radius: 3px; transition: width 400ms ease; }
-.sbd-seats { font-size: 0.8rem; font-weight: 700; text-align: right; }
-.sbd-share { font-size: 0.72rem; color: var(--ink-soft); text-align: right; }
-.sbd-trends { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 52px; }
-.sbd-battleground-note {
-  margin-top: 8px;
-  padding: 5px 7px;
-  background: rgba(230,92,0,0.07);
-  border: 1px solid rgba(230,92,0,0.3);
-  font-size: 0.76rem;
-  color: var(--battleground);
-}
-
-/* Vote history chart inside the standings dropdown */
-.sbd-history {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--ink-faint);
-}
-.sbd-history-label {
-  font-size: 0.63rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-soft);
-  margin-bottom: 4px;
 }
 
 /* ─── Campaign panel (always visible) ────────────────────────────────────── */
@@ -1147,20 +993,11 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* ─── Vote history chart ─────────────────────────────────────────────────────── */
-.history-section { margin-top: 4px; }
-.section-label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--ink-soft);
-  margin-bottom: 3px;
-}
 .history-chart-wrap { display: flex; flex-direction: column; gap: 4px; }
 .history-svg { width: 100%; height: 100px; }
 .history-svg.tall { height: 180px; }
 .chart-gridline { stroke: var(--ink-faint); stroke-width: 0.8; }
 .chart-axis-label { font-size: 9px; fill: var(--ink-soft); }
-.chart-election-line { stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1177,162 +1014,7 @@ button, input, select, textarea { font: inherit; }
 .legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 .history-empty { font-size: 0.78rem; color: var(--ink-soft); font-style: italic; padding: 6px 0; }
 
-/* ─── Right tabs ─────────────────────────────────────────────────────────────── */
-.right-tabs { display: flex; gap: 3px; }
-.right-tab {
-  appearance: none;
-  flex: 1;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,251,238,0.6);
-  color: var(--ink-mid);
-  padding: 6px;
-  font: inherit;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-}
-.right-tab.is-active {
-  background: var(--ink);
-  color: #f8f0dd;
-  border-color: var(--ink);
-}
-
-.right-panel { overflow: auto; max-height: 75vh; }
-
-/* ─── Race / Standings panel ──────────────────────────────────────────────────── */
-.race-panel { display: flex; flex-direction: column; gap: 8px; }
-
-.key-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.key-stat {
-  padding: 8px;
-  background: rgba(255,255,255,0.5);
-  border: 1px solid var(--ink-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.key-stat.accent { background: linear-gradient(180deg, rgba(255,218,120,0.5), rgba(255,244,200,0.7)); }
-.key-stat > span { font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
-.key-stat > strong { font-size: 0.92rem; line-height: 1.2; }
-.key-stat > small { font-size: 0.72rem; color: var(--ink-soft); }
-
-.tightest-race-card {
-  padding: 7px 8px;
-  background: rgba(230,92,0,0.06);
-  border: 1px solid rgba(230,92,0,0.25);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.tightest-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--battleground); }
-.tightest-race-card > strong { font-size: 0.9rem; }
-.margin-bar-wrap {
-  height: 5px;
-  background: rgba(0,0,0,0.08);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.margin-bar { height: 100%; background: var(--battleground); border-radius: 3px; transition: width 400ms ease; }
-.tightest-race-card > small { font-size: 0.7rem; color: var(--ink-soft); }
-
-.standings-list { display: flex; flex-direction: column; gap: 4px; }
-.standing-row {
-  display: grid;
-  grid-template-columns: 20px 12px 1fr auto;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 8px;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.4);
-  transition: background 200ms ease;
-}
-.standing-row.is-player {
-  background: rgba(122,96,48,0.1);
-  border-color: rgba(122,96,48,0.35);
-}
-.standing-row.at-majority { border-color: var(--safe); }
-.standing-rank { font-size: 0.7rem; color: var(--ink-soft); font-weight: 700; }
-.standing-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(44,31,14,0.4); flex-shrink: 0; }
-.standing-info { min-width: 0; }
-.standing-info strong { display: block; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.standing-info small { display: block; font-size: 0.68rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.standing-numbers { display: flex; flex-direction: row; align-items: flex-end; gap: 3px; }
-.standing-numbers > strong { font-size: 0.88rem; }
-.seats-count { font-size: 0.7rem; color: var(--ink-soft); }
-.mini-trend { font-size: 0.65rem; padding: 0 3px; }
-.mini-trend.up { color: #1a5c2a; }
-.mini-trend.down { color: var(--accent-red); }
-.mini-trend.flat { color: var(--ink-soft); }
-.seat-delta { font-size: 0.68rem; font-weight: 700; }
-.seat-delta.up { color: #1a5c2a; }
-.seat-delta.down { color: var(--accent-red); }
-
-.majority-meter {
-  padding: 6px 0 0;
-  border-top: 1px solid var(--ink-faint);
-  position: relative;
-}
-.meter-label { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); display: block; margin-bottom: 4px; }
-.meter-track {
-  height: 16px;
-  display: flex;
-  border: 1px solid var(--ink-faint);
-  overflow: hidden;
-  position: relative;
-}
-.meter-segment { height: 100%; transition: width 400ms ease; }
-.meter-segment.is-player { border-right: 1px solid rgba(0,0,0,0.2); }
-.majority-line {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  width: 2px;
-  background: var(--ink);
-  transform: translateX(-1px);
-}
-
 /* ─── Campaign actions panel ──────────────────────────────────────────────────── */
-/* ─── Ward picker ─────────────────────────────────────────────────────────── */
-.ward-picker { display: flex; flex-direction: column; gap: 4px; }
-.ward-picker-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); }
-.ward-picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 130px;
-  overflow-y: auto;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.25);
-}
-.ward-pick-btn {
-  appearance: none;
-  border: none;
-  border-bottom: 1px solid var(--ink-faint);
-  background: transparent;
-  padding: 5px 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.76rem;
-  color: var(--ink);
-  text-align: left;
-  transition: background 120ms ease;
-}
-.ward-pick-btn:last-child { border-bottom: none; }
-.ward-pick-btn:hover { background: rgba(255,255,255,0.55); }
-.ward-pick-btn.is-active { background: rgba(122,96,48,0.1); font-weight: 700; }
-.ward-pick-btn.is-battleground { background: rgba(230,92,0,0.05); }
-.ward-pick-btn.is-battleground.is-active { background: rgba(230,92,0,0.12); }
-.ward-pick-btn.is-leading .wpb-name { font-weight: 700; }
-.wpb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.wpb-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wpb-share { font-size: 0.7rem; color: var(--ink-soft); flex-shrink: 0; }
-.wpb-bg-mark { font-size: 0.7rem; flex-shrink: 0; }
-
 /* ─── Focus ward poll ─────────────────────────────────────────────────────── */
 .focus-ward-poll {
   background: rgba(255,255,255,0.38);
@@ -1625,37 +1307,6 @@ div.action-card { }
 .event-choice-btn strong { font-size: 0.8rem; }
 .event-choice-btn span { font-size: 0.72rem; color: var(--ink-soft); }
 
-/* ─── News panel ────────────────────────────────────────────────────────────── */
-.news-panel { display: flex; flex-direction: column; gap: 8px; }
-.news-panel h4 { margin: 0; font-size: 1rem; }
-.headlines-block {
-  padding: 8px;
-  background: rgba(255,255,255,0.5);
-  border: 1px solid var(--ink-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.headline-line {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  padding-left: 12px;
-  position: relative;
-}
-.headline-line::before { content: '§'; position: absolute; left: 0; color: var(--accent-gold); font-weight: 900; }
-.news-feed-list { display: flex; flex-direction: column; gap: 3px; }
-.news-feed-item {
-  display: flex;
-  gap: 7px;
-  font-size: 0.76rem;
-  color: var(--ink-soft);
-  line-height: 1.35;
-  padding-bottom: 3px;
-  border-bottom: 1px dotted var(--ink-faint);
-}
-.news-tick { color: var(--accent-gold); font-size: 0.7rem; flex-shrink: 0; }
-
 /* ─── Ward inspector (constituency panel) ─────────────────────────────────── */
 .ward-header-row {
   display: flex;
@@ -1663,17 +1314,6 @@ div.action-card { }
   gap: 8px;
   flex-wrap: wrap;
 }
-.margin-value-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.player-delta-line {
-  font-size: 0.74rem;
-  color: var(--ink-soft);
-}
-.player-delta-line.positive { color: #1a5c2a; font-weight: 700; }
-.player-delta-line.negative { color: var(--accent-red); font-weight: 700; }
 .candidates-list { display: flex; flex-direction: column; gap: 3px; }
 .candidate-info { flex: 1; min-width: 0; }
 .candidate-info .candidate-name { display: block; font-size: 0.8rem; font-weight: 700; }
@@ -1688,122 +1328,6 @@ div.action-card { }
 .constituency-panel h3 { margin: 0; font-size: 1rem; }
 .constituency-panel h4 { margin: 0 0 4px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); }
 .ward-mood { margin: 0; font-size: 0.78rem; color: var(--ink-soft); }
-
-/* ─── Ward poll (wide bar style, replaces candidate-row layout) ─────────── */
-.ward-poll {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.32);
-  overflow: hidden;
-}
-.ward-poll.is-battleground {
-  border-color: rgba(230,92,0,0.35);
-  background: rgba(230,92,0,0.03);
-}
-
-.ward-poll-row {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 0;
-  align-items: stretch;
-  min-height: 32px;
-  background: transparent;
-  transition: background 120ms ease;
-}
-.ward-poll-row.is-winner { background: rgba(255,255,255,0.55); }
-.ward-poll-row.is-player { background: rgba(122,96,48,0.07); }
-.ward-poll-row.is-player.is-winner { background: rgba(122,96,48,0.12); }
-
-.wpr-identity {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-right: 1px solid var(--ink-faint);
-}
-.wpr-initials {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 900;
-  font-size: 0.6rem;
-  flex-shrink: 0;
-}
-.wpr-names { min-width: 0; }
-.wpr-candidate {
-  display: block;
-  font-size: 0.76rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-}
-.wpr-party {
-  display: block;
-  font-size: 0.62rem;
-  color: var(--ink-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-}
-
-.wpr-bar-col {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 5px;
-  align-items: center;
-  padding: 5px 8px 5px 6px;
-}
-.wpr-bar-track {
-  height: 8px;
-  background: rgba(0,0,0,0.07);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.wpr-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 350ms ease;
-}
-.wpr-pct {
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-  min-width: 34px;
-  text-align: right;
-}
-.wpr-delta {
-  font-size: 0.65rem;
-  font-weight: 700;
-  min-width: 30px;
-  text-align: right;
-}
-.wpr-delta.up { color: #1a5c2a; }
-.wpr-delta.down { color: var(--accent-red); }
-
-.ward-poll-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 5px 8px;
-  border-top: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.2);
-  font-size: 0.72rem;
-}
-.wpm-leading { color: var(--safe); font-weight: 700; }
-.wpm-trailing { color: var(--battleground); font-weight: 700; }
-
-/* Keep ward-margin-meter for any remaining refs, but de-emphasise */
-.ward-margin-meter { display: none; }
 
 /* History scrollable box */
 .ward-history-scroll {

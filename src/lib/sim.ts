@@ -2386,6 +2386,10 @@ export function simulateWeek(world: World): World {
 }
 
 // ─── Exported helpers ─────────────────────────────────────────────────────────
+export function dominantBlocId(blocMix: Record<string, number>) {
+  return Object.entries(blocMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+}
+
 export function formatPopulation(value: number) {
   return new Intl.NumberFormat('en-GB').format(Math.round(value))
 }
@@ -2416,7 +2420,8 @@ export const IDEOLOGY_AXES = [
   { key: 'services' as const, leftLabel: 'Thrift',    rightLabel: 'Services',   leftShort: 'Low-tax',     rightShort: 'High-services' },
 ]
 
-export function axisStance(value: number, axis: typeof IDEOLOGY_AXES[number]): string | null {
+function axisStance(value: number, axis: typeof IDEOLOGY_AXES[number]): string | null {
+
   if (value > 25) return axis.rightShort
   if (value < -25) return axis.leftShort
   return null

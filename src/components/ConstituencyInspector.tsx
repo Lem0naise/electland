@@ -1,7 +1,5 @@
 import { axisSummary, describeValues, formatPopulation, IDEOLOGY_AXES, topBlocEntries, wardFitSentence } from '../lib/sim'
-import type { Constituency, PopulationTile, TilePreferenceEstimate, World } from '../types/sim'
-
-type MapMode = 'ward' | 'bloc' | 'voter'
+import type { Constituency, MapMode, PopulationTile, TilePreferenceEstimate, World } from '../types/sim'
 
 interface ConstituencyInspectorProps {
   world: World | null
