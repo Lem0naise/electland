@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { ConstituencyInspector } from './components/ConstituencyInspector'
 import { MapFigure } from './components/MapFigure'
+import { StatisticsModal } from './components/StatisticsModal'
 import {
   applyCampaignAction,
   estimateTilePreference,
@@ -389,24 +390,21 @@ function ActionFlash({ result, onDismiss }: { result: ActionResult; onDismiss: (
 }
 
 // ─── Seat Bar (horizontal TV-style election bar above the map) ───────────────
-function SeatBar({ world, previousNationalById }: {
+function SeatBar({ world, onOpenStats }: {
   world: World
-  previousNationalById: Map<string, { voteShare: number; seatsWon: number }>
+  onOpenStats: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
 
   return (
     <div className="seat-bar-wrap">
-      {/* The bar itself — clickable to expand */}
       <button
         className="seat-bar"
         type="button"
-        onClick={() => setExpanded((e) => !e)}
-        title="Click to see full standings"
-        aria-expanded={expanded}
+        onClick={onOpenStats}
+        title="Click to see full statistics"
       >
         <span className="seat-bar-label">Council seats</span>
         <div className="seat-bar-track">
@@ -421,7 +419,6 @@ function SeatBar({ world, previousNationalById }: {
               title={`${r.partyName}: ${r.seatsWon} seats`}
             />
           ))}
-          {/* Empty seats (no party) */}
           {(() => {
             const filled = world.nationalResults.reduce((s, r) => s + r.seatsWon, 0)
             const empty = total - filled
@@ -433,85 +430,9 @@ function SeatBar({ world, previousNationalById }: {
             ) : null
           })()}
         </div>
-        {/* Majority line */}
-        <div
-          className="seat-bar-majority-line"
-          style={{ left: `calc(${(majority / total) * 100}% + 56px)` }}
-          title={`Majority: ${majority} seats`}
-        />
         <span className="seat-bar-majority-label">{majority} for majority</span>
-        <span className="seat-bar-expand-hint">{expanded ? '▲' : '▼'}</span>
+        <span className="seat-bar-expand-hint">📊</span>
       </button>
-
-      {/* Expanded standings dropdown */}
-      {expanded && (
-        <div className="seat-bar-dropdown panel">
-          <div className="sbd-header">
-            <span className="sbd-title">Full standings — week {world.week}</span>
-            <span className="sbd-subtitle">{majority} seats needed for a majority</span>
-          </div>
-          <div className="sbd-rows">
-            {world.nationalResults.map((result, rank) => {
-              const previous = previousNationalById.get(result.partyId)
-              const voteDelta = previous ? result.voteShare - previous.voteShare : null
-              const seatDelta = previous ? result.seatsWon - previous.seatsWon : null
-              const isPlayer = result.partyId === playerPartyId
-              const atMajority = result.seatsWon >= majority
-              return (
-                <div
-                  key={result.partyId}
-                  className={`sbd-row${isPlayer ? ' is-player' : ''}${atMajority ? ' at-majority' : ''}`}
-                >
-                  <span className="sbd-rank">#{rank + 1}</span>
-                  <span className="sbd-swatch" style={{ background: result.colour }} />
-                  <div className="sbd-info">
-                    <strong>{result.partyName}</strong>
-                    <small>{result.leader}</small>
-                  </div>
-                  {/* Mini seat bar */}
-                  <div className="sbd-mini-bar-wrap">
-                    <div
-                      className="sbd-mini-bar"
-                      style={{
-                        width: `${(result.seatsWon / total) * 100}%`,
-                        background: result.colour,
-                      }}
-                    />
-                  </div>
-                  <span className="sbd-seats">{result.seatsWon} seats</span>
-                  <span className="sbd-share">{result.voteShare.toFixed(1)}%</span>
-                  <div className="sbd-trends">
-                    {voteDelta !== null && Math.abs(voteDelta) > 0.05 && (
-                      <span className={`mini-trend ${voteDelta > 0 ? 'up' : 'down'}`}>
-                        {voteDelta > 0 ? '▲' : '▼'} {Math.abs(voteDelta).toFixed(1)}pp
-                      </span>
-                    )}
-                    {seatDelta !== null && seatDelta !== 0 && (
-                      <span className={`seat-delta ${seatDelta > 0 ? 'up' : 'down'}`}>
-                        {seatDelta > 0 ? '+' : ''}{seatDelta}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          {/* Tightest race callout */}
-          {world.stats.closestWardMargin < 10 && (
-            <div className="sbd-battleground-note">
-              Tightest race: <strong>{world.stats.closestWardName}</strong> — {world.stats.closestWardMargin.toFixed(1)}pt margin
-            </div>
-          )}
-
-          {/* Vote share over time — taller here with more room */}
-          {world.voteHistory.length >= 2 && (
-            <div className="sbd-history">
-              <div className="sbd-history-label">Vote share over time</div>
-              <VoteHistoryChart world={world} tall />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -991,103 +912,6 @@ function CampaignActionsPanel({ world, selectedWardId, onAction, onTogglePermane
   )
 }
 
-// ─── History chart (simple SVG sparklines) ───────────────────────────────────
-function VoteHistoryChart({ world, tall = false }: { world: World; tall?: boolean }) {
-  const history = world.voteHistory
-  if (history.length < 2) {
-    return <div className="history-empty">Advance a few weeks to see vote trends.</div>
-  }
-
-  const width = 560
-  const height = tall ? 180 : 100
-  const padL = 28
-  const padR = tall ? 40 : 8
-  const padT = 6
-  const padB = 16
-  const chartW = width - padL - padR
-  const chartH = height - padT - padB
-
-  const weeks = history.map((h) => h.week)
-  const minWeek = Math.min(...weeks)
-  const maxWeek = Math.max(...weeks)
-
-  const topParties = world.nationalResults
-
-  // Find actual max share across all tracked parties + history, then ceiling to nearest 5%
-  const allShares = history.flatMap((h) =>
-    topParties.map((p) => h.partyShares[p.partyId] ?? 0),
-  )
-  const rawMax = Math.max(...allShares, 5)
-  // Round up to nearest 10
-  const yMax = Math.ceil(rawMax / 10) * 10
-
-  // Pick 2–3 sensible gridline values
-  const gridlines = yMax <= 30
-    ? [Math.round(yMax / 2), yMax]
-    : yMax <= 60
-      ? [Math.round(yMax / 3), Math.round((yMax * 2) / 3), yMax]
-      : [25, 50, yMax]
-
-  function x(week: number) {
-    if (maxWeek === minWeek) return padL + chartW / 2
-    return padL + ((week - minWeek) / (maxWeek - minWeek)) * chartW
-  }
-
-  function y(share: number) {
-    return padT + chartH - (share / yMax) * chartH
-  }
-
-  return (
-    <div className="history-chart-wrap">
-      <svg viewBox={`0 0 ${width} ${height}`} className={`history-svg${tall ? ' tall' : ''}`}>
-        {/* Gridlines + axis labels */}
-        {gridlines.map((pct) => (
-          <g key={pct}>
-            <line x1={padL} x2={padL + chartW} y1={y(pct)} y2={y(pct)} className="chart-gridline" />
-            <text x={padL - 4} y={y(pct) + 3} className="chart-axis-label" textAnchor="end">{pct}</text>
-          </g>
-        ))}
-        {/* Zero baseline */}
-        <line x1={padL} x2={padL + chartW} y1={y(0)} y2={y(0)} className="chart-gridline" strokeOpacity={0.4} />
-
-        {topParties.map((party) => {
-          const points = history
-            .map((h) => ({ week: h.week, share: h.partyShares[party.partyId] ?? 0 }))
-            .filter((p) => p.share > 0)
-          if (points.length < 2) return null
-          const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.week).toFixed(1)} ${y(p.share).toFixed(1)}`).join(' ')
-          const last = points[points.length - 1]
-          const isPlayer = party.partyId === world.playerPartyId
-          return (
-            <g key={party.partyId}>
-              <path d={d} fill="none" stroke={party.colour} strokeWidth={isPlayer ? 2.4 : 1.4} strokeOpacity={isPlayer ? 0.95 : 0.7} />
-              <circle cx={x(last.week)} cy={y(last.share)} r={isPlayer ? 3.5 : 2.5} fill={party.colour} />
-              {/* Party label at right end */}
-              <text
-                x={x(last.week) + 5}
-                y={y(last.share) + 3}
-                className="chart-axis-label"
-                style={{ fontSize: 8, fill: party.colour, fontWeight: isPlayer ? 700 : 400 }}
-              >
-                {last.share.toFixed(0)}%
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-
-      <div className="chart-legend">
-        {topParties.map((p) => (
-          <span key={p.partyId} className={`legend-item${p.partyId === world.playerPartyId ? ' is-player' : ''}`}>
-            <span className="legend-swatch" style={{ background: p.colour }} />
-            {p.partyName}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ─── Setup / Start screen ─────────────────────────────────────────────────────
 // Used both as the initial full-screen splash and as a mid-game menu modal.
 interface PartyEdit {
@@ -1418,6 +1242,7 @@ function App() {
   const [lastActionResult, setLastActionResult] = useState<ActionResult | null>(null)
   const [showElectionNight, setShowElectionNight] = useState(false)
   const [showGovernance, setShowGovernance] = useState(false)
+  const [showStatsModal, setShowStatsModal] = useState(false)
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const selectedConstituency = useMemo(
@@ -1702,7 +1527,7 @@ function App() {
             <>
               {/* Seat bar — horizontal standings above the map */}
               <div className="seat-bar-row">
-                <SeatBar world={world} previousNationalById={previousNationalById} />
+                <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} />
               </div>
 
               {/* Map panel */}
@@ -1784,6 +1609,15 @@ function App() {
       {/* Action flash */}
       {lastActionResult && (
         <ActionFlash result={lastActionResult} onDismiss={() => setLastActionResult(null)} />
+      )}
+
+      {/* Statistics modal */}
+      {showStatsModal && world && (
+        <StatisticsModal
+          world={world}
+          previousNationalById={previousNationalById}
+          onClose={() => setShowStatsModal(false)}
+        />
       )}
 
       {/* Election night modal */}
