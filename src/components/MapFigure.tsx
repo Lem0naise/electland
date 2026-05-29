@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 
-import type { TilePreferenceEstimate, World } from '../types/sim'
-
-type MapMode = 'ward' | 'bloc' | 'voter'
+import { dominantBlocId } from '../lib/sim'
+import type { MapMode, TilePreferenceEstimate, World } from '../types/sim'
 
 interface MapFigureProps {
   world: World
@@ -34,12 +33,7 @@ function rgbaFromHex(hex: string, alpha: number) {
 // Mix party colour with neutral (desaturated) based on margin.
 // A 30%+ margin = full saturation. A 0% margin = very pale.
 function marginToAlpha(margin: number): number {
-  // margin 0 → alpha 0.22, margin 30+ → alpha 0.82
   return 0.22 + Math.min(1, margin / 30) * 0.60
-}
-
-function dominantBlocId(blocMix: Record<string, number>) {
-  return Object.entries(blocMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
 }
 
 export function MapFigure({
