@@ -2313,48 +2313,22 @@ export function simulateWeek(world: World): World {
     }
   }
 
-  // ── Cancel auto-campaigns in wards that changed hands ────────────────────
-  // Collect ward IDs where the leading party changed (mid-cycle or election night)
-  const flippedWardIds = new Set<string>()
+  // ── Cancel auto-campaigns in wards that changed hands at election time ────
+  // Auto-campaigns stay active through mid-cycle polling swings — they only
+  // reset when an actual election happens and the player gains/loses incumbency.
+  let activeCampaignsAfterFlips = provisionalWithAI.activeCampaigns
+
   if (electionHappening) {
     for (const r of electionNightResults) {
       const prevWinner = world.electionNightResults.find((p) => p.wardId === r.wardId)?.winner?.partyId
       if (prevWinner !== undefined && r.winner?.partyId !== prevWinner) {
-        flippedWardIds.add(r.wardId)
+        activeCampaignsAfterFlips = activeCampaignsAfterFlips.filter((c) => !c.wardId || c.wardId !== r.wardId)
+        if (r.winner?.partyId === world.playerPartyId || prevWinner === world.playerPartyId) {
+          const wardName = world.constituencies.find((c) => c.id === r.wardId)?.name ?? r.wardId
+          newsFeedLines.push(`Auto-campaigns in ${wardName} stopped — ward changed hands.`)
+        }
       }
     }
-  } else {
-    for (const newSeat of results.constituencies) {
-      const oldSeat = world.constituencies.find((c) => c.id === newSeat.id)
-      if (oldSeat && oldSeat.leadingPartyId !== newSeat.leadingPartyId) {
-        flippedWardIds.add(newSeat.id)
-      }
-    }
-  }
-  const activeCampaignsAfterFlips = flippedWardIds.size > 0
-    ? provisionalWithAI.activeCampaigns.filter((c) => !c.wardId || !flippedWardIds.has(c.wardId))
-    : provisionalWithAI.activeCampaigns
-
-  const flippedPlayerWards = electionHappening
-    ? electionNightResults.filter((r) => {
-        const prev = world.electionNightResults.find((p) => p.wardId === r.wardId)?.winner?.partyId
-        return prev !== undefined && r.winner?.partyId !== prev &&
-          (r.winner?.partyId === world.playerPartyId || prev === world.playerPartyId)
-      }).map((r) => r.wardId)
-    : results.constituencies
-        .filter((s) => {
-          const old = world.constituencies.find((c) => c.id === s.id)
-          return old && old.leadingPartyId !== s.leadingPartyId &&
-            (s.leadingPartyId === world.playerPartyId || old.leadingPartyId === world.playerPartyId)
-        })
-        .map((s) => s.id)
-
-  if (flippedPlayerWards.length > 0) {
-    const cancelledNames = flippedPlayerWards
-      .map((id) => world.constituencies.find((c) => c.id === id)?.name ?? id)
-    cancelledNames.forEach((name) => {
-      newsFeedLines.push(`Auto-campaigns in ${name} stopped — ward changed hands.`)
-    })
   }
 
   const merged = {

@@ -300,6 +300,34 @@ function ElectionNightModal({ world, onReveal, onClose }: {
                   : `No majority. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`}
             </div>
 
+            <button
+              className="ink-button secondary copy-results-btn"
+              type="button"
+              onClick={() => {
+                const lines = world.electionNightResults.map((r) => {
+                  const topParties = r.results.slice(0, 3)
+                  const partyLines = topParties.map((p, i) => {
+                    const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
+                    const name = candidate?.name ?? p.partyName
+                    const swing = r.swingFromLastElection != null && i === 0
+                      ? ` (${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp)`
+                      : ''
+                    return `${p.partyName} — ${name} ${p.voteShare.toFixed(1)}%${swing}`
+                  })
+                  return `${r.wardName}: ${partyLines.join(', ')}`
+                })
+                const councilLine = world.parties
+                  .filter((p) => (electionSeatCounts[p.id] ?? 0) > 0)
+                  .sort((a, b) => (electionSeatCounts[b.id] ?? 0) - (electionSeatCounts[a.id] ?? 0))
+                  .map((p) => `${p.name} ${electionSeatCounts[p.id] ?? 0}`)
+                  .join(', ')
+                const text = `${world.townName} Council — Week ${world.week} Election Results\n\n${lines.join('\n')}\n\nCouncil: ${councilLine}\nMajority: ${majority} seats`
+                navigator.clipboard.writeText(text).catch(() => {})
+              }}
+            >
+              📋 Copy all results
+            </button>
+
             <button className="ink-button" type="button" onClick={onClose}>
               {playerWonThisElection ? 'Govern the town' : 'Campaign continues'}
             </button>
@@ -447,8 +475,19 @@ function SeatBar({ world, previousNationalById }: {
       {expanded && (
         <div className="seat-bar-dropdown panel">
           <div className="sbd-header">
-            <span className="sbd-title">Full standings — week {world.week}</span>
-            <span className="sbd-subtitle">{majority} seats needed for a majority</span>
+            <div>
+              <span className="sbd-title">Full standings — week {world.week}</span>
+              <span className="sbd-subtitle">{majority} seats needed for a majority</span>
+            </div>
+            <button
+              className="sbd-close-btn"
+              type="button"
+              onClick={() => setExpanded(false)}
+              title="Close standings"
+              aria-label="Close standings"
+            >
+              ✕
+            </button>
           </div>
           <div className="sbd-rows">
             {world.nationalResults.map((result, rank) => {

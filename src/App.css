@@ -941,9 +941,30 @@ button, input, select, textarea { font: inherit; }
   border-top: none;
 }
 
-.sbd-header { margin-bottom: 8px; }
+.sbd-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 .sbd-title { font-size: 0.82rem; font-weight: 700; display: block; }
 .sbd-subtitle { font-size: 0.68rem; color: var(--ink-soft); }
+.sbd-close-btn {
+  appearance: none;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.4);
+  color: var(--ink-mid);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background 120ms ease;
+}
+.sbd-close-btn:hover { background: rgba(155,28,28,0.1); border-color: var(--accent-red); color: var(--accent-red); }
 
 .sbd-rows { display: flex; flex-direction: column; gap: 4px; }
 
@@ -2249,6 +2270,14 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 .verdict-win { border-color: #1a5c2a; background: rgba(26,92,42,0.08); color: #1a5c2a; }
 .verdict-loss { border-color: var(--accent-red); background: rgba(155,28,28,0.06); color: var(--accent-red); }
+
+.copy-results-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 10px;
+  font-size: 0.82rem;
+}
 
 /* Governance modal */
 .governance-choices { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
