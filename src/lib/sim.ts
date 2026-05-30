@@ -1769,7 +1769,7 @@ export function estimateTilePreference(
   return { turnout, rankings }
 }
 
-function calculateResults(world: World) {
+export function calculateResults(world: World) {
   const partyVotes = new Map<string, number>()
   const partySeats = new Map<string, number>()
   const nextConstituencies = world.constituencies.map((seat) => ({ ...seat, results: [] as ConstituencyResult[] }))
@@ -2690,6 +2690,87 @@ export function simulateWeek(world: World): World {
 
   const stats = buildStats(merged)
   return { ...merged, stats, headlines: summarizeHeadlines({ ...merged, stats, headlines: [] }) }
+}
+
+// ─── Redistricting / ward recalculation ────────────────────────────────────
+
+export function recalculateWardAggregates(world: World): Constituency[] {
+  return world.constituencies.map((seat) => {
+    const seatTiles = world.tiles.filter((t) => t.constituencyId === seat.id)
+    const population = seatTiles.reduce((s, t) => s + t.population, 0)
+    if (population === 0) return { ...seat }
+
+    const urbanity = seatTiles.reduce((s, t) => s + t.urbanity * t.population, 0) / population
+    const turnout = seatTiles.reduce((s, t) => s + t.turnout * t.population, 0) / population
+
+    const blocMix: Record<string, number> = {}
+    const tagWeights: Record<string, number> = {}
+    seatTiles.forEach((tile) => {
+      Object.entries(tile.blocMix).forEach(([k, v]) => {
+        blocMix[k] = (blocMix[k] ?? 0) + v * tile.population
+      })
+      tile.tags.forEach((tag) => {
+        tagWeights[tag] = (tagWeights[tag] ?? 0) + tile.population
+      })
+    })
+    const totalBloc = Object.values(blocMix).reduce((s, v) => s + v, 0) || 1
+    Object.keys(blocMix).forEach((k) => { blocMix[k] /= totalBloc })
+
+    const tags = Object.entries(tagWeights)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([tag]) => tag)
+
+    const cx = seatTiles.reduce((s, t) => s + t.x * t.population, 0) / population
+    const cy = seatTiles.reduce((s, t) => s + t.y * t.population, 0) / population
+
+    return {
+      ...seat,
+      population,
+      turnout,
+      urbanity,
+      tags,
+      blocMix,
+      values: weightedAverageValues(
+        seatTiles.map((t) => ({ values: t.values, weight: t.population })),
+        createValues(0),
+      ),
+      seed: { x: cx, y: cy },
+    }
+  })
+}
+
+export function regenerateCellPaths(constituencies: Constituency[]): Constituency[] {
+  const seeds = constituencies
+    .filter((c) => c.population > 0)
+    .map((c) => [c.seed.x, c.seed.y] as [number, number])
+
+  if (seeds.length < 3) return constituencies
+
+  const delaunay = Delaunay.from(seeds)
+  const voronoi = delaunay.voronoi([0, 0, MAP_WIDTH, MAP_HEIGHT])
+
+  let seedIndex = 0
+  return constituencies.map((seat) => {
+    if (seat.population === 0) return seat
+    const cell = voronoi.cellPolygon(seedIndex) as Array<[number, number]> | null
+    seedIndex++
+    return {
+      ...seat,
+      cellPath: cell ? polygonToPath(cell) : seat.cellPath,
+    }
+  })
+}
+
+export function redistributeSnapshot(tiles: PopulationTile[]): Map<string, string> {
+  return new Map(tiles.map((t) => [t.id, t.constituencyId ?? '']))
+}
+
+export function restoreRedistributeSnapshot(tiles: PopulationTile[], snapshot: Map<string, string>) {
+  for (const tile of tiles) {
+    const original = snapshot.get(tile.id)
+    if (original !== undefined) tile.constituencyId = original
+  }
 }
 
 // ─── Exported helpers ─────────────────────────────────────────────────────────

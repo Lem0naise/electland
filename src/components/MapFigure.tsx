@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { Delaunay } from 'd3-delaunay'
 
 import { dominantBlocId } from '../lib/sim'
 import type { MapMode, TilePreferenceEstimate, World } from '../types/sim'
@@ -14,6 +15,9 @@ interface MapFigureProps {
   onSelectConstituency: (id: string) => void
   onSelectBloc: (id: string) => void
   onSelectTile: (id: string) => void
+  redistrictTargetWardId?: string
+  onSetRedistrictTarget?: (wardId: string) => void
+  onDragRedistrictSeeds?: (seeds: Array<{ wardId: string; x: number; y: number }>) => void
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -47,8 +51,14 @@ export function MapFigure({
   onSelectConstituency,
   onSelectBloc,
   onSelectTile,
+  redistrictTargetWardId,
+  onSetRedistrictTarget,
+  onDragRedistrictSeeds,
 }: MapFigureProps) {
   const [zoom, setZoom] = useState(1)
+  const [dragWardId, setDragWardId] = useState<string | null>(null)
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const selectedSeat = useMemo(
     () => world.constituencies.find((seat) => seat.id === selectedConstituencyId),
@@ -72,11 +82,17 @@ export function MapFigure({
   const battlegroundIds = new Set(world.stats.battlegroundWardIds)
   const playerPartyId = world.playerPartyId
 
+  const palette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d5524', '#c56b37', '#e65c00', '#008080', '#a0522d', '#4682b4', '#daa520']
+  const wardColours: Record<string, string> = {}
+  world.constituencies.forEach((c, i) => { wardColours[c.id] = palette[i % palette.length] })
+
   const caption = mapMode === 'ward'
     ? 'Ward view — colour intensity shows lead margin. Dashed borders = battleground.'
     : mapMode === 'bloc'
       ? 'Bloc view — each square shows the strongest neighbourhood bloc.'
-      : 'Voter-cluster view — circles show likely winning party per cluster.'
+      : mapMode === 'voter'
+        ? 'Voter-cluster view — circles show likely winning party per cluster.'
+        : 'Redistrict — drag the seed points to reshape wards.'
 
   return (
     <figure className="map-figure">
@@ -106,7 +122,41 @@ export function MapFigure({
         </span>
       </div>
 
-      <svg viewBox={viewBox} className="map-svg" role="img" aria-label={`Map of ${world.townName}`}>
+      <svg
+        ref={svgRef}
+        viewBox={viewBox}
+        className="map-svg"
+        role="img"
+        aria-label={`Map of ${world.townName}`}
+        onMouseMove={(e) => {
+          if (!dragWardId || !svgRef.current) return
+          const rect = svgRef.current.getBoundingClientRect()
+          const svgX = ((e.clientX - rect.left) / rect.width) * world.width
+          const svgY = ((e.clientY - rect.top) / rect.height) * world.height
+          setDragPos({ x: Math.max(0, Math.min(world.width, svgX)), y: Math.max(0, Math.min(world.height, svgY)) })
+        }}
+        onMouseUp={() => {
+          if (!dragWardId || !dragPos) return
+          const updatedDisplaySeeds = world.constituencies.map((c) => {
+            if (c.id === dragWardId) return [dragPos.x, dragPos.y] as [number, number]
+            return [c.seed.x, c.seed.y] as [number, number]
+          })
+          const finalDelaunay = Delaunay.from(updatedDisplaySeeds)
+          for (const tile of world.tiles) {
+            const idx = finalDelaunay.find(tile.x, tile.y)
+            tile.constituencyId = world.constituencies[idx]?.id ?? tile.constituencyId ?? ''
+          }
+          const seeds = world.constituencies.map((c) => ({
+            wardId: c.id,
+            x: c.id === dragWardId ? dragPos.x : c.seed.x,
+            y: c.id === dragWardId ? dragPos.y : c.seed.y,
+          }))
+          onDragRedistrictSeeds?.(seeds)
+          setDragWardId(null)
+          setDragPos(null)
+        }}
+        onMouseLeave={() => { setDragWardId(null); setDragPos(null) }}
+      >
         <defs>
           <clipPath id="landmass-clip">
             <path d={world.landmass.path} />
@@ -132,102 +182,194 @@ export function MapFigure({
         <path d={world.landmass.path} fill="url(#paper-grain)" opacity="0.4" />
 
         <g clipPath="url(#landmass-clip)">
-          {mapMode === 'ward'
-            ? (
-                <>
-                  {world.constituencies.map((seat) => {
-                    const selected = seat.id === selectedConstituencyId
-                    const leader = seat.results[0]
-                    const isBattleground = battlegroundIds.has(seat.id)
-                    const alpha = marginToAlpha(seat.margin)
-                    return (
-                      <path
-                        key={seat.id}
-                        d={seat.cellPath}
-                        className={`constituency-cell${selected ? ' is-selected' : ''}${isBattleground ? ' is-battleground' : ''}`}
-                        fill={leader ? rgbaFromHex(leader.colour, alpha) : 'rgba(113,96,63,0.2)'}
-                        onClick={() => onSelectConstituency(seat.id)}
+          {mapMode === 'ward' && (
+            <>
+              {world.constituencies.map((seat) => {
+                const selected = seat.id === selectedConstituencyId
+                const leader = seat.results[0]
+                const isBattleground = battlegroundIds.has(seat.id)
+                const alpha = marginToAlpha(seat.margin)
+                return (
+                  <path
+                    key={seat.id}
+                    d={seat.cellPath}
+                    className={`constituency-cell${selected ? ' is-selected' : ''}${isBattleground ? ' is-battleground' : ''}`}
+                    fill={leader ? rgbaFromHex(leader.colour, alpha) : 'rgba(113,96,63,0.2)'}
+                    onClick={() => onSelectConstituency(seat.id)}
+                  />
+                )
+              })}
+
+              {world.constituencies
+                .filter((seat) => battlegroundIds.has(seat.id))
+                .map((seat) => {
+                  const r = world.stats.closestWardMargin
+                  const pulseR = 8 + (10 - Math.min(r, 10))
+                  return (
+                    <circle
+                      key={`bg-ring-${seat.id}`}
+                      cx={seat.seed.x}
+                      cy={seat.seed.y}
+                      r={pulseR}
+                      className="battleground-ring"
+                    />
+                  )
+                })}
+            </>
+          )}
+
+          {(mapMode === 'bloc' || mapMode === 'voter') && (
+            <>
+              {world.constituencies.map((seat) => (
+                <path
+                  key={seat.id}
+                  d={seat.cellPath}
+                  className={`constituency-outline${seat.id === selectedConstituencyId ? ' is-selected' : ''}`}
+                />
+              ))}
+
+              {world.tiles.map((tile) => {
+                const blocId = dominantBlocId(tile.blocMix)
+                const preference = tilePreferenceById.get(tile.id)
+                const topParty = preference?.rankings[0]
+                const fill = mapMode === 'bloc'
+                  ? blocColours[blocId] ?? '#8d5524'
+                  : topParty?.colour ?? '#8d5524'
+                const selected = tile.id === selectedTileId
+                const dimmed = mapMode === 'bloc' && selectedBlocId !== '' && blocId !== selectedBlocId
+
+                const certainty = topParty && preference
+                  ? Math.max(0, (topParty.support - (preference.rankings[1]?.support ?? 0)) / 50)
+                  : 0.5
+                const alpha = selected ? 0.9 : dimmed ? 0.18 : mapMode === 'voter' ? 0.35 + certainty * 0.5 : 0.65
+
+                const colourProps = {
+                  fill: rgbaFromHex(fill, alpha),
+                  className: `tile-mark${selected ? ' is-selected' : ''}`,
+                  onClick: () => {
+                    onSelectConstituency(tile.constituencyId ?? selectedConstituencyId)
+                    onSelectTile(tile.id)
+                    onSelectBloc(blocId)
+                  },
+                }
+
+                return mapMode === 'bloc'
+                  ? (
+                      <rect
+                        key={tile.id}
+                        {...colourProps}
+                        x={tile.x - 5}
+                        y={tile.y - 5}
+                        width={10}
+                        height={10}
+                        rx={2}
                       />
                     )
-                  })}
+                  : (
+                      <circle
+                        key={tile.id}
+                        {...colourProps}
+                        cx={tile.x}
+                        cy={tile.y}
+                        r={selected ? 5.4 : 3.8}
+                      />
+                    )
+              })}
+            </>
+          )}
 
-                  {/* Battleground animated rings — drawn on top */}
-                  {world.constituencies
-                    .filter((seat) => battlegroundIds.has(seat.id))
-                    .map((seat) => {
-                      const r = world.stats.closestWardMargin
-                      const pulseR = 8 + (10 - Math.min(r, 10))
+          {mapMode === 'redistrict' && (
+            <>
+              {(() => {
+                // Compute Voronoi from seeds (with drag offset applied)
+                const displaySeeds = world.constituencies.map((c) => {
+                  if (dragWardId === c.id && dragPos) return [dragPos.x, dragPos.y] as [number, number]
+                  return [c.seed.x, c.seed.y] as [number, number]
+                })
+                const delaunay = Delaunay.from(displaySeeds)
+                const voronoi = delaunay.voronoi([0, 0, world.width, world.height])
+                const cellPaths = world.constituencies.map((_, i) => voronoi.renderCell(i))
+
+                // Reassign tiles to nearest seed (temporary visual, not committed)
+                const tileWardMap = new Map<string, string>()
+                for (const tile of world.tiles) {
+                  const nearestIdx = delaunay.find(tile.x, tile.y)
+                  tileWardMap.set(tile.id, world.constituencies[nearestIdx]?.id ?? tile.constituencyId ?? '')
+                }
+
+                return (
+                  <g>
+                    {/* Voronoi cell polygons */}
+                    {world.constituencies.map((seat, i) => (
+                      <path
+                        key={seat.id}
+                        d={cellPaths[i]}
+                        fill={rgbaFromHex(wardColours[seat.id] ?? '#8d5524', seat.id === redistrictTargetWardId ? 0.18 : 0.06)}
+                        stroke={seat.id === redistrictTargetWardId ? '#c86400' : 'rgba(44,31,14,0.4)'}
+                        strokeWidth={seat.id === redistrictTargetWardId ? 2 : 0.8}
+                      />
+                    ))}
+                    {/* Tile dots colored by their temporary ward assignment */}
+                    {world.tiles.map((tile) => {
+                      const wId = tileWardMap.get(tile.id) ?? ''
+                      const colour = wardColours[wId] ?? '#8d5524'
                       return (
                         <circle
-                          key={`bg-ring-${seat.id}`}
-                          cx={seat.seed.x}
-                          cy={seat.seed.y}
-                          r={pulseR}
-                          className="battleground-ring"
+                          key={tile.id}
+                          cx={tile.x}
+                          cy={tile.y}
+                          r={1.8}
+                          fill={rgbaFromHex(colour, 0.7)}
+                          pointerEvents="none"
                         />
                       )
                     })}
-                </>
-              )
-            : (
-                <>
-                  {world.constituencies.map((seat) => (
-                    <path
-                      key={seat.id}
-                      d={seat.cellPath}
-                      className={`constituency-outline${seat.id === selectedConstituencyId ? ' is-selected' : ''}`}
-                    />
-                  ))}
-
-                  {world.tiles.map((tile) => {
-                    const blocId = dominantBlocId(tile.blocMix)
-                    const preference = tilePreferenceById.get(tile.id)
-                    const topParty = preference?.rankings[0]
-                    const fill = mapMode === 'bloc'
-                      ? blocColours[blocId] ?? '#8d5524'
-                      : topParty?.colour ?? '#8d5524'
-                    const selected = tile.id === selectedTileId
-                    const dimmed = mapMode === 'bloc' && selectedBlocId !== '' && blocId !== selectedBlocId
-
-                    // In voter mode, colour intensity reflects how certain the vote is
-                    const certainty = topParty && preference
-                      ? Math.max(0, (topParty.support - (preference.rankings[1]?.support ?? 0)) / 50)
-                      : 0.5
-                    const alpha = selected ? 0.9 : dimmed ? 0.18 : mapMode === 'voter' ? 0.35 + certainty * 0.5 : 0.65
-
-                    const commonProps = {
-                      key: tile.id,
-                      fill: rgbaFromHex(fill, alpha),
-                      className: `tile-mark${selected ? ' is-selected' : ''}`,
-                      onClick: () => {
-                        onSelectConstituency(tile.constituencyId ?? selectedConstituencyId)
-                        onSelectTile(tile.id)
-                        onSelectBloc(blocId)
-                      },
-                    }
-
-                    return mapMode === 'bloc'
-                      ? (
-                          <rect
-                            {...commonProps}
-                            x={tile.x - 5}
-                            y={tile.y - 5}
-                            width={10}
-                            height={10}
-                            rx={2}
-                          />
-                        )
-                      : (
+                    {/* Draggable seed points */}
+                    {world.constituencies.map((seat) => {
+                      const isDragging = dragWardId === seat.id
+                      const sx = isDragging && dragPos ? dragPos.x : seat.seed.x
+                      const sy = isDragging && dragPos ? dragPos.y : seat.seed.y
+                      const r = isDragging ? 10 : 6
+                      return (
+                        <g key={`seed-${seat.id}`}>
                           <circle
-                            {...commonProps}
-                            cx={tile.x}
-                            cy={tile.y}
-                            r={selected ? 5.4 : 3.8}
+                            cx={sx}
+                            cy={sy}
+                            r={r + 4}
+                            fill="transparent"
+                            style={{ cursor: 'grab' }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              setDragWardId(seat.id)
+                              onSetRedistrictTarget?.(seat.id)
+                            }}
                           />
-                        )
-                  })}
-                </>
-              )}
+                          <circle
+                            cx={sx}
+                            cy={sy}
+                            r={r}
+                            fill={wardColours[seat.id] ?? '#8d5524'}
+                            stroke="white"
+                            strokeWidth={2}
+                            style={{ pointerEvents: 'none' }}
+                          />
+                          <circle
+                            cx={sx}
+                            cy={sy}
+                            r={4}
+                            fill="white"
+                            stroke={rgbaFromHex(wardColours[seat.id] ?? '#8d5524', 1)}
+                            strokeWidth={1.5}
+                            style={{ pointerEvents: 'none' }}
+                          />
+                        </g>
+                      )
+                    })}
+                  </g>
+                )
+              })()}
+            </>
+          )}
 
           {/* Settlement centres */}
                   {world.settlementCenters.map((center) => (
@@ -281,6 +423,27 @@ export function MapFigure({
             </text>
           )
         })}
+
+        {/* Ward labels in redistrict mode — click to highlight */}
+        {mapMode === 'redistrict' && world.constituencies.map((seat) => (
+          <text
+            key={`${seat.id}-label`}
+            x={seat.seed.x + 10}
+            y={seat.seed.y - 10}
+            className="constituency-label"
+            style={{
+              fill: seat.id === redistrictTargetWardId
+                ? 'rgba(200,60,0,0.95)'
+                : 'rgba(44,31,14,0.5)',
+              fontWeight: seat.id === redistrictTargetWardId ? '900' : '500',
+              cursor: 'pointer',
+              fontSize: 11,
+            }}
+            onClick={() => onSetRedistrictTarget?.(seat.id)}
+          >
+            {seat.name.split(' ')[0]}
+          </text>
+        ))}
       </svg>
     </figure>
   )

@@ -372,7 +372,7 @@ export interface WorldOptions {
   playerPartyId?: string
 }
 
-export type MapMode = 'ward' | 'bloc' | 'voter'
+export type MapMode = 'ward' | 'bloc' | 'voter' | 'redistrict'
 
 export interface PartyEdit {
   id: string

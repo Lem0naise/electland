@@ -12,9 +12,14 @@ import { CampaignActionsPanel } from './components/CampaignActionsPanel'
 import { SetupScreen } from './components/SetupScreen'
 import {
   applyCampaignAction,
+  calculateResults,
   dominantBlocId,
   estimateTilePreference,
   generateWorld,
+  recalculateWardAggregates,
+  redistributeSnapshot,
+  regenerateCellPaths,
+  restoreRedistributeSnapshot,
   simulateWeek,
   strategyTagsForValues,
 } from './lib/sim'
@@ -44,6 +49,8 @@ function App() {
   const [showElectionNight, setShowElectionNight] = useState(false)
   const [showGovernance, setShowGovernance] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
+  const [redistrictTargetWardId, setRedistrictTargetWardId] = useState('')
+  const [redistrictSnapshot, setRedistrictSnapshot] = useState<Map<string, string> | null>(null)
 
   const selectedConstituency = useMemo(
     () => world?.constituencies.find((seat) => seat.id === selectedConstituencyId),
@@ -250,6 +257,57 @@ function App() {
     if (tile.constituencyId) setSelectedConstituencyId(tile.constituencyId)
   }
 
+  const handleStartRedistrict = () => {
+    if (!world) return
+    setRedistrictSnapshot(redistributeSnapshot(world.tiles))
+    setMapMode('redistrict')
+    setRedistrictTargetWardId(world.constituencies[0]?.id ?? '')
+    setSelectedBlocId('')
+    setSelectedTileId('')
+    setSelectedConstituencyId('')
+  }
+
+  const handleDragSeeds = (seeds: Array<{ wardId: string; x: number; y: number }>) => {
+    if (!world) return
+    for (const s of seeds) {
+      const ward = world.constituencies.find((c) => c.id === s.wardId)
+      if (ward) {
+        ward.seed.x = s.x
+        ward.seed.y = s.y
+      }
+    }
+    setWorld({ ...world })
+  }
+
+  const handleDoneRedistrict = () => {
+    if (!world) return
+    const updatedSeats = recalculateWardAggregates(world)
+    const withPaths = regenerateCellPaths(updatedSeats)
+    const worldWithSeats = { ...world, constituencies: withPaths }
+    const results = calculateResults(worldWithSeats)
+    const nextWorld = {
+      ...worldWithSeats,
+      constituencies: results.constituencies,
+      nationalResults: results.nationalResults,
+    }
+    setWorld(nextWorld)
+    setMapMode('ward')
+    setRedistrictTargetWardId('')
+    setRedistrictSnapshot(null)
+    setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
+    setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
+    setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
+  }
+
+  const handleCancelRedistrict = () => {
+    if (!world || !redistrictSnapshot) return
+    restoreRedistributeSnapshot(world.tiles, redistrictSnapshot)
+    setWorld({ ...world })
+    setMapMode('ward')
+    setRedistrictTargetWardId('')
+    setRedistrictSnapshot(null)
+  }
+
   const electionIn = world?.weeksUntilElection ?? 0
   const majority = world?.stats.councilMajority ?? 0
   const playerSeats = playerResult?.seatsWon ?? 0
@@ -353,18 +411,45 @@ function App() {
                     <h3>{world.townName}</h3>
                   </div>
                   <div className="map-mode-row">
-                    {(['ward', 'bloc', 'voter'] as MapMode[]).map((mode) => (
+                    {(['ward', 'bloc', 'voter', 'redistrict'] as MapMode[]).map((mode) => (
                       <button
                         key={mode}
                         type="button"
                         className={`mode-btn${mode === mapMode ? ' is-active' : ''}`}
-                        onClick={() => setMapMode(mode)}
+                        onClick={() => {
+                          if (mode === 'redistrict') handleStartRedistrict()
+                          else setMapMode(mode)
+                        }}
                       >
-                        {mode === 'ward' ? 'Wards' : mode === 'bloc' ? 'Blocs' : 'Clusters'}
+                        {mode === 'ward' ? 'Wards' : mode === 'bloc' ? 'Blocs' : mode === 'voter' ? 'Clusters' : 'Redistrict'}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {mapMode === 'redistrict' && (
+                  <div className="redistrict-toolbar">
+                    <div className="redistrict-disclaimer">
+                      Sandbox redistricting — boundaries will not be fair. Drag the seed points to reshape wards. Tile assignments update automatically.
+                    </div>
+                    <div className="redistrict-controls">
+                      <button
+                        className="ink-button secondary small"
+                        type="button"
+                        onClick={handleCancelRedistrict}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        className="ink-button small"
+                        type="button"
+                        onClick={handleDoneRedistrict}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="currents-strip">
                   {world.currents.map((current, i) => (
@@ -386,6 +471,9 @@ function App() {
                   onSelectConstituency={setSelectedConstituencyId}
                   onSelectBloc={setSelectedBlocId}
                   onSelectTile={focusTile}
+                  redistrictTargetWardId={mapMode === 'redistrict' ? redistrictTargetWardId : undefined}
+                  onSetRedistrictTarget={mapMode === 'redistrict' ? setRedistrictTargetWardId : undefined}
+                  onDragRedistrictSeeds={mapMode === 'redistrict' ? handleDragSeeds : undefined}
                 />
               </section>
 

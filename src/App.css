@@ -936,6 +936,29 @@ button, input, select, textarea { font: inherit; }
   background: var(--accent-gold);
 }
 
+/* Redistrict toolbar */
+.redistrict-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 0;
+  border-top: 1px solid var(--ink-faint);
+}
+.redistrict-disclaimer {
+  font-size: 0.68rem;
+  color: var(--accent-red);
+  font-style: italic;
+  padding: 4px 7px;
+  background: rgba(155,28,28,0.06);
+  border: 1px solid rgba(155,28,28,0.2);
+}
+.redistrict-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* ─── Map SVG ────────────────────────────────────────────────────────────────── */
 .map-figure {
   margin: 0;
