@@ -2053,6 +2053,51 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .pdn-icon { font-size: 0.9rem; flex-shrink: 0; }
 .pdn-text { font-weight: 600; }
 
+/* Alliance pacts display */
+.alliance-pacts-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.alliance-pact-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  background: rgba(184,134,11,0.08);
+  border: 1px solid rgba(184,134,11,0.25);
+  font-size: 0.7rem;
+  color: var(--ink-mid);
+}
+.alliance-pact-indicator { font-size: 0.85rem; flex-shrink: 0; }
+.alliance-pact-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+.alliance-pact-text strong {
+  color: var(--ink);
+}
+.alliance-break-btn {
+  appearance: none;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.3);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: all 120ms ease;
+}
+.alliance-break-btn:hover {
+  background: rgba(155,28,28,0.08);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
 /* Action section label (incumbent mode header) */
 .action-section-label {
   padding: 5px 0 2px;

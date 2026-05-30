@@ -4,6 +4,7 @@ import {
   VALUE_KEYS,
   type ActionResult,
   type ActiveCampaign,
+  type AlliancePact,
   type CampaignAction,
   type Constituency,
   type ConstituencyResult,
@@ -918,7 +919,7 @@ function createLeaderName(rng: () => number) {
 // Create a ward name in the quirky English village style, no repeats
 function createWardName(rng: () => number, used: Set<string>, urbanity: number, nearestRole: string): string {
   // Check for a role-specific override (50% chance when the role matches)
-  const roleOverride = wardRoleOverrides[nearestRole]
+  const roleOverride = wardRoleOverrides[nearestRole as keyof typeof wardRoleOverrides]
   const useRoleOverride = roleOverride && rng() < 0.5
 
   let firstPool: string[]
@@ -1317,7 +1318,7 @@ function createConstituencies(rng: () => number, tiles: PopulationTile[], count:
   })
 }
 
-function strategyTagsForValues(values: PoliticalValues) {
+export function strategyTagsForValues(values: PoliticalValues) {
   const tags = new Set<string>()
   if (values.change > 18) tags.add('school')
   if (values.change < -10) tags.add('oldtown')
@@ -1716,12 +1717,40 @@ function scorePartyForTile(world: World, seat: Constituency | undefined, tile: P
   return wardFit + focus + organization + tagBonus + issueFit + eventBonus + party.baseUtility + party.momentum + wardBoost + tileBoost + incumbencyBonus
 }
 
+function allianceModifier(world: World, tile: PopulationTile, party: PartyDefinition): { standingDown: boolean; endorsementBonus: number } {
+  const seat = world.constituencies.find((c) => c.id === tile.constituencyId)
+  if (!seat) return { standingDown: false, endorsementBonus: 0 }
+
+  let standingDown = false
+  let endorsementBonus = 0
+
+  for (const pact of world.alliancePacts) {
+    if (pact.broken) continue
+
+    const initiatorStandingDownHere = pact.standingDownIn === seat.id || pact.standingDownName === seat.name
+    const allyStandingDownHere = pact.allyStandsDownIn === seat.id || pact.allyStandsDownName === seat.name
+
+    if (initiatorStandingDownHere && pact.initiatorPartyId === party.id) standingDown = true
+    if (allyStandingDownHere && pact.allyPartyId === party.id) standingDown = true
+
+    if (initiatorStandingDownHere && pact.allyPartyId === party.id) endorsementBonus += 0.06
+    if (allyStandingDownHere && pact.initiatorPartyId === party.id) endorsementBonus += 0.06
+  }
+
+  return { standingDown, endorsementBonus }
+}
+
 export function estimateTilePreference(
   world: World,
   tile: PopulationTile,
   constituency: Constituency | undefined = world.constituencies.find((seat) => seat.id === tile.constituencyId),
 ): TilePreferenceEstimate {
-  const scores = world.parties.map((party) => scorePartyForTile(world, constituency, tile, party))
+  const scores = world.parties.map((party) => {
+    const base = scorePartyForTile(world, constituency, tile, party)
+    const { standingDown, endorsementBonus } = allianceModifier(world, tile, party)
+    if (standingDown) return -999
+    return base + endorsementBonus
+  })
   const turnout = clamp(tile.turnout + (Math.max(...scores) - Math.min(...scores)) * 0.01, 0.4, 0.95)
   const rankings = softmax(scores)
     .map<TilePartyPreference>((support, partyIndex) => {
@@ -1971,6 +2000,8 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
   let description = ''
   let wardName: string | undefined
   let targetPartyName: string | undefined
+  let newAlliancePact: AlliancePact | undefined
+  let brokenPactId: string | undefined
 
   const targetWard = action.wardId ? world.constituencies.find((c) => c.id === action.wardId) : undefined
   wardName = targetWard?.name
@@ -2159,6 +2190,73 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       }
       break
     }
+    case 'propose_alliance': {
+      if (!targetWard || !action.targetPartyId || !action.allyWardId) break
+      const allyWard = world.constituencies.find((c) => c.id === action.allyWardId)
+      const allyParty = world.parties.find((p) => p.id === action.targetPartyId)
+      if (!allyWard || !allyParty) break
+
+      // AI evaluation
+      const allyResultInOurWard = targetWard.results.find((r) => r.partyId === action.targetPartyId)
+      const playerResultInAllyWard = allyWard.results.find((r) => r.partyId === world.playerPartyId)
+      const allyStandingInAllyWard = allyWard.results.find((r) => r.partyId === action.targetPartyId)
+
+      const allyWinningInRequestedWard = (allyStandingInAllyWard?.voteShare ?? 0) > 20
+      const allyHopelessInOurWard = (allyResultInOurWard?.voteShare ?? 100) < 15
+      const playerCloseInAllyWard = (playerResultInAllyWard?.voteShare ?? 0) > 10
+
+      // Ideological alignment: closer values = more receptive
+      const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
+      const valueDist = playerParty ? valueDistance(playerParty.values, allyParty.values, { change: 1, growth: 1, services: 1 }) : 10000
+      const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
+
+      // Reputation penalty
+      const repKey = [world.playerPartyId, action.targetPartyId].sort().join('_')
+      const repPenalty = world.allianceReputation[repKey] ?? 0
+
+      const acceptanceChance = (allyHopelessInOurWard ? 0.30 : 0) +
+        (playerCloseInAllyWard ? 0.25 : 0) +
+        ideologicalBonus * 0.25 -
+        repPenalty * 0.15 -
+        (allyWinningInRequestedWard ? 0.40 : 0)
+
+      const accepted = rng() < Math.max(0.05, Math.min(0.85, acceptanceChance))
+      targetPartyName = allyParty.name
+
+      if (accepted) {
+        newAlliancePact = {
+          id: `pact-${Date.now()}-${rng().toString(36).slice(2, 6)}`,
+          initiatorPartyId: world.playerPartyId,
+          allyPartyId: action.targetPartyId,
+          standingDownIn: targetWard.id,
+          standingDownName: targetWard.name,
+          allyStandsDownIn: allyWard.id,
+          allyStandsDownName: allyWard.name,
+          expiresWeek: world.week + world.weeksUntilElection + 1,
+        }
+        voteShareDelta = 2
+        description = `${allyParty.name} accepted the pact. You stand down in ${targetWard.name}; they stand down in ${allyWard.name}.`
+        outcome = 'success'
+      } else {
+        voteShareDelta = 0
+        description = `${allyParty.name} rejected the alliance proposal.${allyWinningInRequestedWard ? ' They\'re too strong in the requested ward.' : ' They weren\'t convinced.'}`
+        outcome = 'backfire'
+      }
+      break
+    }
+    case 'break_alliance': {
+      if (!action.wardId || !action.targetPartyId) break
+      const pact = world.alliancePacts.find((p) => p.id === action.wardId)
+      if (!pact) break
+      brokenPactId = pact.id
+      const allyName = world.parties.find((p) => p.id === action.targetPartyId)?.name ?? action.targetPartyId
+      const repKey = [world.playerPartyId, action.targetPartyId].sort().join('_')
+      world.allianceReputation[repKey] = (world.allianceReputation[repKey] ?? 0) + 0.3
+      voteShareDelta = 0
+      description = `You broke the pact with ${allyName}. They won't forget this.`
+      outcome = 'neutral'
+      break
+    }
   }
 
   const updatedWorld: World = {
@@ -2170,6 +2268,11 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       ? { ...world.weeklyEvent, resolved: true, chosenIndex: action.eventChoiceIndex }
       : world.weeklyEvent,
     policyShiftUsedThisCycle: action.type === 'policy_shift' ? true : world.policyShiftUsedThisCycle,
+    alliancePacts: newAlliancePact
+      ? [...world.alliancePacts, newAlliancePact]
+      : brokenPactId
+        ? world.alliancePacts.map((p) => p.id === brokenPactId ? { ...p, broken: true } : p)
+        : world.alliancePacts,
   }
 
   // Recalculate results after action
@@ -2291,6 +2394,8 @@ export function generateWorld(options: WorldOptions): World {
     playerWon: false,
     playerLost: false,
     policyShiftUsedThisCycle: false,
+    alliancePacts: [] as AlliancePact[],
+    allianceReputation: {} as Record<string, number>,
     headlines: [] as string[],
   }
 
@@ -2567,6 +2672,9 @@ export function simulateWeek(world: World): World {
       ? [pickGovernanceDecision(rng), pickGovernanceDecision(rng)]
       : world.governanceDecisions,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
+    alliancePacts: electionHappening
+      ? world.alliancePacts.map((p) => ({ ...p, broken: true }))
+      : world.alliancePacts,
   }
 
   if (electionHappening) {

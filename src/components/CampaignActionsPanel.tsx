@@ -14,6 +14,10 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
   const [policyDir, setPolicyDir] = useState<1 | -1>(1)
   const [showSmearConfig, setShowSmearConfig] = useState(false)
   const [showPolicyConfig, setShowPolicyConfig] = useState(false)
+  const [showAllianceConfig, setShowAllianceConfig] = useState(false)
+  const [alliancePartyId, setAlliancePartyId] = useState('')
+  const [allianceOurWardId, setAllianceOurWardId] = useState('')
+  const [allianceTheirWardId, setAllianceTheirWardId] = useState('')
 
   useEffect(() => {
     setFocusWardId(selectedWardId)
@@ -105,6 +109,42 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
           <span className="pdn-text">
             {world.activeCampaigns.length} auto-campaign{world.activeCampaigns.length !== 1 ? 's' : ''} running — draining {Math.min(3, totalPermanentDrain)} AP/week
           </span>
+        </div>
+      )}
+
+      {/* Active alliance pacts */}
+      {world.alliancePacts.filter((p) => !p.broken).length > 0 && (
+        <div className="alliance-pacts-display">
+          {world.alliancePacts.filter((p) => !p.broken).map((pact) => {
+            const isInitiator = pact.initiatorPartyId === world.playerPartyId
+            const ourWard = world.constituencies.find((c) => c.id === (isInitiator ? pact.standingDownIn : pact.allyStandsDownIn))
+            const theirWard = world.constituencies.find((c) => c.id === (isInitiator ? pact.allyStandsDownIn : pact.standingDownIn))
+            const allyId = isInitiator ? pact.allyPartyId : pact.initiatorPartyId
+            const ally = world.parties.find((p) => p.id === allyId)
+            return (
+              <div key={pact.id} className="alliance-pact-row">
+                <span className="alliance-pact-indicator">{'\uD83E\uDD1D'}</span>
+                <span className="alliance-pact-text">
+                  Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}
+                </span>
+                <button
+                  type="button"
+                  className="alliance-break-btn"
+                  onClick={() => onAction({
+                    type: 'break_alliance',
+                    label: `Break pact with ${ally?.name ?? allyId}`,
+                    description: '',
+                    apCost: 0,
+                    targetPartyId: allyId,
+                    wardId: pact.id,
+                  })}
+                  title="Break this pact"
+                >
+                  {'\u2715'}
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -435,6 +475,88 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                 </div>
               </div>
             )}
+      </div>
+
+      {/* Alliance proposal */}
+      <div className={`action-card${ap < 2 ? ' is-disabled' : ''}`}>
+        <button
+          type="button"
+          className="ac-expand-toggle"
+          onClick={() => setShowAllianceConfig((s) => !s)}
+          disabled={ap < 2}
+        >
+          <div className="ac-header">
+            <span className="ac-name">Propose alliance</span>
+            <span className={`ac-cost${ap < 2 ? ' cant-afford' : ''}`}>2 AP</span>
+          </div>
+          <span className="ac-desc">Negotiate a pact — stand down in one ward, they stand down in another.</span>
+        </button>
+        {showAllianceConfig && ap >= 2 && (
+          <div className="ac-config">
+            <select
+              value={alliancePartyId}
+              onChange={(e) => setAlliancePartyId(e.target.value)}
+              className="ac-select"
+            >
+              <option value="">Pick an ally...</option>
+              {opponents
+                .filter((o) => !world.alliancePacts.some((p) => !p.broken &&
+                  ((p.initiatorPartyId === world.playerPartyId && p.allyPartyId === o.id) ||
+                   (p.allyPartyId === world.playerPartyId && p.initiatorPartyId === o.id))))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+            </select>
+            <select
+              value={allianceOurWardId}
+              onChange={(e) => setAllianceOurWardId(e.target.value)}
+              className="ac-select"
+            >
+              <option value="">We stand down in...</option>
+              {world.constituencies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={allianceTheirWardId}
+              onChange={(e) => setAllianceTheirWardId(e.target.value)}
+              className="ac-select"
+            >
+              <option value="">They stand down in...</option>
+              {world.constituencies
+                .filter((c) => c.id !== allianceOurWardId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+            <button
+              className="ink-button small"
+              type="button"
+              disabled={!alliancePartyId || !allianceOurWardId || !allianceTheirWardId}
+              onClick={() => {
+                const ally = world.parties.find((p) => p.id === alliancePartyId)
+                const ourWard = world.constituencies.find((c) => c.id === allianceOurWardId)
+                const theirWard = world.constituencies.find((c) => c.id === allianceTheirWardId)
+                if (!ally || !ourWard || !theirWard) return
+                onAction({
+                  type: 'propose_alliance',
+                  label: `Alliance with ${ally.name}`,
+                  description: `Stand down in ${ourWard.name}; they stand down in ${theirWard.name}`,
+                  apCost: 2,
+                  targetPartyId: ally.id,
+                  wardId: ourWard.id,
+                  allyWardId: theirWard.id,
+                })
+                setShowAllianceConfig(false)
+                setAlliancePartyId('')
+                setAllianceOurWardId('')
+                setAllianceTheirWardId('')
+              }}
+            >
+              Propose pact
+            </button>
+          </div>
+        )}
       </div>
 
       {world.actionsThisWeek.length > 0 && (

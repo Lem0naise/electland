@@ -16,7 +16,7 @@ export function SetupScreen({
   constituencyCount: number
   onSetConstituencyCount: (n: number) => void
   onGenerate: () => void
-  onStart: (seed?: number, playerPartyId?: string) => void
+  onStart: (seed?: number, playerPartyId?: string, edits?: PartyEdit[]) => void
   onSavePartyEdit: (edit: PartyEdit) => void
   onClose?: () => void
 }) {
@@ -59,8 +59,8 @@ export function SetupScreen({
   }
 
   function handleStart() {
-    Object.values(partyEdits).forEach((edit) => onSavePartyEdit(edit))
-    onStart(world?.seed, selectedPartyId || world?.playerPartyId)
+    const edits = Object.values(partyEdits)
+    onStart(world?.seed, selectedPartyId || world?.playerPartyId, edits)
   }
 
   function handleNewTown() {
@@ -69,12 +69,12 @@ export function SetupScreen({
 
   function applyUKNames() {
     if (!world) return
-    const ukColourNames: Array<{ colour: string; name: string }> = [
-      { colour: '#0087DC', name: 'Local Conservatives' },
-      { colour: '#E4003B', name: 'Labour' },
-      { colour: '#FAA61A', name: 'Lib Dems' },
-      { colour: '#02A95B', name: 'Green Party' },
-      { colour: '#70147A', name: 'Reform UK' },
+    const ukColourNames: Array<{ colour: string; name: string; values: { change: number; growth: number; services: number } }> = [
+      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -35, growth: 40, services: -20 } },
+      { colour: '#E4003B', name: 'Labour', values: { change: 25, growth: 5, services: 45 } },
+      { colour: '#FAA61A', name: 'Lib Dems', values: { change: 15, growth: 10, services: 15 } },
+      { colour: '#02A95B', name: 'Green Party', values: { change: 45, growth: -35, services: 30 } },
+      { colour: '#70147A', name: 'Reform UK', values: { change: -50, growth: 20, services: -30 } },
     ]
 
     function hexDist(a: string, b: string) {
@@ -88,15 +88,15 @@ export function SetupScreen({
 
     const nextEdits = { ...partyEdits }
     for (const party of world.parties) {
-      let best: { name: string; dist: number } | null = null
+      let best: { name: string; values: { change: number; growth: number; services: number }; dist: number } | null = null
       for (const uk of ukColourNames) {
         const dist = hexDist(party.colour, uk.colour)
         if (!best || dist < best.dist) {
-          best = { name: uk.name, dist }
+          best = { name: uk.name, values: uk.values, dist }
         }
       }
       if (best && best.dist < 3600) {
-        nextEdits[party.id] = { ...editFor(party.id), name: best.name }
+        nextEdits[party.id] = { ...editFor(party.id), name: best.name, values: best.values }
       }
     }
     setPartyEdits(nextEdits)

@@ -16,6 +16,7 @@ import {
   estimateTilePreference,
   generateWorld,
   simulateWeek,
+  strategyTagsForValues,
 } from './lib/sim'
 import type {
   ActionResult,
@@ -117,8 +118,15 @@ function App() {
   const handleSavePartyEdit = useCallback((edit: PartyEdit) => {
     setWorld((prev) => {
       if (!prev) return prev
-      const patchParty = (p: PartyDefinition) =>
-        p.id !== edit.id ? p : { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
+      const patchParty = (p: PartyDefinition) => {
+        if (p.id !== edit.id) return p
+        const updated: PartyDefinition = { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
+        if (edit.values) {
+          updated.values = edit.values
+          updated.strategyTags = strategyTagsForValues(edit.values)
+        }
+        return updated
+      }
       return {
         ...prev,
         parties: prev.parties.map(patchParty),
@@ -132,7 +140,7 @@ function App() {
     })
   }, [])
 
-  const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string) => {
+  const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string, edits?: PartyEdit[]) => {
     if (seed !== undefined && seed !== world?.seed) {
       const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId: playerPartyIdArg })
       setPreviousWorld(null)
@@ -146,10 +154,34 @@ function App() {
     } else {
       setWorld((prev) => {
         if (!prev) return prev
-        if (playerPartyIdArg && playerPartyIdArg !== prev.playerPartyId) {
-          return { ...prev, playerPartyId: playerPartyIdArg }
+        let next = prev
+        if (edits && edits.length > 0) {
+          next = edits.reduce((w, edit) => {
+            const patchParty = (p: PartyDefinition) => {
+              if (p.id !== edit.id) return p
+              const updated: PartyDefinition = { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
+              if (edit.values) {
+                updated.values = edit.values
+                updated.strategyTags = strategyTagsForValues(edit.values)
+              }
+              return updated
+            }
+            return {
+              ...w,
+              parties: w.parties.map(patchParty),
+              constituencies: w.constituencies.map((c) => ({
+                ...c,
+                candidates: c.candidates.map((cand) =>
+                  cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
+                ),
+              })),
+            }
+          }, next)
         }
-        return prev
+        if (playerPartyIdArg && playerPartyIdArg !== next.playerPartyId) {
+          next = { ...next, playerPartyId: playerPartyIdArg }
+        }
+        return next
       })
     }
     setMenuOpen(false)

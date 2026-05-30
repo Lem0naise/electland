@@ -174,7 +174,7 @@ export interface TownStats {
 }
 
 // Campaign actions the player can take
-export type CampaignActionType = 'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event' | 'fix_potholes' | 'improve_bins' | 'ward_festival'
+export type CampaignActionType = 'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event' | 'fix_potholes' | 'improve_bins' | 'ward_festival' | 'propose_alliance' | 'break_alliance'
 
 export interface CampaignAction {
   type: CampaignActionType
@@ -193,6 +193,8 @@ export interface CampaignAction {
   // For event response
   eventId?: string
   eventChoiceIndex?: number
+  // For alliance proposal: which ward the ally should stand down in
+  allyWardId?: string
 }
 
 export interface ActionResult {
@@ -285,6 +287,18 @@ export interface ActiveCampaign {
   targetPartyId?: string
 }
 
+export interface AlliancePact {
+  id: string
+  initiatorPartyId: string
+  allyPartyId: string
+  standingDownIn: string
+  standingDownName: string
+  allyStandsDownIn: string
+  allyStandsDownName: string
+  expiresWeek: number
+  broken?: boolean
+}
+
 export interface World {
   seed: number
   week: number
@@ -338,6 +352,10 @@ export interface World {
   playerLost: boolean
   // Policy shift cooldown (resets each cycle)
   policyShiftUsedThisCycle: boolean
+  // Alliance pacts
+  alliancePacts: AlliancePact[]
+  // Tracks broken pacts per party pair (affects AI willingness)
+  allianceReputation: Record<string, number>
 }
 
 export interface CustomPartyDraft {
@@ -361,6 +379,7 @@ export interface PartyEdit {
   name: string
   leader: string
   colour: string
+  values?: PoliticalValues
 }
 
 export interface CouncillorTenure {
