@@ -211,15 +211,11 @@ function App() {
     if (!world) return
     const existing = world.activeCampaigns.find((c) => c.id === campaign.id || (c.wardId === campaign.wardId && c.type === campaign.type))
     if (existing) {
-      setWorld({ ...world, activeCampaigns: world.activeCampaigns.filter((c) => c !== existing) })
+      setWorld((prev) => prev ? { ...prev, activeCampaigns: prev.activeCampaigns.filter((c) => c !== existing) } : prev)
     } else {
       const upfrontCost = campaign.apCostPerTurn
       if (world.playerActionPoints < upfrontCost) return
-      setWorld({
-        ...world,
-        playerActionPoints: world.playerActionPoints - upfrontCost,
-        activeCampaigns: [...world.activeCampaigns, campaign],
-      })
+      setWorld((prev) => prev ? { ...prev, playerActionPoints: prev.playerActionPoints - upfrontCost, activeCampaigns: [...prev.activeCampaigns, campaign] } : prev)
     }
   }
 

@@ -107,8 +107,34 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
         <div className="permanent-drain-notice">
           <span className="pdn-icon">{'\u27F3'}</span>
           <span className="pdn-text">
-            {world.activeCampaigns.length} auto-campaign{world.activeCampaigns.length !== 1 ? 's' : ''} running — draining {Math.min(3, totalPermanentDrain)} AP/week
+            {world.activeCampaigns.length} running:{' '}
+            {(() => {
+              const byType = new Map<string, { count: number; apCost: number }>()
+              for (const c of world.activeCampaigns) {
+                const key = c.type
+                const cur = byType.get(key) ?? { count: 0, apCost: c.apCostPerTurn }
+                cur.count++
+                byType.set(key, cur)
+              }
+              const labels: Record<string, string> = { canvass: 'Canvass', ads: 'Ads', fix_potholes: 'Potholes', improve_bins: 'Bins' }
+              return [...byType.entries()].map(([type, info]) =>
+                `${labels[type] ?? type} (${info.count * info.apCost}AP)`
+              ).join(' + ')
+            })()}
+            {' '}— draining {Math.min(3, totalPermanentDrain)}/5 AP weekly
           </span>
+          <button
+            type="button"
+            className="pdn-stop-all"
+            onClick={() => {
+              for (const c of [...world.activeCampaigns]) {
+                onTogglePermanent(c)
+              }
+            }}
+            title="Stop all auto-campaigns"
+          >
+            {'\u2715'} Stop all
+          </button>
         </div>
       )}
 
@@ -206,6 +232,25 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                   ? <span className="fwp-margin-leading">Leading by {focusWard.margin.toFixed(1)}pts</span>
                   : <span className="fwp-margin-trailing">Trailing by {focusWard.margin.toFixed(1)}pts</span>}
               </div>
+
+              {world.activeCampaigns.filter((c) => c.wardId === focusWardId).length > 0 && (
+                <div className="fwp-auto-status">
+                  <span className="fwp-auto-label">{'\u27F3'} Auto:</span>
+                  {world.activeCampaigns.filter((c) => c.wardId === focusWardId).map((c) => {
+                    const labels: Record<string, string> = { canvass: 'Canvass', ads: 'Ads', fix_potholes: 'Potholes', improve_bins: 'Bins' }
+                    return (
+                      <span key={c.id} className="fwp-auto-campaign">
+                        {labels[c.type] ?? c.type}
+                      </span>
+                    )
+                  })}
+                  <span className="fwp-auto-boost">{(() => {
+                    const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
+                    const boost = playerParty?.wardBoosts[focusWard.id] ?? 0
+                    return `(+${(boost * 100).toFixed(1)}% effect)`
+                  })()}</span>
+                </div>
+              )}
             </div>
           )
         : <p className="campaign-no-ward">Click a ward on the map to target it.</p>}
@@ -238,7 +283,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                         const action = actions.find((a) => a.type === 'fix_potholes' && a.wardId === focusWardId)
                         if (action) togglePermanent(action)
                       }}
-                      title={isPermanentActive ? 'Stop automated action' : 'Run automatically each week (1 AP/week)'}
+                      title={isPermanentActive ? 'Stop automated action' : 'Auto-boost builds weekly: adds to ward support. Steadies after a few weeks.'}
                     >
                       {isPermanentActive ? '\u27F3 Auto ON — 1 AP/wk' : '\u27F3 Set to auto'}
                     </button>
@@ -267,7 +312,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                         const action = actions.find((a) => a.type === 'improve_bins' && a.wardId === focusWardId)
                         if (action) togglePermanent(action)
                       }}
-                      title={isPermanentActive ? 'Stop automated action' : 'Run automatically each week (1 AP/week)'}
+                      title={isPermanentActive ? 'Stop automated action' : 'Auto-boost builds weekly: adds to ward support. Steadies after a few weeks.'}
                     >
                       {isPermanentActive ? '\u27F3 Auto ON — 1 AP/wk' : '\u27F3 Set to auto'}
                     </button>
@@ -307,9 +352,10 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                       className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
                       onClick={() => {
                         const action = actions.find((a) => a.type === 'canvass' && a.wardId === focusWardId)
-                        if (action) togglePermanent(action)
-                      }}
-                    >
+                          if (action) togglePermanent(action)
+                        }}
+                        title={isPermanentActive ? 'Stop automated action' : 'Auto-boost builds weekly: adds to ward support. Steadies after a few weeks.'}
+                      >
                       {isPermanentActive ? '\u27F3 Auto ON — 1 AP/wk' : '\u27F3 Set to auto'}
                     </button>
                   </div>
@@ -337,9 +383,10 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                       className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
                       onClick={() => {
                         const action = actions.find((a) => a.type === 'canvass' && a.wardId === focusWardId)
-                        if (action) togglePermanent(action)
-                      }}
-                    >
+                          if (action) togglePermanent(action)
+                        }}
+                        title={isPermanentActive ? 'Stop automated action' : 'Auto-boost builds weekly: adds to ward support. Steadies after a few weeks.'}
+                      >
                       {isPermanentActive ? '\u27F3 Auto ON — 1 AP/wk' : '\u27F3 Set to auto'}
                     </button>
                   </div>
@@ -365,9 +412,10 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                       className={`ac-permanent-toggle${isPermanentActive ? ' is-on' : ''}`}
                       onClick={() => {
                         const action = actions.find((a) => a.type === 'ads' && a.wardId === focusWardId)
-                        if (action) togglePermanent(action)
-                      }}
-                    >
+                          if (action) togglePermanent(action)
+                        }}
+                        title={isPermanentActive ? 'Stop automated action' : 'Auto-boost builds weekly: adds to ward support. Steadies after a few weeks.'}
+                      >
                       {isPermanentActive ? '\u27F3 Auto ON — 2 AP/wk' : '\u27F3 Set to auto'}
                     </button>
                   </div>

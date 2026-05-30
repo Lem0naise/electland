@@ -129,6 +129,23 @@ export function ConstituencyInspector({
             </div>
           </div>
 
+          {/* Active auto-campaigns in this ward */}
+          {world.activeCampaigns.filter((c) => c.wardId === selectedWard.id).length > 0 && (
+            <div className="ward-campaign-activity">
+              <span className="ward-campaign-label">{'\u27F3'} Campaign activity:</span>
+              {world.activeCampaigns.filter((c) => c.wardId === selectedWard.id).map((c) => {
+                const playerParty = world.parties.find((p) => p.id === playerPartyId)
+                const boost = playerParty?.wardBoosts[selectedWard.id] ?? 0
+                const labels: Record<string, string> = { canvass: 'Canvass', ads: 'Ads', fix_potholes: 'Potholes', improve_bins: 'Bins' }
+                return (
+                  <span key={c.id} className="ward-campaign-item">
+                    {labels[c.type] ?? c.type}: +{(boost * 100).toFixed(1)}% effect
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
 
           {/* Ideology + fit block */}
           {(() => {
