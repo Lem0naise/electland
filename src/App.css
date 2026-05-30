@@ -1881,6 +1881,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 .verdict-win { border-color: #1a5c2a; background: rgba(26,92,42,0.08); color: #1a5c2a; }
 .verdict-loss { border-color: var(--accent-red); background: rgba(155,28,28,0.06); color: var(--accent-red); }
+.verdict-noc { border-color: var(--accent-gold); background: rgba(184,134,11,0.06); color: var(--accent-gold); }
 
 .copy-results-btn {
   display: block;

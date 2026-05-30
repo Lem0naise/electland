@@ -205,36 +205,173 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                 })}
             </div>
 
-            <div className={`election-night-verdict${playerWonThisElection ? ' verdict-win' : ' verdict-loss'}`}>
-              {playerWonThisElection
-                ? `${playerParty?.name ?? 'Your party'} wins the council with ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''} — a majority of ${majority}.`
-                : winnerParty && winnerParty.id !== world.playerPartyId
-                  ? `${winnerParty.name} wins the council with ${electionSeatCounts[winnerParty.id] ?? 0} seats. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`
-                  : `No majority. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`}
-            </div>
+            {(() => {
+              const anyMajority = Object.values(electionSeatCounts).some((s) => s >= majority)
+              const verdictClass = playerWonThisElection ? ' verdict-win' : anyMajority ? ' verdict-loss' : ' verdict-noc'
+              return (
+                <div className={`election-night-verdict${verdictClass}`}>
+                  {playerWonThisElection
+                    ? `${playerParty?.name ?? 'Your party'} wins the council with ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''} — a majority of ${majority}.`
+                    : !anyMajority
+                      ? `No Overall Control — ${winnerParty?.name ?? 'Largest party'} is the largest party with ${electionSeatCounts[winnerPartyId ?? ''] ?? 0} seats (${majority} needed for majority). ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`
+                      : winnerParty && winnerParty.id !== world.playerPartyId
+                        ? `${winnerParty.name} wins the council with ${electionSeatCounts[winnerParty.id] ?? 0} seats — a majority of ${majority}. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`
+                        : `A majority was reached. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`}
+                </div>
+              )
+            })()}
 
             <button
               className="ink-button secondary copy-results-btn"
               type="button"
               onClick={() => {
-                const lines = world.electionNightResults.map((r) => {
-                  const topParties = r.results.slice(0, 3)
-                  const partyLines = topParties.map((p, i) => {
+                const textParts: string[] = []
+
+                textParts.push(`${world.townName} Council — Week ${world.week} Election Results`)
+                textParts.push(`${'='.repeat(40)}`)
+
+                // Per-ward results — all candidates
+                textParts.push('')
+                textParts.push('RESULTS BY WARD')
+                textParts.push('-'.repeat(20))
+                for (const r of revealed) {
+                  const winnerName = r.winner?.name ?? '?'
+                  const winnerParty = r.winner?.partyName ?? '?'
+                  const margin = r.results[0] && r.results[1]
+                    ? `(+${(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)}pts)`
+                    : ''
+                  const swingLine = r.swingFromLastElection != null
+                    ? ` [swing: ${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp]`
+                    : ''
+
+                  textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin}${swingLine}`)
+
+                  // All candidates
+                  for (const p of r.results) {
                     const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
-                    const name = candidate?.name ?? p.partyName
-                    const swing = r.swingFromLastElection != null && i === 0
-                      ? ` (${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp)`
-                      : ''
-                    return `${p.partyName} — ${name} ${p.voteShare.toFixed(1)}%${swing}`
-                  })
-                  return `${r.wardName}: ${partyLines.join(', ')}`
-                })
-                const councilLine = world.parties
-                  .filter((p) => (electionSeatCounts[p.id] ?? 0) > 0)
-                  .sort((a, b) => (electionSeatCounts[b.id] ?? 0) - (electionSeatCounts[a.id] ?? 0))
-                  .map((p) => `${p.name} ${electionSeatCounts[p.id] ?? 0}`)
-                  .join(', ')
-                const text = `${world.townName} Council — Week ${world.week} Election Results\n\n${lines.join('\n')}\n\nCouncil: ${councilLine}\nMajority: ${majority} seats`
+                    const name = candidate?.name ?? '?'
+                    textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}%`)
+                  }
+
+                  // Change of hands
+                  if (r.wasHeld) {
+                    if (r.winner?.partyId === world.playerPartyId) {
+                      textParts.push(`  GAIN from ${r.previousWinnerPartyName ?? '?'} (was +${(r.previousMargin ?? 0).toFixed(1)})`)
+                    } else if (r.previousWinnerPartyId === world.playerPartyId) {
+                      textParts.push(`  LOSS to ${r.winner?.partyName ?? '?'} (overturned +${(r.previousMargin ?? 0).toFixed(1)})`)
+                    } else {
+                      textParts.push(`  FLIP: ${r.previousWinnerPartyName ?? '?'} → ${r.winner?.partyName ?? '?'}`)
+                    }
+                  }
+                  textParts.push('')
+                }
+
+                // Gains / Losses / Re-elected / Other flips
+                textParts.push('')
+                textParts.push('COUNCILLOR TURNOVER')
+                textParts.push('-'.repeat(20))
+
+                // Re-elected (same person, same party)
+                const reElected = revealed.filter((r) =>
+                  r.wasHeld && r.winner?.partyId === r.previousWinnerPartyId &&
+                  r.winner?.name === r.previousWinnerCandidateName
+                )
+                if (reElected.length > 0) {
+                  textParts.push(`Re-elected: ${reElected.length}`)
+                  for (const r of reElected) {
+                    textParts.push(`  ${r.winner?.name ?? '?'} (${r.winner?.partyName ?? '?'}) — ${r.wardName}`)
+                  }
+                }
+
+                // Gains (player)
+                if (gains.length > 0) {
+                  textParts.push(`Your gains: ${gains.length}`)
+                  for (const r of gains) {
+                    textParts.push(`  ${r.wardName} from ${r.previousWinnerPartyName ?? '?'} — ${r.winner?.name ?? '?'}`)
+                  }
+                }
+
+                // Losses (player)
+                if (losses.length > 0) {
+                  textParts.push(`Your losses: ${losses.length}`)
+                  for (const r of losses) {
+                    textParts.push(`  ${r.wardName} to ${r.winner?.partyName ?? '?'} — ${r.winner?.name ?? '?'}`)
+                  }
+                }
+
+                // Other flips
+                if (otherFlips.length > 0) {
+                  textParts.push(`Other upsets: ${otherFlips.length}`)
+                  for (const r of otherFlips) {
+                    textParts.push(`  ${r.wardName}: ${r.previousWinnerPartyName ?? '?'} → ${r.winner?.partyName ?? '?'}`)
+                  }
+                }
+
+                // First-time winners (no previous winner)
+                const newWards = revealed.filter((r) => !r.previousWinnerPartyId)
+                if (newWards.length > 0) {
+                  textParts.push(`New wards: ${newWards.length}`)
+                  for (const r of newWards) {
+                    textParts.push(`  ${r.wardName} — ${r.winner?.partyName ?? '?'} (${r.winner?.name ?? '?'})`)
+                  }
+                }
+
+                // Council: before → after
+                textParts.push('')
+                textParts.push('COUNCIL SEATS')
+                textParts.push('-'.repeat(20))
+                if (world.electionsHeld > 1) {
+                  textParts.push('Before → After:')
+                  for (const p of allParties) {
+                    const before = prevSeats[p.id] ?? 0
+                    const after = electionSeatCounts[p.id] ?? 0
+                    const delta = after - before
+                    const deltaStr = delta !== 0 ? ` (${delta > 0 ? '+' : ''}${delta})` : ''
+                    textParts.push(`  ${p.name}: ${before} → ${after}${deltaStr}`)
+                  }
+                } else {
+                  for (const p of allParties) {
+                    const seats = electionSeatCounts[p.id] ?? 0
+                    textParts.push(`  ${p.name}: ${seats} seat${seats !== 1 ? 's' : ''}`)
+                  }
+                }
+
+                // National vote shares
+                textParts.push('')
+                textParts.push('NATIONAL VOTE SHARE')
+                textParts.push('-'.repeat(20))
+                for (const r of world.nationalResults) {
+                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats)`)
+                }
+
+                // Stats
+                textParts.push('')
+                textParts.push('ELECTION STATISTICS')
+                textParts.push('-'.repeat(20))
+                textParts.push(`  Wards: ${world.constituencies.length}`)
+                textParts.push(`  Majority: ${majority} seats`)
+                textParts.push(`  Turnout: ${(world.stats.averageTurnout * 100).toFixed(1)}%`)
+                textParts.push(`  Battlegrounds: ${world.stats.battlegroundWardIds.length}`)
+
+                // Verdict
+                textParts.push('')
+                textParts.push('VERDICT')
+                textParts.push('-'.repeat(20))
+                const anyMajority = Object.values(electionSeatCounts).some((s) => s >= majority)
+                if (playerWonThisElection) {
+                  textParts.push(`${playerParty?.name ?? 'Your party'} wins the council with ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''} — a majority of ${majority}.`)
+                } else if (!anyMajority) {
+                  textParts.push(`No Overall Control (NOC)`)
+                  textParts.push(`${winnerParty?.name ?? 'Largest party'} is the largest party with ${electionSeatCounts[winnerPartyId ?? ''] ?? 0} seats (${majority} needed for a majority).`)
+                  textParts.push(`${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`)
+                } else if (winnerParty && winnerParty.id !== world.playerPartyId) {
+                  textParts.push(`${winnerParty.name} wins the council with ${electionSeatCounts[winnerParty.id] ?? 0} seats — a majority of ${majority}.`)
+                  textParts.push(`${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`)
+                } else {
+                  textParts.push(`No majority. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`)
+                }
+
+                const text = textParts.join('\n')
                 navigator.clipboard.writeText(text).catch(() => {})
               }}
             >
