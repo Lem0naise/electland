@@ -479,51 +479,197 @@ const colourPalette = [
   '#3D405B', // Navy
   '#8D5524'  // Mud/Earthy
 ]
-
 // ─── Character Names ────────────────────────────────────────────────────────
 // Shifted from purely whimsical to classic UK local demographics (lots of boomers and eccentric youths)
+
 const firstNames = [
-  // Older/Traditional
-  'Arthur', 'Beryl', 'Clive', 'Deirdre', 'Enid', 'Frank', 'Geraldine', 'Horace', 'Ian', 'Joyce', 
-  'Keith', 'Linda', 'Malcolm', 'Norma', 'Prudence', 'Stuart', 'Winifred', 'Yvonne',
-  // Younger/Quirky
-  'Pip', 'Juniper', 'Otis', 'Marlow', 'Dex', 'Ludo', 'Tilly', 'Barnaby', 'Cressida', 'Tarquin'
-]
+  // Older/Traditional - Male
+  'Albert', 'Arthur', 'Barry', 'Bernard', 'Clive', 'Colin', 'Dennis', 'Derek', 
+  'Eric', 'Frank', 'Geoffrey', 'Gordon', 'Graham', 'Harold', 'Horace', 'Ian', 
+  'Kenneth', 'Leonard', 'Malcolm', 'Neville', 'Nigel', 'Norman', 'Percy', 
+  'Reginald', 'Rodney', 'Roy', 'Stanley', 'Stuart', 'Trevor', 'Vernon', 'Victor', 'Walter',
+  
+  // Older/Traditional - Female
+  'Agnes', 'Audrey', 'Barbara', 'Beryl', 'Betty', 'Brenda', 'Carol', 'Deirdre', 
+  'Doreen', 'Doris', 'Edna', 'Elsie', 'Enid', 'Eunice', 'Geraldine', 'Gladys', 
+  'Gwendoline', 'Irene', 'Jean', 'Joan', 'Joyce', 'Linda', 'Marjorie', 'Maureen', 
+  'Mildred', 'Muriel', 'Norma', 'Pamela', 'Pauline', 'Peggy', 'Phyllis', 'Prudence', 
+  'Rita', 'Shirley', 'Sylvia', 'Valerie', 'Vera', 'Winifred', 'Yvonne',
+
+  // Younger/Quirky - Male
+  'Alfie', 'Archie', 'Arlo', 'Barnaby', 'Cosmo', 'Dex', 'Felix', 'Finn', 
+  'Hector', 'Hugo', 'Jago', 'Jasper', 'Kit', 'Ludo', 'Marlow', 'Milo', 
+  'Monty', 'Ned', 'Orson', 'Oscar', 'Otis', 'Pip', 'Rafe', 'Rex', 'Rufus', 
+  'Silas', 'Tarquin', 'Toby',
+  
+  // Younger/Quirky - Female
+  'Amelie', 'Bea', 'Cleo', 'Cora', 'Cressida', 'Daphne', 'Delilah', 'Elara', 
+  'Eloise', 'Esme', 'Flora', 'Freya', 'Hazel', 'Imogen', 'Iris', 'Isla', 
+  'Jemima', 'Juniper', 'Lyra', 'Mabel', 'Maeve', 'Margot', 'Nell', 'Olive', 
+  'Penelope', 'Poppy', 'Posy', 'Stella', 'Thea', 'Tilly', 'Zara'
+];
 
 const lastNames = [
   // Classic Mundane
-  'Smith', 'Jones', 'Davies', 'Taylor', 'Brown', 'Williams',
-  // Eccentric/Village
-  'Appleton', 'Braithwaite', 'Crump', 'Dingle', 'Entwistle', 'Fogg', 'Goggins', 'Higginbottom', 
-  'Ironmonger', 'Jellicoe', 'Lightoller', 'Murgatroyd', 'Oglethorpe', 'Pendleton', 'Quigley', 
-  'Rumbold', 'Thistlethwaite', 'Underhill', 'Wigglesworth',
+  'Brown', 'Clarke', 'Davies', 'Edwards', 'Evans', 'Green', 'Hall', 'Harris', 
+  'Hughes', 'Johnson', 'Jones', 'Martin', 'Roberts', 'Robinson', 'Smith', 
+  'Taylor', 'Thomas', 'Thompson', 'White', 'Williams', 'Wood', 'Wright',
+  
+  // Eccentric/Village (The "Midsomer Murders" special)
+  'Appleton', 'Baggott', 'Bickerstaff', 'Blackwood', 'Bottomley', 'Braithwaite', 
+  'Broadbent', 'Butterfill', 'Cattermole', 'Clutterbuck', 'Cockburn', 'Crump', 
+  'Dingle', 'Dribble', 'Entwistle', 'Featherstonehaugh', 'Fogg', 'Fothergill', 
+  'Goggins', 'Goodbody', 'Greenhalgh', 'Hardcastle', 'Hesketh', 'Higginbottom', 
+  'Ironmonger', 'Jellicoe', 'Kettle', 'Lightoller', 'Longbottom', 'Machen', 
+  'Mellor', 'Murgatroyd', 'Nethersole', 'Oglethorpe', 'Pendleton', 'Plackett', 
+  'Postlethwaite', 'Quigley', 'Ramsbottom', 'Rumbold', 'Scargill', 'Shufflebottom', 
+  'Slocombe', 'Snodgrass', 'Sparrow', 'Tarbottom', 'Thistlethwaite', 'Throckmorton', 
+  'Treadwell', 'Trevithick', 'Turnbull', 'Underhill', 'Wadsworth', 'Waterhouse', 
+  'Wigglesworth', 'Winterbottom', 'Wrench',
+
   // Posh Double-Barrelled
-  'Smythe-Willis', 'Finch-Hatton', 'Blythe-Smith'
-]
+  'Baring-Gould', 'Blythe-Smith', 'Bowes-Lyon', 'Cavendish-Bentinck', 
+  'Cholmondeley-Warner', 'Finch-Hatton', 'Fitzalan-Howard', 'Gordon-Lennox', 
+  'Hamilton-Russell', 'Hepworth-Dix', 'Leveson-Gower', 'Montagu-Douglas-Scott', 
+  'Pelham-Clinton', 'Percy-Wellesley', 'Smythe-Willis', 'Spencer-Churchill', 
+  'Talbot-Ponsonby', 'Vane-Tempest'
+];
 
 // ─── Town & Ward Generation ─────────────────────────────────────────────────
 // Added prefixes for the classic "Chipping" or "Little" English town vibe.
-const townPrefixes = ['', '', '', 'Great ', 'Little ', 'Upper ', 'Lower ', 'Chipping ']
-const townStarts = [
-  'Brindle', 'Clover', 'Merry', 'Thistle', 'Copper', 'Willow', 'Lantern', 'Pebble', 
-  'Amber', 'Barley', 'Fen', 'Grims', 'Bex', 'Slough', 'Dumble', 'Cuddle'
-]
-const townEnds = [
-  'ford', 'market', 'hollow', 'stead', 'bridge', 'wick', 'harbour', 'cross', 
-  'bottom', 'end', 'gate', 'heath', 'bury', 'ton', 'ley', 'chester', 'worth'
-]
 
-// Quirky English village ward names (Excellent original list, just added a few classics)
-const wardFirstWords = [
-  'Millpond', 'Copper', 'Fen', 'Shambles', 'Cobble', 'Lantern', 'Old Kiln', 'Tanner', 'Bell',
-  'Rushmore', 'Cinder', 'Bramble', 'Halfpenny', 'Woolwich', 'Nettleback', 'Gravel', 'Soapstone',
-  'Pickwick', 'Flint', 'Minnow', 'Oakham', 'Barley', 'Catchpenny', 'Horseshoe', 'Mudlark',
-  'St. Jude', 'Vicarage', 'Market'
-]
-const wardSecondWords = [
-  'End', 'Corner', 'Gate', 'Row', 'Bottom', 'Green', 'Cross', 'Hill', 'Moor', 'Side',
-  'Lane', 'Yards', 'Close', 'Wharf', 'Square', 'Fold', 'Beck', 'Nook', 'Parade', 'Precinct'
-]
+const townPrefixes = [
+  // Empty strings to allow for towns without prefixes
+  '', '', '', '', '', '', 
+  // Directions
+  'North ', 'South ', 'East ', 'West ', 
+  // Scale & Age
+  'Great ', 'Little ', 'Upper ', 'Lower ', 'Much ', 'Old ', 'New ', 
+  // Eccentric/Market
+  'Chipping ', 'High ', 'Long ', 'Broad ', 'Nether ', 'Over ', 
+  'Market ', "Bishop's ", "King's ", "Earls "
+];
+
+const townStarts = [
+  // Nature/Rural
+  'Adder', 'Amber', 'Apple', 'Ash', 'Barley', 'Beck', 'Black', 'Bourne', 
+  'Bram', 'Broad', 'Buck', 'Clover', 'Cold', 'Copper', 'Crow', 'Deep', 
+  'Dun', 'Fen', 'Fletch', 'Hazel', 'Oak', 'Pebble', 'Plum', 'Sand', 
+  'Steeple', 'Thistle', 'Water', 'Willow', 'Wood',
+  // Quirky/Historic sounds
+  'Aston', 'Basset', 'Bex', 'Brad', 'Brindle', 'Bur', 'Chelm', 'Chest', 
+  'Crom', 'Cuddle', 'Dar', 'Dumble', 'Farn', 'Fram', 'God', 'Grims', 
+  'Hales', 'Helm', 'Hem', 'Horn', 'Il', 'Ink', 'Lantern', 'Laven', 
+  'Led', 'Lud', 'Mal', 'Merry', 'Min', 'Monk', 'Nettle', 'Norton', 
+  'Pen', 'Ravens', 'Saffron', 'Shing', 'Ship', 'Slough', 'Stan', 
+  'Stoke', 'Swin', 'Tatter', 'Thorn', 'Tiver', 'Walling', 'Walmer', 
+  'Wapping', 'Weston', 'Wey', 'Whit', 'Win', 'Wob', 'Wot', 'Yax'
+];
+
+const townEnds = [
+  // Topography/Landscape
+  'bottom', 'bridge', 'brook', 'burn', 'camp', 'cliffe', 'combe', 'croft', 
+  'dale', 'den', 'dene', 'don', 'ey', 'field', 'fleet', 'fold', 'ford', 
+  'gate', 'harbour', 'head', 'heath', 'hill', 'hollow', 'holt', 'hurst', 
+  'leigh', 'ley', 'moor', 'mouth', 'ness', 'pool', 'port', 'stone', 
+  'tree', 'water', 'well', 'wold', 'wood',
+  // Settlements/Institutions
+  'bury', 'by', 'caster', 'chester', 'cote', 'cross', 'end', 'ing', 
+  'market', 'minster', 'over', 'soke', 'stead', 'stoke', 'thorpe', 
+  'ton', 'wick', 'worth'
+];
+// ─── Ward naming ────────────────────────────────────────────────────────────
+// Categorised by ward character so names reflect the geography. Expanded for 
+// maximum quirky English village, provincial town, and rural parish flavor.
+
+const wardNamesByTier = {
+  urban: {
+    first: [
+      // Civic & Royal
+      'Central', 'Town', 'Crown', 'Guildhall', 'King\'s', 'Queen\'s', 'Victoria', 
+      'Albert', 'Regent', 'Duke\'s', 'Jubilee', 'Civic', 'Charter', 'Grosvenor',
+      // Historic & Commercial
+      'Market', 'High', 'Broad', 'Corn', 'Exchange', 'Garrick', 'Brunel', 'Toll',
+      // Religious & Architectural
+      'Church', 'Castle', 'Abbey', 'Trinity', 'Cathedral', 'Priory', 'Bishop\'s', 
+      'Minster', 'St. Mary\'s', 'St. George\'s', 'St. Peter\'s', 'St. Jude\'s', 'St. Clement\'s'
+    ],
+    second: [
+      'Square', 'Street', 'Parade', 'Gardens', 'Place', 'Quarter', 'Precinct', 
+      'Arcade', 'Walk', 'Row', 'Centre', 'Cross', 'Terrace', 'Circus', 'Boulevard', 
+      'Yard', 'Court', 'Way', 'Avenue', 'Steps', 'Gate', 'Wynd', 'Alley'
+    ],
+  },
+  suburban: {
+    first: [
+      // Idyllic & Quaint
+      'Millpond', 'Lantern', 'Vicarage', 'Pickwick', 'Oakham', 'Bell', 'Willow', 
+      'Orchard', 'Rectory', 'Meadow', 'Rose', 'Glebe', 'Foxglove', 'Chestnut', 'Elm',
+      // Transitional & Light Industry
+      'Copper', 'Tanner', 'Old Kiln', 'Halfpenny', 'Cobble', 'Barley', 'Brewery', 
+      'Pump', 'Turnpike', 'Pound', 'Hearth', 'Gallows', 'Spinney', 'Thatch'
+    ],
+    second: [
+      'End', 'Corner', 'Gate', 'Green', 'Close', 'Fold', 'Nook', 'Side', 'Cross', 
+      'Row', 'Rise', 'View', 'Crescent', 'Drive', 'Grove', 'Copse', 'Mews', 
+      'Garth', 'Mead', 'Patch', 'Croft'
+    ],
+  },
+  rural: {
+    first: [
+      // Wild & Geographic
+      'Fen', 'Rushmore', 'Bramble', 'Nettleback', 'Mudlark', 'Gravel', 'Soapstone', 
+      'Cinder', 'Flint', 'Tarn', 'Bog', 'Bracken', 'Heather', 'Chalk', 'Clay', 'Moss',
+      // Agricultural & Fauna
+      'Horseshoe', 'Shambles', 'Woolwich', 'Catchpenny', 'Minnow', 'Wych', 'Toad', 
+      'Crow', 'Raven', 'Cowslip', 'Fleece', 'Tithe', 'Plough', 'Hare', 'Shepherd\'s',
+      // Folklore & Local Legends
+      'Hangman\'s', 'Smuggler\'s', 'Barrow', 'Druid\'s', 'Goblin'
+    ],
+    second: [
+      'Hill', 'Moor', 'Bottom', 'Lane', 'Beck', 'Wharf', 'Yards', 'Side', 'Cross', 
+      'Green', 'Hollow', 'Brook', 'Wood', 'Ridge', 'Fell', 'Marsh', 'Ditch', 'Dyke', 
+      'Pasture', 'Warren', 'Scrub', 'Coppice', 'Down', 'Bank', 'Grange'
+    ],
+  },
+}
+
+// Expanded overrides for highly specific micro-geographies within the town/village
+const wardRoleOverrides = {
+  river: { 
+    first: ['Millpond', 'Minnow', 'Weir', 'Ferry', 'Lock', 'Ford', 'Willow'], 
+    second: ['Beck', 'Wharf', 'Side', 'Bank', 'Reach', 'Wash'] 
+  },
+  pond: { 
+    first: ['Millpond', 'Minnow', 'Duckpond', 'Lily', 'Reed'], 
+    second: ['Beck', 'Side', 'Water', 'Pool'] 
+  },
+  industrial: { 
+    first: ['Old Kiln', 'Copper', 'Tanner', 'Gravel', 'Soapstone', 'Iron', 'Coal', 'Foundry', 'Mill', 'Forge'], 
+    second: ['Yards', 'Side', 'Works', 'Estate'] 
+  },
+  oldtown: { 
+    first: ['Castle', 'Abbey', 'Vicarage', 'Priory', 'Minster', 'Tudor', 'Charter'], 
+    second: ['Gate', 'Close', 'Row', 'Wynd', 'Walls', 'Steps'] 
+  },
+  school: { 
+    first: ['Trinity', 'St. Mary\'s', 'Vicarage', 'Grammar', 'Academy', 'Collegiate', 'Old School'], 
+    second: ['Gardens', 'Walk', 'Row', 'Playing Fields'] 
+  },
+  market: { 
+    first: ['Market', 'Broad', 'Cattle', 'Corn', 'Fleece', 'Butter', 'Wool'], 
+    second: ['Square', 'Parade', 'Cross', 'Shambles', 'Exchange'] 
+  },
+  woodland: {
+    first: ['Oakham', 'Bramble', 'Spinney', 'Copse', 'Chestnut', 'Badger'],
+    second: ['Wood', 'Grove', 'Thicket', 'Nook', 'Ride']
+  },
+  transport: {
+    first: ['Station', 'Railway', 'Junction', 'Tramway', 'Brunel', 'Canal'],
+    second: ['Road', 'Approach', 'Sidings', 'Yard', 'Terminus']
+  }
+}
+
 
 // ─── Bloc templates ─────────────────────────────────────────────────────────
 const fictionalBlocTemplates: Array<{
@@ -770,17 +916,51 @@ function createLeaderName(rng: () => number) {
 }
 
 // Create a ward name in the quirky English village style, no repeats
-function createWardName(rng: () => number, used: Set<string>): string {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const name = `${pickOne(rng, wardFirstWords)} ${pickOne(rng, wardSecondWords)}`
+function createWardName(rng: () => number, used: Set<string>, urbanity: number, nearestRole: string): string {
+  // Check for a role-specific override (50% chance when the role matches)
+  const roleOverride = wardRoleOverrides[nearestRole]
+  const useRoleOverride = roleOverride && rng() < 0.5
+
+  let firstPool: string[]
+  let secondPool: string[]
+
+  if (useRoleOverride) {
+    firstPool = roleOverride.first
+    secondPool = roleOverride.second
+  } else if (urbanity > 0.55) {
+    firstPool = wardNamesByTier.urban.first
+    secondPool = wardNamesByTier.urban.second
+  } else if (urbanity > 0.30) {
+    firstPool = wardNamesByTier.suburban.first
+    secondPool = wardNamesByTier.suburban.second
+  } else {
+    firstPool = wardNamesByTier.rural.first
+    secondPool = wardNamesByTier.rural.second
+  }
+
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const first = pickOne(rng, firstPool)
+    const second = pickOne(rng, secondPool)
+    const name = `${first} ${second}`
     if (!used.has(name)) {
       used.add(name)
       return name
     }
   }
-  // Fallback with a number
-  const base = `${pickOne(rng, wardFirstWords)} ${pickOne(rng, wardSecondWords)}`
-  const name = `${base} ${used.size + 1}`
+
+  // Fallback: try the full pool
+  const allFirst = [...new Set(Object.values(wardNamesByTier).flatMap((t) => t.first))]
+  const allSecond = [...new Set(Object.values(wardNamesByTier).flatMap((t) => t.second))]
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const name = `${pickOne(rng, allFirst)} ${pickOne(rng, allSecond)}`
+    if (!used.has(name)) {
+      used.add(name)
+      return name
+    }
+  }
+
+  // Last resort
+  const name = `Ward ${used.size + 1}`
   used.add(name)
   return name
 }
@@ -1094,6 +1274,7 @@ function createConstituencies(rng: () => number, tiles: PopulationTile[], count:
     const seatTiles = tiles.filter((_, tileIndex) => assignments[tileIndex] === seatIndex)
     seatTiles.forEach((tile) => { tile.constituencyId = `ward-${seatIndex + 1}` })
     const population = seatTiles.reduce((sum, tile) => sum + tile.population, 0)
+    const urbanity = seatTiles.reduce((sum, tile) => sum + tile.urbanity * tile.population, 0) / Math.max(1, population)
     const blocMix: Record<string, number> = {}
     const tagWeights: Record<string, number> = {}
     seatTiles.forEach((tile) => {
@@ -1108,13 +1289,20 @@ function createConstituencies(rng: () => number, tiles: PopulationTile[], count:
     Object.keys(blocMix).forEach((blocId) => { blocMix[blocId] /= totalBloc })
     const tags = Object.entries(tagWeights).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tag]) => tag)
 
+    const roleTags = ['market', 'oldtown', 'river', 'industrial', 'school', 'pond', 'hill']
+    const dominantRole = roleTags.reduce((best, role) => {
+      const w = tagWeights[role] ?? 0
+      const bw = tagWeights[best] ?? 0
+      return w > bw ? role : best
+    }, roleTags[0])
+
     return {
       id: `ward-${seatIndex + 1}`,
-      name: createWardName(rng, usedWardNames),
+      name: createWardName(rng, usedWardNames, urbanity, dominantRole),
       seed,
       population,
       turnout: seatTiles.reduce((sum, tile) => sum + tile.turnout * tile.population, 0) / Math.max(1, population),
-      urbanity: seatTiles.reduce((sum, tile) => sum + tile.urbanity * tile.population, 0) / Math.max(1, population),
+      urbanity,
       tags,
       blocMix,
       values: weightedAverageValues(seatTiles.map((tile) => ({ values: tile.values, weight: tile.population })), createValues(0)),
