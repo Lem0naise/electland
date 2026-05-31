@@ -7,9 +7,10 @@ import { StatisticsModal } from './components/StatisticsModal'
 import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
-import { SeatBar } from './components/SeatBar'
 import { CampaignActionsPanel } from './components/CampaignActionsPanel'
+import { SeatBar } from './components/SeatBar'
 import { SetupScreen } from './components/SetupScreen'
+import { saveGame, loadGame, hasSave } from './lib/persistence'
 import {
   applyCampaignAction,
   calculateResults,
@@ -200,6 +201,31 @@ function App() {
     setWorld(simulateWeek(world))
   }
 
+  const handleSave = () => {
+    if (!world) return
+    saveGame(world, previousWorld, constituencyCount)
+    setLastActionResult({
+      action: { type: 'canvass', label: '', description: '', apCost: 0 },
+      outcome: 'success',
+      description: `Game saved — Week ${world.week}, ${world.townName}`,
+    })
+  }
+
+  const handleLoad = () => {
+    const data = loadGame()
+    if (!data) return
+    setWorld(data.world)
+    setPreviousWorld(data.previousWorld)
+    setConstituencyCount(data.constituencyCount)
+    setShowElectionNight(false)
+    setShowGovernance(false)
+    setLastActionResult(null)
+    setSelectedConstituencyId(data.world.constituencies[0]?.id ?? '')
+    setSelectedBlocId(dominantBlocId(data.world.constituencies[0]?.blocMix ?? {}))
+    setSelectedTileId(data.world.tiles.find((t) => t.constituencyId === data.world.constituencies[0]?.id)?.id ?? '')
+    setMenuOpen(false)
+  }
+
   const handleAction = (action: CampaignAction) => {
     if (!world) return
     const { world: nextWorld, result } = applyCampaignAction(world, action)
@@ -336,6 +362,8 @@ function App() {
             world={world}
             constituencyCount={constituencyCount}
             onSetConstituencyCount={setConstituencyCount}
+            hasSaveGame={hasSave()}
+            onLoad={handleLoad}
             onGenerate={() => {
               const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], playerPartyId: undefined })
               setPreviousWorld(null)
@@ -386,6 +414,9 @@ function App() {
 
             <div className="topbar-actions">
               <button className="ink-button secondary small" type="button" onClick={() => setMenuOpen(true)}>Menu</button>
+              <button className="ink-button secondary small save-btn" type="button" onClick={handleSave} title="Save game">
+                {'\uD83D\uDCBE'}
+              </button>
               <button className="ink-button advance-week-btn" type="button" onClick={advanceWeek}>
                 Advance Week {'\u2192'}
               </button>

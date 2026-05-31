@@ -25,6 +25,7 @@ body {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.45;
+  overflow-x: hidden;
 }
 
 button, input, select, textarea { font: inherit; }
@@ -1926,8 +1927,11 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .newspaper-shell { padding: 6px; }
-  .masthead-inner { flex-direction: column; gap: 4px; }
+  body { font-size: 12.5px; }
+  .newspaper-shell { padding: 3px; }
+  .masthead-inner { flex-direction: column; gap: 3px; }
+  .masthead h1 { font-size: 1.2rem; }
+  .masthead-meta { font-size: 0.68rem; gap: 8px; }
 
   /* Sticky topbar on mobile */
   .game-topbar {
@@ -1937,19 +1941,112 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
+    padding: 5px 7px;
   }
   .topbar-party-block { flex: 1 1 100%; border-left: none; padding-left: 0; }
-  .topbar-ap-block { flex: 1 1 auto; }
-  .topbar-countdown { flex: 1 1 auto; }
+  .topbar-party-block strong { font-size: 0.8rem; }
+  .topbar-party-block small { font-size: 0.65rem; }
+  .party-initials-badge { width: 26px; height: 26px; font-size: 0.65rem; }
+  .topbar-ap-block { flex: 1 1 auto; gap: 4px; }
+  .topbar-countdown { flex: 1 1 auto; padding: 2px 6px; }
+  .countdown-number { font-size: 1rem; }
+  .countdown-label { font-size: 0.52rem; }
 
-  .topbar-actions { justify-content: stretch; width: 100%; margin-top: 4px; }
-  .topbar-actions button { flex: 1; padding: 10px; }
+  .topbar-actions { justify-content: stretch; width: 100%; margin-top: 3px; gap: 4px; }
+  .topbar-actions button { flex: 1; padding: 7px 8px; font-size: 0.7rem; }
+
+  .dashboard-layout { gap: 5px; }
+
+  /* Seat bar */
+  .seat-bar { padding: 3px 6px; gap: 5px; }
+  .seat-bar-label { font-size: 0.56rem; }
+  .seat-bar-track { height: 16px; }
+  .seat-bar-majority-label { font-size: 0.56rem; }
+  .seat-bar-expand-hint { font-size: 0.52rem; }
+
+  /* Panels */
+  .panel { padding: 6px 7px; }
+  .panel-kicker { font-size: 0.56rem; margin-bottom: 2px; }
+  .map-panel-header h3 { font-size: 0.92rem; }
+
+  /* Map */
+  .map-svg { height: min(50vw, 240px); min-height: 180px; }
+  .map-mode-row { gap: 2px; }
+  .mode-btn { padding: 3px 6px; font-size: 0.62rem; }
+  .currents-strip { gap: 2px; }
+  .current-pill { padding: 1px 5px; font-size: 0.62rem; }
+
+  /* Campaign panel */
+  .focus-ward-poll.is-battleground { border-width: 1px; }
+  .fwp-header { padding: 4px 7px 3px; }
+  .fwp-targeting-label { font-size: 0.54rem; }
+  .fwp-ward-name { font-size: 0.78rem; }
+  .fwp-hint { font-size: 0.54rem; }
+  .fwp-cand-row { min-height: 28px; }
+  .fwp-cand-initials { width: 20px; height: 20px; font-size: 0.54rem; }
+  .fwp-cand-name { font-size: 0.68rem; }
+  .fwp-cand-party { font-size: 0.56rem; }
+  .fwp-cand-bar-col { padding: 3px 7px 3px 5px; }
+  .fwp-cand-bar-track { height: 8px; }
+  .fwp-cand-pct { font-size: 0.7rem; }
+  .fwp-status { padding: 3px 7px; font-size: 0.64rem; }
+  .campaign-no-ward { font-size: 0.68rem; padding: 6px 0; }
+
+  /* Action cards */
+  .action-cards { gap: 3px; }
+  .action-card { border-width: 1px; }
+  .ac-expand-toggle { padding: 5px 7px; }
+  .ac-name { font-size: 0.72rem; }
+  .ac-desc { font-size: 0.64rem; }
+  .ac-cost { font-size: 0.6rem; }
+  .ac-permanent-toggle { font-size: 0.58rem; padding: 2px 6px; }
+  button.action-card { padding: 5px 7px; }
+  button.action-card .ac-name { font-size: 0.72rem; }
+  button.action-card .ac-desc { font-size: 0.64rem; }
+  .ac-config { padding: 0 7px 6px; padding-top: 5px; }
+  .ac-select { font-size: 0.68rem; padding: 4px 5px; }
+
+  /* Event card */
+  .event-card { padding: 5px 7px; }
+  .event-headline { font-size: 0.76rem; }
+  .event-desc { font-size: 0.66rem; }
+  .event-choice-btn { padding: 5px 7px; }
+  .event-choice-btn strong { font-size: 0.7rem; }
+  .event-choice-btn span { font-size: 0.64rem; }
+
+  /* Ward inspector */
+  .constituency-panel { gap: 5px; }
+  .constituency-panel h3 { font-size: 0.85rem; }
+  .constituency-panel h4 { font-size: 0.68rem; }
+  .ward-mood { font-size: 0.68rem; }
+  .detail-strip { grid-template-columns: 1fr; gap: 2px; padding: 4px 0; }
+  .detail-strip-item strong { font-size: 0.7rem; }
+  .detail-strip-item .label { font-size: 0.52rem; }
+  .detail-strip-item small { font-size: 0.6rem; }
+  .bloc-row { font-size: 0.66rem; padding: 2px 0; }
+  .bloc-label { width: 80px; }
+  .bloc-pct { font-size: 0.64rem; width: 26px; }
+  .ward-fit-axes { gap: 3px; }
+  .ward-fit-axis-row { grid-template-columns: 48px 1fr 14px; gap: 4px; }
+  .wfa-label { font-size: 0.56rem; }
+  .history-item { font-size: 0.62rem; }
+
+  /* Alliance UI */
+  .alliance-pact-row { font-size: 0.64rem; padding: 3px 5px; }
+  .alliance-pacts-display { gap: 1px; }
+
+  /* Permanent drain */
+  .permanent-drain-notice { font-size: 0.64rem; padding: 3px 6px; gap: 4px; }
+  .pdn-stop-all { font-size: 0.56rem; padding: 1px 4px; }
+
+  /* Auto-campaign status */
+  .fwp-auto-status { font-size: 0.6rem; padding: 3px 6px; gap: 3px; }
+  .fwp-auto-campaign { font-size: 0.56rem; padding: 1px 3px; }
+  .fwp-auto-boost { font-size: 0.58rem; }
 
   .key-stats-row { grid-template-columns: 1fr; }
-  .detail-strip { grid-template-columns: 1fr; }
   .election-night-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  .map-svg { height: min(55vw, 360px); min-height: 240px; }
 }
 
 @media (max-width: 600px) {
@@ -2058,6 +2155,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   box-shadow: 0 5px 14px rgba(44,31,14,0.45) !important;
   transform: translateY(-1px);
 }
+.save-btn { padding: 5px 7px !important; font-size: 0.85rem !important; line-height: 1; }
 .topbar-actions {
   display: flex;
   gap: 6px;
@@ -2241,9 +2339,9 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 
 /* ─── Statistics Modal ────────────────────────────────────────────────────── */
 .stats-modal {
-  max-width: 98vw;
+  max-width: none;
+  width: calc(100vw - 32px);
   max-height: 96vh;
-  width: 98vw;
   padding: 10px 16px;
   display: flex;
   flex-direction: column;
@@ -2654,23 +2752,46 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .stats-tenure-since { font-size: 0.64rem; color: var(--ink-soft); text-align: right; }
 
 @media (max-width: 900px) {
-  .stats-modal { max-width: 100vw; width: 100vw; padding: 8px 10px; }
+  .stats-modal { max-width: none; width: auto; margin: 0 2px; padding: 6px 8px; }
+  .stats-modal-header { margin-bottom: 4px; padding-bottom: 4px; }
   .stats-modal-title-row {
     flex-direction: column;
     align-items: flex-start;
-    gap: 6px;
+    gap: 4px;
   }
-  .stats-modal-title-row h2 { font-size: 1.05rem; }
+  .stats-modal-title-row h2 { font-size: 0.95rem; }
   .stats-modal-meta {
     flex-wrap: wrap;
-    gap: 6px;
-    font-size: 0.7rem;
+    gap: 4px;
+    font-size: 0.62rem;
     width: 100%;
     justify-content: flex-start;
   }
+  .stats-modal-body { gap: 4px; }
+  .stats-modal-meta .ink-button { font-size: 0.64rem; padding: 3px 6px; }
+  .stats-section-label { font-size: 0.54rem; }
+  .stats-stand-row { font-size: 0.64rem; grid-template-columns: 20px 10px 1fr 32px 36px; padding: 2px 4px; gap: 4px; }
+  .stats-stand-leader { display: none; }
+  .stats-stand-rank { font-size: 0.58rem; }
+  .stats-stand-swatch { width: 10px; height: 10px; }
+  .stats-stand-seats { font-size: 0.7rem; }
+  .stats-stand-share { font-size: 0.64rem; }
   .stats-two-col { grid-template-columns: 1fr; }
   .stats-grid-three { grid-template-columns: 1fr; }
-  .stats-stand-row { grid-template-columns: 22px 11px 1fr 38px 42px; }
-  .stats-stand-leader { display: none; }
+  .stats-seat-bar { height: 18px; }
+  .stats-grid-card { padding: 4px 5px; }
+  .stats-grid-card-label { font-size: 0.52rem; }
+  .stats-seat-row { font-size: 0.64rem; }
+  .stats-seat-margin { font-size: 0.68rem; }
+  .stats-fact-num { font-size: 0.9rem; }
+  .stats-fact-label { font-size: 0.52rem; }
   .stats-party-metrics { grid-template-columns: 1fr 1fr; }
+  .spm-label { font-size: 0.52rem; }
+  .spm-value { font-size: 0.68rem; }
+  .stats-party-ward-row { font-size: 0.64rem; }
+  .stats-tenure-row { font-size: 0.62rem; grid-template-columns: 20px 9px 1fr 1fr 60px 50px; gap: 3px; }
+  .stats-trend-row { font-size: 0.64rem; }
+  .stats-projection { padding: 4px 5px; }
+  .stats-proj-outcome { font-size: 0.7rem; }
+  .stats-proj-card-label { font-size: 0.52rem; }
 }

@@ -11,6 +11,8 @@ export function SetupScreen({
   onStart,
   onSavePartyEdit,
   onClose,
+  hasSaveGame,
+  onLoad,
 }: {
   world: World | null
   constituencyCount: number
@@ -19,6 +21,8 @@ export function SetupScreen({
   onStart: (seed?: number, playerPartyId?: string, edits?: PartyEdit[]) => void
   onSavePartyEdit: (edit: PartyEdit) => void
   onClose?: () => void
+  hasSaveGame?: boolean
+  onLoad?: () => void
 }) {
   const isFirstTime = world === null
   const [selectedPartyId, setSelectedPartyId] = useState<string>(world?.playerPartyId ?? '')
@@ -151,6 +155,11 @@ export function SetupScreen({
             )}
 
             <div className="setup-actions">
+              {hasSaveGame && onLoad && (
+                <button className="setup-btn-secondary load-save-btn" type="button" onClick={onLoad}>
+                  {'\uD83D\uDCBE'} Load saved game
+                </button>
+              )}
               <button className="setup-btn-secondary" type="button" onClick={handleNewTown}>
                 {world ? 'New Town' : 'Generate Town'}
               </button>
