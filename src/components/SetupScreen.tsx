@@ -13,6 +13,8 @@ export function SetupScreen({
   onClose,
   hasSaveGame,
   onLoad,
+  onExport,
+  onImport,
 }: {
   world: World | null
   constituencyCount: number
@@ -23,6 +25,8 @@ export function SetupScreen({
   onClose?: () => void
   hasSaveGame?: boolean
   onLoad?: () => void
+  onExport?: () => void
+  onImport?: () => void
 }) {
   const isFirstTime = world === null
   const [selectedPartyId, setSelectedPartyId] = useState<string>(world?.playerPartyId ?? '')
@@ -158,6 +162,16 @@ export function SetupScreen({
               {hasSaveGame && onLoad && (
                 <button className="setup-btn-secondary load-save-btn" type="button" onClick={onLoad}>
                   {'\uD83D\uDCBE'} Load saved game
+                </button>
+              )}
+              {world && onExport && (
+                <button className="setup-btn-secondary" type="button" onClick={onExport}>
+                  {'\u2B07'} Export save to file
+                </button>
+              )}
+              {onImport && (
+                <button className="setup-btn-secondary" type="button" onClick={onImport}>
+                  {'\u2B06'} Import save from file
                 </button>
               )}
               <button className="setup-btn-secondary" type="button" onClick={handleNewTown}>

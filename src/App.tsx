@@ -10,7 +10,7 @@ import { ActionFlash } from './components/ActionFlash'
 import { CampaignActionsPanel } from './components/CampaignActionsPanel'
 import { SeatBar } from './components/SeatBar'
 import { SetupScreen } from './components/SetupScreen'
-import { saveGame, loadGame, hasSave } from './lib/persistence'
+import { saveGame, loadGame, hasSave, exportSaveGame, importSaveGame } from './lib/persistence'
 import {
   applyCampaignAction,
   calculateResults,
@@ -214,6 +214,22 @@ function App() {
   const handleLoad = () => {
     const data = loadGame()
     if (!data) return
+    applyLoadedSave(data)
+  }
+
+  const handleExport = () => {
+    if (!world) return
+    exportSaveGame(world, previousWorld, constituencyCount)
+  }
+
+  const handleImport = async () => {
+    const data = await importSaveGame()
+    if (!data) return
+    saveGame(data.world, data.previousWorld, data.constituencyCount)
+    applyLoadedSave(data)
+  }
+
+  const applyLoadedSave = (data: { world: World; previousWorld: World | null; constituencyCount: number }) => {
     setWorld(data.world)
     setPreviousWorld(data.previousWorld)
     setConstituencyCount(data.constituencyCount)
@@ -364,6 +380,8 @@ function App() {
             onSetConstituencyCount={setConstituencyCount}
             hasSaveGame={hasSave()}
             onLoad={handleLoad}
+            onExport={handleExport}
+            onImport={handleImport}
             onGenerate={() => {
               const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], playerPartyId: undefined })
               setPreviousWorld(null)
