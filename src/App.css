@@ -2257,6 +2257,12 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .alliance-pact-text strong {
   color: var(--ink);
 }
+.alliance-boost {
+  color: #1a5c2a;
+  font-weight: 600;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
 .alliance-break-btn {
   appearance: none;
   border: 1px solid var(--ink-faint);

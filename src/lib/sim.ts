@@ -1733,8 +1733,16 @@ function allianceModifier(world: World, tile: PopulationTile, party: PartyDefini
     if (initiatorStandingDownHere && pact.initiatorPartyId === party.id) standingDown = true
     if (allyStandingDownHere && pact.allyPartyId === party.id) standingDown = true
 
-    if (initiatorStandingDownHere && pact.allyPartyId === party.id) endorsementBonus += 0.06
-    if (allyStandingDownHere && pact.initiatorPartyId === party.id) endorsementBonus += 0.06
+    // Endorsement bonus scaled by how strong the standing-down party is in this ward.
+    // Vote share × 0.01 converts directly to a score modifier (e.g. 20% → +0.20).
+    if (initiatorStandingDownHere && pact.allyPartyId === party.id) {
+      const standingDownPartyResult = seat.results.find((r) => r.partyId === pact.initiatorPartyId)
+      endorsementBonus += (standingDownPartyResult?.voteShare ?? 0) * 0.01
+    }
+    if (allyStandingDownHere && pact.initiatorPartyId === party.id) {
+      const standingDownPartyResult = seat.results.find((r) => r.partyId === pact.allyPartyId)
+      endorsementBonus += (standingDownPartyResult?.voteShare ?? 0) * 0.01
+    }
   }
 
   return { standingDown, endorsementBonus }

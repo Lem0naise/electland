@@ -147,11 +147,16 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
             const theirWard = world.constituencies.find((c) => c.id === (isInitiator ? pact.allyStandsDownIn : pact.standingDownIn))
             const allyId = isInitiator ? pact.allyPartyId : pact.initiatorPartyId
             const ally = world.parties.find((p) => p.id === allyId)
+            // Endorsement bonus the player receives from the ally standing down
+            const allyStandDownWardId = pact.initiatorPartyId === world.playerPartyId ? pact.allyStandsDownIn : pact.standingDownIn
+            const allyResult = world.constituencies.find((c) => c.id === allyStandDownWardId)?.results.find((r) => r.partyId === allyId)
+            const allyBoost = (allyResult?.voteShare ?? 0)
             return (
               <div key={pact.id} className="alliance-pact-row">
                 <span className="alliance-pact-indicator">{'\uD83E\uDD1D'}</span>
                 <span className="alliance-pact-text">
                   Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}
+                  {' '}<span className="alliance-boost">(+{(allyBoost * 0.01).toFixed(2)} from their {allyBoost.toFixed(1)}%)</span>
                 </span>
                 <button
                   type="button"
