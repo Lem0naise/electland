@@ -379,7 +379,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             </button>
 
             <button className="ink-button" type="button" onClick={onClose}>
-              {playerWonThisElection ? 'Govern the town' : 'Campaign continues'}
+              {playerWonThisElection ? 'Govern the town' : world.needsCoalition ? 'Form Government' : 'Campaign continues'}
             </button>
           </div>
         )}

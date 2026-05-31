@@ -4,6 +4,7 @@ import './App.css'
 import { ConstituencyInspector } from './components/ConstituencyInspector'
 import { MapFigure } from './components/MapFigure'
 import { StatisticsModal } from './components/StatisticsModal'
+import { CoalitionModal } from './components/CoalitionModal'
 import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
@@ -16,6 +17,7 @@ import {
   calculateResults,
   dominantBlocId,
   estimateTilePreference,
+  generateGovernanceDecisions,
   generateWorld,
   recalculateWardAggregates,
   redistributeSnapshot,
@@ -50,6 +52,7 @@ function App() {
   const [showElectionNight, setShowElectionNight] = useState(false)
   const [showGovernance, setShowGovernance] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
+  const [showCoalitionModal, setShowCoalitionModal] = useState(false)
   const [redistrictTargetWardId, setRedistrictTargetWardId] = useState('')
   const [redistrictSnapshot, setRedistrictSnapshot] = useState<Map<string, string> | null>(null)
 
@@ -269,19 +272,18 @@ function App() {
     const decision = world.governanceDecisions.find((d) => d.id === decisionId)
     const choice = decision?.choices[choiceIndex]
     let updatedParties = world.parties.map((p) => {
-      if (p.id !== world.playerPartyId || !choice) return p
-      return {
-        ...p,
-        baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta),
+      if (p.id === world.playerPartyId && choice) {
+        return { ...p, baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta) }
       }
+      // Apply blocEffects to coalition partner
+      if (world.coalitionPartnerId && p.id === world.coalitionPartnerId && choice) {
+        const blocBonus = Object.values(choice.effect.blocEffects).reduce((sum, v) => sum + v, 0) / Math.max(1, Object.keys(choice.effect.blocEffects).length)
+        return { ...p, baseUtility: Math.min(1.2, p.baseUtility + blocBonus * 0.3) }
+      }
+      return p
     })
     const newsFeedLine = `Week ${world.week}: Council decision — ${decision?.headline ?? 'decision made'} — you chose "${choice?.label ?? '?'}".`
-    setWorld({
-      ...world,
-      parties: updatedParties,
-      governanceDecisions: nextDecisions,
-      newsFeed: [newsFeedLine, ...world.newsFeed].slice(0, 30),
-    })
+    setWorld((prev) => prev ? { ...prev, parties: updatedParties, governanceDecisions: nextDecisions, newsFeed: [newsFeedLine, ...prev.newsFeed].slice(0, 30) } : prev)
     const stillPending = nextDecisions.filter((d) => !d.resolved)
     if (stillPending.length === 0) setShowGovernance(false)
   }
@@ -570,14 +572,38 @@ function App() {
           onReveal={() => setWorld((w) => w ? { ...w, electionNightRevealIndex: Math.min(w.electionNightRevealIndex + 1, w.electionNightResults.length) } : w)}
           onClose={() => {
             setShowElectionNight(false)
-            setWorld((w) => {
-              if (!w) return w
-              const nextWorld = { ...w, electionNightActive: false, playerLost: false }
-              if (w.isGoverning && w.governanceDecisions.some((d) => !d.resolved)) {
-                setShowGovernance(true)
-              }
-              return nextWorld
-            })
+            const w = world
+            if (!w) return
+            if (w.isGoverning) {
+              const decisions = generateGovernanceDecisions(2)
+              setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false, playerLost: false })
+              setShowGovernance(true)
+            } else if (w.needsCoalition) {
+              setShowCoalitionModal(true)
+              setWorld({ ...w, electionNightActive: false, playerLost: false })
+            } else {
+              setWorld({ ...w, electionNightActive: false, playerLost: false })
+            }
+          }}
+        />
+      )}
+
+      {showCoalitionModal && world && (
+        <CoalitionModal
+          world={world}
+          onFormCoalition={(partnerId, decisions) => {
+            setWorld((prev) => prev ? { ...prev, coalitionPartnerId: partnerId, governanceDecisions: decisions, needsCoalition: false } : prev)
+            setShowCoalitionModal(false)
+            setShowGovernance(true)
+          }}
+          onFormMinority={(decisions) => {
+            setWorld((prev) => prev ? { ...prev, minorityGovernment: true, governanceDecisions: decisions, needsCoalition: false } : prev)
+            setShowCoalitionModal(false)
+            setShowGovernance(true)
+          }}
+          onOpposition={() => {
+            setWorld((prev) => prev ? { ...prev, needsCoalition: false } : prev)
+            setShowCoalitionModal(false)
           }}
         />
       )}

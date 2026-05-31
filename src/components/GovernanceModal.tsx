@@ -6,6 +6,9 @@ export function GovernanceModal({ world, decisions, onDecide, onClose }: {
   onDecide: (decisionId: string, choiceIndex: number) => void
   onClose: () => void
 }) {
+  const coalitionPartner = world.coalitionPartnerId ? world.parties.find((p) => p.id === world.coalitionPartnerId) : undefined
+  const govType = world.coalitionPartnerId ? 'Coalition' : world.minorityGovernment ? 'Minority' : 'Majority'
+
   const pending = decisions.filter((d) => !d.resolved)
   if (pending.length === 0) {
     return (
@@ -28,7 +31,13 @@ export function GovernanceModal({ world, decisions, onDecide, onClose }: {
     <div className="modal-backdrop">
       <div className="modal governance-modal">
         <div className="modal-header">
-          <span className="modal-kicker">Council Decision</span>
+          <span className="modal-kicker">
+            {govType === 'Coalition' && coalitionPartner
+              ? `Coalition Government — with ${coalitionPartner.name}`
+              : govType === 'Minority'
+                ? 'Minority Government'
+                : 'Council Decision'}
+          </span>
           <h2>{current.headline}</h2>
           <p className="modal-sub">{current.description}</p>
         </div>

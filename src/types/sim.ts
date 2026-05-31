@@ -356,6 +356,10 @@ export interface World {
   alliancePacts: AlliancePact[]
   // Tracks broken pacts per party pair (affects AI willingness)
   allianceReputation: Record<string, number>
+  // Coalition government
+  needsCoalition: boolean
+  coalitionPartnerId?: string
+  minorityGovernment: boolean
 }
 
 export interface CustomPartyDraft {

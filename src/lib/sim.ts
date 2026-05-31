@@ -2317,12 +2317,6 @@ function pickWeeklyEvent(rng: () => number): WeeklyEvent | undefined {
   return undefined
 }
 
-// ─── Pick a governance decision ──────────────────────────────────────────────
-function pickGovernanceDecision(rng: () => number): GovernanceDecision {
-  const dec = pickOne(rng, governanceDecisionPool)
-  return { ...dec, resolved: false }
-}
-
 // ─── Main world generation ────────────────────────────────────────────────────
 export function generateWorld(options: WorldOptions): World {
   const rng = createRng(options.seed)
@@ -2404,6 +2398,8 @@ export function generateWorld(options: WorldOptions): World {
     policyShiftUsedThisCycle: false,
     alliancePacts: [] as AlliancePact[],
     allianceReputation: {} as Record<string, number>,
+    needsCoalition: false,
+    minorityGovernment: false,
     headlines: [] as string[],
   }
 
@@ -2676,9 +2672,10 @@ export function simulateWeek(world: World): World {
     playerWon: world.playerWon || playerWon,
     playerLost: !playerWon && playerLost ? true : world.playerLost,
     isGoverning: electionHappening ? playerWon : world.isGoverning,
-    governanceDecisions: electionHappening && playerWon
-      ? [pickGovernanceDecision(rng), pickGovernanceDecision(rng)]
-      : world.governanceDecisions,
+    governanceDecisions: electionHappening ? [] : world.governanceDecisions,
+    needsCoalition: electionHappening && !playerWon && !results.nationalResults.some((r) => r.seatsWon >= majority),
+    minorityGovernment: false,
+    coalitionPartnerId: undefined,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
     alliancePacts: electionHappening
       ? world.alliancePacts.map((p) => ({ ...p, broken: true }))
@@ -2905,6 +2902,19 @@ export function axisSummary(values: PoliticalValues) {
   else if (values.services < -10) lines.push('Leans towards Thrift')
 
   return lines.length > 0 ? lines : ['Broadly Centrist']
+}
+
+// ─── Coalition formation helpers ────────────────────────────────────────────
+
+export function generateGovernanceDecisions(count: number): GovernanceDecision[] {
+  const n = Math.min(count, governanceDecisionPool.length)
+  const shuffled = [...governanceDecisionPool].sort(() => Math.random() - 0.5)
+  return shuffled.slice(0, n).map((d) => ({ ...d, resolved: false }))
+}
+
+export function coalitionCompatibility(playerValues: PoliticalValues, partnerValues: PoliticalValues): number {
+  const dist = valueDistance(playerValues, partnerValues, { change: 1, growth: 1, services: 1 })
+  return Math.max(0, Math.min(100, Math.round(100 - (dist / 12000) * 100)))
 }
 
 export function getAvailableActions(world: World): CampaignAction[] {
