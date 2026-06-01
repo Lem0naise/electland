@@ -2082,6 +2082,25 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 
   .key-stats-row { grid-template-columns: 1fr; }
   .election-night-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* Action flash toast — shrink for mobile */
+  .action-flash {
+    max-width: calc(100vw - 16px);
+    right: 8px;
+    left: 8px;
+    bottom: 8px;
+    padding: 8px 10px;
+    font-size: 0.68rem;
+  }
+  .flash-body { min-width: 0; }
+  .flash-body strong { font-size: 0.7rem; }
+  .flash-body span { font-size: 0.66rem; word-break: break-word; }
+
+  /* NPC proposal prompt — shrink for mobile */
+  .npc-proposal-prompt { padding: 6px; gap: 4px; }
+  .npc-proposal-header { font-size: 0.7rem; }
+  .npc-proposal-details { font-size: 0.64rem; }
+  .npc-proposal-actions .ink-button { font-size: 0.64rem; padding: 5px 8px; }
 }
 
 @media (max-width: 600px) {
