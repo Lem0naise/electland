@@ -360,6 +360,8 @@ export interface World {
   alliancePacts: AlliancePact[]
   // Tracks broken pacts per party pair (affects AI willingness)
   allianceReputation: Record<string, number>
+  // Pending NPC pact proposal (player must accept/reject)
+  pendingNpcProposal?: AlliancePact
   // Coalition government
   needsCoalition: boolean
   coalitionPartnerId?: string

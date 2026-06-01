@@ -201,7 +201,18 @@ function App() {
   const advanceWeek = () => {
     if (!world) return
     setPreviousWorld(world)
-    setWorld(simulateWeek(world))
+    const nextWorld = simulateWeek(world)
+    setWorld(nextWorld)
+    // Show NPC pact events
+    const newPactLines = nextWorld.newsFeed.slice(0, 5).filter((l) => l.includes('form a pact') || l.includes('proposes a pact with you'))
+    if (newPactLines.length > 0) {
+      const desc = newPactLines[0].replace(/^Week \d+: /, '')
+      setLastActionResult({
+        action: { type: 'propose_alliance', label: '', description: '', apCost: 0 },
+        outcome: 'success' as const,
+        description: desc,
+      })
+    }
   }
 
   const handleSave = () => {
@@ -532,6 +543,21 @@ function App() {
                     selectedWardId={selectedConstituencyId}
                     onAction={handleAction}
                     onTogglePermanent={handleTogglePermanent}
+                    onAcceptNpcProposal={() => {
+                      if (!world?.pendingNpcProposal) return
+                      const p = world.pendingNpcProposal
+                      setWorld({ ...world, pendingNpcProposal: undefined, alliancePacts: [...world.alliancePacts, { ...p }] })
+                    }}
+                    onRejectNpcProposal={() => {
+                      if (!world?.pendingNpcProposal) return
+                      const p = world.pendingNpcProposal
+                      const repKey = [world.playerPartyId, p.initiatorPartyId].sort().join('_')
+                      setWorld({
+                        ...world,
+                        pendingNpcProposal: undefined,
+                        allianceReputation: { ...world.allianceReputation, [repKey]: (world.allianceReputation[repKey] ?? 0) + 0.15 },
+                      })
+                    }}
                   />
                 </section>
 

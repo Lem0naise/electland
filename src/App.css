@@ -2317,6 +2317,29 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   border-color: var(--accent-red);
   color: var(--accent-red);
 }
+.alliance-pact-row.is-npc { opacity: 0.75; font-size: 0.65rem; }
+
+/* NPC proposal prompt */
+.npc-proposal-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(184,134,11,0.1);
+  border: 1.5px solid rgba(184,134,11,0.35);
+}
+.npc-proposal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+.npc-proposal-header strong { color: var(--ink); }
+.npc-proposal-icon { font-size: 1rem; flex-shrink: 0; }
+.npc-proposal-details { font-size: 0.7rem; color: var(--ink-soft); }
+.npc-proposal-details em { color: var(--ink-mid); font-style: normal; font-weight: 600; }
+.npc-proposal-actions { display: flex; gap: 6px; }
+.npc-proposal-actions .ink-button { flex: 1; }
 
 /* Alliance suggestions */
 .alliance-suggestions {

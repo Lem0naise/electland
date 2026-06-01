@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { getAvailableActions, suggestPacts } from '../lib/sim'
 import type { ActiveCampaign, CampaignAction, World } from '../types/sim'
 
-export function CampaignActionsPanel({ world, selectedWardId, onAction, onTogglePermanent }: {
+export function CampaignActionsPanel({ world, selectedWardId, onAction, onTogglePermanent, onAcceptNpcProposal, onRejectNpcProposal }: {
   world: World
   selectedWardId: string
   onAction: (action: CampaignAction) => void
   onTogglePermanent: (campaign: ActiveCampaign) => void
+  onAcceptNpcProposal?: () => void
+  onRejectNpcProposal?: () => void
 }) {
   const [focusWardId, setFocusWardId] = useState(selectedWardId)
   const [smearTargetId, setSmearTargetId] = useState('')
@@ -139,39 +141,108 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
         </div>
       )}
 
+      {/* NPC alliance proposal to player */}
+      {world.pendingNpcProposal && !world.pendingNpcProposal.broken && (
+        <div className="npc-proposal-prompt">
+          <div className="npc-proposal-header">
+            <span className="npc-proposal-icon">{'\uD83E\uDD1D'}</span>
+            <span>
+              <strong>{world.parties.find((p) => p.id === world.pendingNpcProposal!.initiatorPartyId)?.name ?? '?'}</strong>
+              {' '}proposes a pact with you
+            </span>
+          </div>
+          <div className="npc-proposal-details">
+            {(() => {
+              const p = world.pendingNpcProposal!
+              const theirWard = world.constituencies.find((c) => c.id === p.standingDownIn)
+              const ourWard = world.constituencies.find((c) => c.id === p.allyStandsDownIn)
+              return (
+                <span>
+                  They stand down in <em>{theirWard?.name ?? '?'}</em>
+                  {' ⇄ '}
+                  You stand down in <em>{ourWard?.name ?? '?'}</em>
+                  {' '}
+                  <span className="alliance-boost">
+                    (+{(p.playerEndorsementValue * 0.01).toFixed(2)} from their endorsement)
+                  </span>
+                </span>
+              )
+            })()}
+          </div>
+          <div className="npc-proposal-actions">
+            <button
+              className="ink-button small"
+              type="button"
+              onClick={() => onAcceptNpcProposal?.()}
+            >
+              {'\u2713'} Accept
+            </button>
+            <button
+              className="ink-button secondary small"
+              type="button"
+              onClick={() => onRejectNpcProposal?.()}
+            >
+              {'\u2717'} Reject
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Active alliance pacts */}
       {world.alliancePacts.filter((p) => !p.broken).length > 0 && (
         <div className="alliance-pacts-display">
           {world.alliancePacts.filter((p) => !p.broken).map((pact) => {
-            const isInitiator = pact.initiatorPartyId === world.playerPartyId
-            const ourWard = world.constituencies.find((c) => c.id === (isInitiator ? pact.standingDownIn : pact.allyStandsDownIn))
-            const theirWard = world.constituencies.find((c) => c.id === (isInitiator ? pact.allyStandsDownIn : pact.standingDownIn))
-            const allyId = isInitiator ? pact.allyPartyId : pact.initiatorPartyId
-            const ally = world.parties.find((p) => p.id === allyId)
-            // Endorsement bonus the player receives from the ally standing down
-            const allyBoost = pact.playerEndorsementValue
+            const playerIsInitiator = pact.initiatorPartyId === world.playerPartyId
+            const playerIsAlly = pact.allyPartyId === world.playerPartyId
+            const playerInvolved = playerIsInitiator || playerIsAlly
+
+            if (playerInvolved) {
+              const ourWard = world.constituencies.find((c) => c.id === (playerIsInitiator ? pact.standingDownIn : pact.allyStandsDownIn))
+              const theirWard = world.constituencies.find((c) => c.id === (playerIsInitiator ? pact.allyStandsDownIn : pact.standingDownIn))
+              const allyId = playerIsInitiator ? pact.allyPartyId : pact.initiatorPartyId
+              const ally = world.parties.find((p) => p.id === allyId)
+              return (
+                <div key={pact.id} className="alliance-pact-row">
+                  <span className="alliance-pact-indicator">{'\uD83E\uDD1D'}</span>
+                  <span className="alliance-pact-text">
+                    Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}
+                    <br />
+                    <span className="alliance-boost">
+                      You gain +{(pact.playerEndorsementValue * 0.01).toFixed(2)} in {theirWard?.name ?? '?'}{' '}
+                      · They gain +{(pact.allyEndorsementValue * 0.01).toFixed(2)} in {ourWard?.name ?? '?'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="alliance-break-btn"
+                    onClick={() => onAction({
+                      type: 'break_alliance',
+                      label: `Break pact with ${ally?.name ?? allyId}`,
+                      description: '',
+                      apCost: 0,
+                      targetPartyId: allyId,
+                      wardId: pact.id,
+                    })}
+                    title="Break this pact"
+                  >
+                    {'\u2715'}
+                  </button>
+                </div>
+              )
+            }
+
+            // NPC-only pact
+            const initiator = world.parties.find((p) => p.id === pact.initiatorPartyId)
+            const ally = world.parties.find((p) => p.id === pact.allyPartyId)
+            const initWard = world.constituencies.find((c) => c.id === pact.standingDownIn)
+            const allyWard = world.constituencies.find((c) => c.id === pact.allyStandsDownIn)
             return (
-              <div key={pact.id} className="alliance-pact-row">
+              <div key={pact.id} className="alliance-pact-row is-npc">
                 <span className="alliance-pact-indicator">{'\uD83E\uDD1D'}</span>
                 <span className="alliance-pact-text">
-                  Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}
-                  {' '}<span className="alliance-boost">(+{(allyBoost * 0.01).toFixed(2)} from their {allyBoost.toFixed(1)}%)</span>
+                  <strong>{initiator?.name ?? pact.initiatorPartyId}</strong> ↔ <strong>{ally?.name ?? pact.allyPartyId}</strong>:{' '}
+                  {initiator?.name ?? '?'} stands down in {initWard?.name ?? '?'}, {ally?.name ?? '?'} in {allyWard?.name ?? '?'}
                 </span>
-                <button
-                  type="button"
-                  className="alliance-break-btn"
-                  onClick={() => onAction({
-                    type: 'break_alliance',
-                    label: `Break pact with ${ally?.name ?? allyId}`,
-                    description: '',
-                    apCost: 0,
-                    targetPartyId: allyId,
-                    wardId: pact.id,
-                  })}
-                  title="Break this pact"
-                >
-                  {'\u2715'}
-                </button>
               </div>
             )
           })}
@@ -556,13 +627,9 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
               className="ac-select"
             >
               <option value="">Pick an ally...</option>
-              {opponents
-                .filter((o) => !world.alliancePacts.some((p) => !p.broken &&
-                  ((p.initiatorPartyId === world.playerPartyId && p.allyPartyId === o.id) ||
-                   (p.allyPartyId === world.playerPartyId && p.initiatorPartyId === o.id))))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
+              {opponents.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
 
             {alliancePartyId && (() => {
@@ -587,11 +654,9 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                       className="ac-select alliance-filter-select"
                     >
                       <option value="">Filter: my stand-down ward...</option>
-                      {[...new Set(suggestions.map((s) => s.ourWardId))]
-                        .map((wid) => {
-                          const ward = world.constituencies.find((c) => c.id === wid)
-                          return <option key={wid} value={wid}>{ward?.name ?? wid}</option>
-                        })}
+                      {world.constituencies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
                     </select>
                     <select
                       value={filterTheirWardId}
@@ -602,11 +667,9 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                       className="ac-select alliance-filter-select"
                     >
                       <option value="">Filter: their stand-down ward...</option>
-                      {[...new Set(suggestions.map((s) => s.theirWardId))]
-                        .map((wid) => {
-                          const ward = world.constituencies.find((c) => c.id === wid)
-                          return <option key={wid} value={wid}>{ward?.name ?? wid}</option>
-                        })}
+                      {world.constituencies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -614,6 +677,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                     const filtered = suggestions
                       .filter((s) => !filterOurWardId || s.ourWardId === filterOurWardId)
                       .filter((s) => !filterTheirWardId || s.theirWardId === filterTheirWardId)
+                      .slice(0, 12)
                     return filtered.map((s) => {
                       const i = suggestions.indexOf(s)
                       const isSelected = selectedSuggestions.has(i)
