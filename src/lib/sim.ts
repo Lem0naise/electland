@@ -1729,16 +1729,18 @@ function allianceModifier(world: World, tile: PopulationTile, party: PartyDefini
 
     const initiatorStandingDownHere = pact.standingDownIn === seat.id || pact.standingDownName === seat.name
     const allyStandingDownHere = pact.allyStandsDownIn === seat.id || pact.allyStandsDownName === seat.name
+    const isUnilateral = pact.standingDownIn === pact.allyStandsDownIn
 
     if (initiatorStandingDownHere && pact.initiatorPartyId === party.id) standingDown = true
-    if (allyStandingDownHere && pact.allyPartyId === party.id) standingDown = true
+    // Unilateral: ally isn't actually standing down — same ward, only initiator stands down
+    if (!isUnilateral && allyStandingDownHere && pact.allyPartyId === party.id) standingDown = true
 
-    // Endorsement bonus scaled by standing-down party's pre-pact vote share.
-    // Uses stored values so the bonus doesn't vanish when the party's result drops to 0%.
+    // Endorsement bonus: standing-down party's voters transfer to the other party
     if (initiatorStandingDownHere && pact.allyPartyId === party.id) {
       endorsementBonus += pact.allyEndorsementValue * 0.01
     }
-    if (allyStandingDownHere && pact.initiatorPartyId === party.id) {
+    // Unilateral: no endorsement for initiator since ally isn't actually standing down
+    if (!isUnilateral && allyStandingDownHere && pact.initiatorPartyId === party.id) {
       endorsementBonus += pact.playerEndorsementValue * 0.01
     }
   }
@@ -1972,20 +1974,25 @@ function evaluateAllianceAcceptance(
   const initiatorResultInTargetWard = targetWard.results.find((r) => r.partyId === initiatorId)
   const targetStandingInTargetWard = targetWard.results.find((r) => r.partyId === targetId)
 
-  const targetWinningInRequested = (targetStandingInTargetWard?.voteShare ?? 0) > 20
-  const targetHopelessInInitiator = (targetResultInInitiatorWard?.voteShare ?? 100) < 15
-  const initiatorCloseInTarget = (initiatorResultInTargetWard?.voteShare ?? 0) > 10
+  const targetWinningInRequested = Math.min(1, (targetStandingInTargetWard?.voteShare ?? 0) / 30) * 0.60
+  const isLeading = targetStandingInTargetWard?.partyId === targetId && (targetWard.margin ?? 0) > 8
+  const targetHopelessInInitiator = isLeading
+    ? -0.30
+    : Math.max(0, 1 - (targetResultInInitiatorWard?.voteShare ?? 100) / 25) * 0.30
+  const initiatorCloseInTarget = Math.min(1, (initiatorResultInTargetWard?.voteShare ?? 0) / 25) * 0.25
+
+  // Incumbent check: if target won this ward at the last election, they'll almost certainly refuse
+  const isIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
+    (r) => r.wardId === targetWardId && r.winner?.partyId === targetId
+  )
+  const incumbencyPenalty = isIncumbent ? 0.70 : 0
 
   const valueDist = valueDistance(initiatorParty.values, targetParty.values, { change: 1, growth: 1, services: 1 })
   const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
-  return (targetHopelessInInitiator ? 0.30 : 0) +
-    (initiatorCloseInTarget ? 0.25 : 0) +
-    ideologicalBonus * 0.25 -
-    repPenalty -
-    (targetWinningInRequested ? 0.40 : 0)
+  return targetHopelessInInitiator + initiatorCloseInTarget + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested - incumbencyPenalty
 }
 
 function runAICampaigns(world: World, rng: () => number): { parties: PartyDefinition[]; newsFeedLines: string[]; aiPactResults: Array<{ description: string; outcome: 'success' | 'backfire' }> } {
@@ -2048,13 +2055,16 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         for (const initWard of world.constituencies) {
           if (initCommittedWards.has(initWard.id)) continue
           const initShare = initWard.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
-          const initWeakness = Math.max(0, 1 - initShare / 40)
+          const initStrength = Math.max(0, initShare / 40)
+          const initLeading = initWard.leadingPartyId === party.id && initWard.margin > 8
           for (const targWard of world.constituencies) {
             if (initWard.id === targWard.id) continue
             if (targCommittedWards.has(targWard.id)) continue
             const targShare = targWard.results.find((r) => r.partyId === target.id)?.voteShare ?? 0
-            const targWeakness = Math.max(0, 1 - targShare / 40)
-            const pairScore = initWeakness * 0.5 + targWeakness * 0.5
+            const targStrength = Math.max(0, targShare / 40)
+            const targLeading = targWard.leadingPartyId === target.id && targWard.margin > 8
+            const pairScore = (initLeading ? initStrength * 0.2 : initStrength * 0.5) +
+              (targLeading ? targStrength * 0.2 : targStrength * 0.5)
             if (pairScore > bestScore) {
               bestScore = pairScore
               bestPair = { initWard: initWard.id, targWard: targWard.id }
@@ -2070,8 +2080,8 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
             const initW = world.constituencies.find((c) => c.id === bestPair!.initWard)
             const targW = world.constituencies.find((c) => c.id === bestPair!.targWard)
             if (initW && targW) {
-              const pev = targW.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
-              const aev = initW.results.find((r) => r.partyId === target.id)?.voteShare ?? 0
+              const pev = targW.results.find((r) => r.partyId === target.id)?.voteShare ?? 0
+              const aev = initW.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
               world.alliancePacts.push({
                 id: `pact-npc-${Date.now()}-${rng().toString(36).slice(2, 6)}`,
                 initiatorPartyId: party.id,
@@ -2110,13 +2120,16 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           let bestScore2 = 0
           for (const initWard of world.constituencies) {
             const initShare = initWard.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
-            const initWeakness = Math.max(0, 1 - initShare / 40)
+            const initStrength = Math.max(0, initShare / 40)
+          const initLeading = initWard.leadingPartyId === party.id && initWard.margin > 8
             for (const targWard of world.constituencies) {
               if (initWard.id === targWard.id) continue
               if (playerCommittedWards.has(targWard.id)) continue
               const targShare = targWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
-              const targWeakness = Math.max(0, 1 - targShare / 40)
-              const pairScore = initWeakness * 0.5 + targWeakness * 0.5
+              const targStrength = Math.max(0, targShare / 40)
+              const targLeading = targWard.leadingPartyId === world.playerPartyId && targWard.margin > 8
+              const pairScore = (initLeading ? initStrength * 0.2 : initStrength * 0.5) +
+                (targLeading ? targStrength * 0.2 : targStrength * 0.5)
               if (pairScore > bestScore2) {
                 bestScore2 = pairScore
                 bestPair2 = { initWard: initWard.id, targWard: targWard.id }
@@ -2124,11 +2137,14 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
             }
           }
           if (bestPair2) {
-            const initW2 = world.constituencies.find((c) => c.id === bestPair2.initWard)
+            const chance2 = evaluateAllianceAcceptance(world, party.id, world.playerPartyId, bestPair2.initWard, bestPair2.targWard)
+            const accepted2 = rng() < Math.max(0.05, Math.min(0.85, chance2))
+            if (accepted2) {
+              const initW2 = world.constituencies.find((c) => c.id === bestPair2.initWard)
             const targW2 = world.constituencies.find((c) => c.id === bestPair2.targWard)
             if (initW2 && targW2) {
-              const pev = targW2.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
-              const aev = initW2.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
+              const pev = targW2.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
+              const aev = initW2.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
               world.pendingNpcProposal = {
                 id: `pact-npc-player-${Date.now()}`,
                 initiatorPartyId: party.id,
@@ -2146,10 +2162,35 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           }
         }
       }
+      }
     }
 
     return { ...party, aiActionPoints: ap, wardBoosts: boosts }
   })
+
+  // Periodic NPC pact review: every 4 weeks, NPCs evaluate whether to keep pacts
+  if (world.week % 4 === 0) {
+    for (let i = world.alliancePacts.length - 1; i >= 0; i--) {
+      const pact = world.alliancePacts[i]
+      if (pact.broken) continue
+      // Only NPCs review their own pacts; player pacts are kept forever unless broken
+      if (pact.initiatorPartyId === world.playerPartyId || pact.allyPartyId === world.playerPartyId) continue
+
+      const initW = world.constituencies.find((c) => c.id === pact.standingDownIn)
+      const allyW = world.constituencies.find((c) => c.id === pact.allyStandsDownIn)
+      if (!initW || !allyW) continue
+
+      // Check if standing-down party is now winning comfortably in their ward
+      const initNowWinning = initW.leadingPartyId === pact.initiatorPartyId && initW.margin > 20
+      const allyNowWinning = allyW.leadingPartyId === pact.allyPartyId && allyW.margin > 20
+
+      if (initNowWinning || allyNowWinning) {
+        pact.broken = true
+        const partyName = world.parties.find((p) => p.id === (initNowWinning ? pact.initiatorPartyId : pact.allyPartyId))?.name ?? '?'
+        newsFeedLines.push(`${partyName} breaks their alliance pact — they're now too strong in their ward.`)
+      }
+    }
+  }
 
   return { parties: updatedParties, newsFeedLines, aiPactResults }
 }
@@ -2372,13 +2413,16 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       // AI evaluation using shared function
       const acceptanceChance = evaluateAllianceAcceptance(world, world.playerPartyId, action.targetPartyId, targetWard.id, allyWard.id)
 
-      const accepted = rng() < Math.max(0.05, Math.min(0.85, acceptanceChance))
+      const isUnilateral = action.wardId === action.allyWardId
+
+      // Unilateral stand-downs auto-accept — the ally gets a free endorsement
+      const accepted = isUnilateral || rng() < Math.max(0.05, Math.min(0.85, acceptanceChance))
       targetPartyName = allyParty.name
 
       if (accepted) {
         const createPact = (ourWard: Constituency, theirWard: Constituency) => {
-          const pev = theirWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
-          const aev = ourWard.results.find((r) => r.partyId === action.targetPartyId)?.voteShare ?? 0
+          const pev = isUnilateral ? 0 : theirWard.results.find((r) => r.partyId === action.targetPartyId)?.voteShare ?? 0
+          const aev = ourWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
           return {
             id: `pact-${Date.now()}-${rng().toString(36).slice(2, 6)}`,
             initiatorPartyId: world.playerPartyId,
@@ -2838,9 +2882,7 @@ export function simulateWeek(world: World): World {
     minorityGovernment: false,
     coalitionPartnerId: undefined,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
-    alliancePacts: electionHappening
-      ? world.alliancePacts.map((p) => ({ ...p, broken: true }))
-      : world.alliancePacts,
+    alliancePacts: world.alliancePacts,
   }
 
   if (electionHappening) {
@@ -3123,27 +3165,36 @@ export function suggestPacts(world: World, allyPartyId: string): PactSuggestion[
       if (allyResult && allyResult.partyId === theirWard.leadingPartyId && theirWard.margin > 15) continue
 
       const playerWeakness = Math.max(0, 1 - playerShare / 40)
-      const allyWeakness = Math.max(0, 1 - allyShare / 40)
+      const allyStrength = Math.max(0, allyShare / 40)
+      const playerLeading = playerResult?.partyId === ourWard.leadingPartyId && ourWard.margin > 8
+      const allyLeading = allyResult?.partyId === theirWard.leadingPartyId && theirWard.margin > 8
       const playerCompetitiveness = playerResult && playerResult.partyId !== ourWard.leadingPartyId
         ? Math.max(0, 1 - ourWard.margin / 20)
         : 0
       const endorsementValue = allyShare * 0.01
-      const score = playerWeakness * 0.3 + allyWeakness * 0.3 + playerCompetitiveness * 0.2 + Math.min(1, endorsementValue * 5) * 0.2
+      const score = (playerLeading ? playerWeakness * 0.1 : playerWeakness * 0.3) +
+        (allyLeading ? allyStrength * 0.1 : allyStrength * 0.3) +
+        playerCompetitiveness * 0.2 + Math.min(1, endorsementValue * 5) * 0.2
 
-      // AI acceptance — ally refuses if they're leading in their own ward
-      const allyIsLeading = allyResult?.partyId === theirWard.leadingPartyId
-      const allyWinningComfortably = allyIsLeading && theirWard.margin > 8
+      // AI acceptance — ally refuses if they're leading or incumbent
+      const isIncumbentHere = world.electionsHeld >= 1 && world.electionNightResults.some(
+        (r) => r.wardId === theirWard.id && r.winner?.partyId === allyPartyId
+      )
+      const incumbencyPenalty = isIncumbentHere ? 0.70 : 0
+      const allyWinningPenalty = Math.min(1, (allyResult?.partyId === theirWard.leadingPartyId ? theirWard.margin / 15 : 0)) * 0.60
 
       const valueDist = valueDistance(playerParty.values, allyParty.values, { change: 1, growth: 1, services: 1 })
       const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
       const repKey = [world.playerPartyId, allyPartyId].sort().join('_')
       const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
+
       const acceptance = Math.max(0.05, Math.min(0.85,
-        (playerShare < 15 ? 0.30 : 0) +
-        (allyShare < 15 ? 0.25 : 0) +
+        Math.max(0, 1 - playerShare / 15) * 0.30 +
+        Math.max(0, 1 - allyShare / 15) * 0.25 +
         ideologicalBonus * 0.25 -
         repPenalty -
-        (allyWinningComfortably ? 0.50 : 0)
+        allyWinningPenalty -
+        incumbencyPenalty
       ))
 
       // Could the endorsement flip the ward?
@@ -3175,6 +3226,127 @@ export function suggestPacts(world: World, allyPartyId: string): PactSuggestion[
   }
 
   return suggestions.sort((a, b) => b.score - a.score).slice(0, 50)
+}
+
+export function reciprocalWards(world: World, allyPartyId: string, allyWardId: string): PactSuggestion[] {
+  const allyParty = world.parties.find((p) => p.id === allyPartyId)
+  const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
+  if (!allyParty || !playerParty) return []
+
+  const theirWard = world.constituencies.find((c) => c.id === allyWardId)
+  if (!theirWard) return []
+
+  const allyResult = theirWard.results.find((r) => r.partyId === allyPartyId)
+  const allyShare = allyResult?.voteShare ?? 0
+  const allyLeading = allyResult?.partyId === theirWard.leadingPartyId && theirWard.margin > 8
+
+  // Collect wards the player is already committed to
+  const playerCommitted = new Set<string>()
+  for (const p of world.alliancePacts) {
+    if (p.broken) continue
+    if (p.initiatorPartyId === world.playerPartyId) playerCommitted.add(p.standingDownIn)
+    if (p.allyPartyId === world.playerPartyId) playerCommitted.add(p.allyStandsDownIn)
+  }
+
+  const suggestions: PactSuggestion[] = []
+  for (const ourWard of world.constituencies) {
+    if (ourWard.id === theirWard.id) continue
+    if (playerCommitted.has(ourWard.id)) continue
+    const playerResult = ourWard.results.find((r) => r.partyId === world.playerPartyId)
+    const playerShare = playerResult?.voteShare ?? 0
+    if (playerResult && playerResult.partyId === ourWard.leadingPartyId && ourWard.margin > 15) continue
+
+    const playerLeading = playerResult?.partyId === ourWard.leadingPartyId && ourWard.margin > 8
+    const isIncumbentHere = world.electionsHeld >= 1 && world.electionNightResults.some(
+      (r) => r.wardId === theirWard.id && r.winner?.partyId === allyPartyId
+    )
+    const incumbencyPenalty = isIncumbentHere ? 0.70 : 0
+    const playerStrength = Math.max(0, playerShare / 40)
+    const endorsementValue = playerShare * 0.01
+    const score = (playerLeading ? playerStrength * 0.2 : playerStrength * 0.5) +
+      Math.min(1, endorsementValue * 5) * 0.3 +
+      (allyLeading ? 0 : allyShare / 40 * 0.2)
+
+    const acceptance = Math.max(0.05, Math.min(0.85,
+      (allyLeading ? -0.30 : Math.max(0, 1 - allyShare / 25) * 0.30) +
+      Math.max(0, 1 - playerShare / 25) * 0.25 +
+      (allyLeading ? 0 : Math.min(1, (playerResult?.partyId !== theirWard.leadingPartyId ? 1 - theirWard.margin / 20 : 0)) * 0.2) -
+      (playerLeading ? Math.min(1, ourWard.margin / 15) * 0.60 : 0) -
+      incumbencyPenalty
+    ))
+
+    if (score > 0.02) {
+      const boost = allyShare * 0.01
+      const estimatedGain = boost * 25
+      const currentLeader = theirWard.results[0]
+      const playerInAllyWard = theirWard.results.find((r) => r.partyId === world.playerPartyId)
+      const couldFlip = currentLeader && currentLeader.partyId !== world.playerPartyId &&
+        (playerInAllyWard?.voteShare ?? 0) + estimatedGain > (currentLeader.voteShare ?? 0)
+
+      suggestions.push({
+        ourWardId: ourWard.id,
+        ourWardName: ourWard.name,
+        ourWardPlayerShare: playerShare,
+        theirWardId: theirWard.id,
+        theirWardName: theirWard.name,
+        theirWardAllyShare: allyShare,
+        score,
+        acceptanceChance: Math.round(acceptance * 100),
+        couldFlip,
+        flipDelta: couldFlip ? `+${estimatedGain.toFixed(1)}% → flip from ${currentLeader!.partyName} to ${playerParty?.name ?? 'you'}` : undefined,
+      })
+    }
+  }
+
+  return suggestions.sort((a, b) => b.score - a.score).slice(0, 4)
+}
+
+export interface BeneficiaryInfo {
+  partyId: string
+  partyName: string
+  colour: string
+  share: number
+  ideologyMatch: number
+  estimatedGain: number
+  couldFlip: boolean
+  flipFrom?: string
+}
+
+export function beneficiaryParties(world: World, wardId: string): BeneficiaryInfo[] {
+  const ward = world.constituencies.find((c) => c.id === wardId)
+  const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
+  if (!ward || !playerParty) return []
+
+  const playerResult = ward.results.find((r) => r.partyId === world.playerPartyId)
+  const playerShare = playerResult?.voteShare ?? 0
+  if (playerShare < 1) return []
+
+  const endorsementValue = playerShare * 0.01
+  const estimatedGain = endorsementValue * 25
+
+  const beneficiaries: BeneficiaryInfo[] = []
+  for (const party of world.parties) {
+    if (party.id === world.playerPartyId) continue
+    const result = ward.results.find((r) => r.partyId === party.id)
+    const share = result?.voteShare ?? 0
+    if (share < 1) continue
+
+    const compat = playerParty ? Math.max(0, Math.round(100 - (valueDistance(playerParty.values, party.values, { change: 1, growth: 1, services: 1 }) / 12000) * 100)) : 50
+    const couldFlip = ward.leadingPartyId !== party.id && share + estimatedGain > (ward.results[0]?.voteShare ?? 0)
+
+    beneficiaries.push({
+      partyId: party.id,
+      partyName: party.name,
+      colour: party.colour,
+      share,
+      ideologyMatch: compat,
+      estimatedGain,
+      couldFlip,
+      flipFrom: couldFlip ? (ward.results[0]?.partyName ?? '?') : undefined,
+    })
+  }
+
+  return beneficiaries.sort((a, b) => (b.share + b.estimatedGain) - (a.share + a.estimatedGain)).slice(0, 5)
 }
 
 export function getAvailableActions(world: World): CampaignAction[] {

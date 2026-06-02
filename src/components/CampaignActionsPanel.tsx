@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAvailableActions, suggestPacts } from '../lib/sim'
+import { beneficiaryParties, getAvailableActions, reciprocalWards, suggestPacts } from '../lib/sim'
 import type { ActiveCampaign, CampaignAction, World } from '../types/sim'
 
 export function CampaignActionsPanel({ world, selectedWardId, onAction, onTogglePermanent, onAcceptNpcProposal, onRejectNpcProposal }: {
@@ -18,9 +18,9 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
   const [showPolicyConfig, setShowPolicyConfig] = useState(false)
   const [showAllianceConfig, setShowAllianceConfig] = useState(false)
   const [alliancePartyId, setAlliancePartyId] = useState('')
-  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set())
-  const [filterOurWardId, setFilterOurWardId] = useState('')
-  const [filterTheirWardId, setFilterTheirWardId] = useState('')
+  const [allianceTheirWardId, setAllianceTheirWardId] = useState('')
+  const [allianceOurWardIds, setAllianceOurWardIds] = useState<Set<string>>(new Set())
+  const [allianceMode, setAllianceMode] = useState<'theyForMe' | 'iForThem'>('theyForMe')
 
   useEffect(() => {
     setFocusWardId(selectedWardId)
@@ -197,19 +197,25 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
             const playerInvolved = playerIsInitiator || playerIsAlly
 
             if (playerInvolved) {
+              const isUnilateral = pact.standingDownIn === pact.allyStandsDownIn
               const ourWard = world.constituencies.find((c) => c.id === (playerIsInitiator ? pact.standingDownIn : pact.allyStandsDownIn))
               const theirWard = world.constituencies.find((c) => c.id === (playerIsInitiator ? pact.allyStandsDownIn : pact.standingDownIn))
               const allyId = playerIsInitiator ? pact.allyPartyId : pact.initiatorPartyId
               const ally = world.parties.find((p) => p.id === allyId)
               return (
                 <div key={pact.id} className="alliance-pact-row">
-                  <span className="alliance-pact-indicator">{'\uD83E\uDD1D'}</span>
+                  <span className="alliance-pact-indicator">{isUnilateral ? '\u27A1' : '\uD83E\uDD1D'}</span>
                   <span className="alliance-pact-text">
-                    Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}
+                    {isUnilateral
+                      ? <span>You stand down for <strong>{ally?.name ?? allyId}</strong> in {ourWard?.name ?? '?'}</span>
+                      : <span>Pact with <strong>{ally?.name ?? allyId}</strong>: you stand down in {ourWard?.name ?? '?'}, they in {theirWard?.name ?? '?'}</span>
+                    }
                     <br />
                     <span className="alliance-boost">
-                      You gain +{(pact.playerEndorsementValue * 0.01).toFixed(2)} in {theirWard?.name ?? '?'}{' '}
-                      · They gain +{(pact.allyEndorsementValue * 0.01).toFixed(2)} in {ourWard?.name ?? '?'}
+                      {isUnilateral
+                        ? <span>They gain +{(pact.allyEndorsementValue * 0.01).toFixed(2)} from your endorsement</span>
+                        : <span>You gain +{(pact.playerEndorsementValue * 0.01).toFixed(2)} in {theirWard?.name ?? '?'} · They gain +{(pact.allyEndorsementValue * 0.01).toFixed(2)} in {ourWard?.name ?? '?'}</span>
+                      }
                     </span>
                   </span>
                   <button
@@ -616,137 +622,181 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
         </button>
         {showAllianceConfig && ap >= 2 && (
           <div className="ac-config">
-            <select
-              value={alliancePartyId}
-              onChange={(e) => {
-                setAlliancePartyId(e.target.value)
-                setSelectedSuggestions(new Set())
-                setFilterOurWardId('')
-                setFilterTheirWardId('')
-              }}
-              className="ac-select"
-            >
-              <option value="">Pick an ally...</option>
-              {opponents.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div className="alliance-tabs">
+              <button
+                type="button"
+                className={`alliance-tab${allianceMode === 'theyForMe' ? ' is-active' : ''}`}
+                onClick={() => { setAllianceMode('theyForMe'); setAllianceTheirWardId(focusWardId); setAllianceOurWardIds(new Set()) }}
+              >
+                They stand down for me
+              </button>
+              <button
+                type="button"
+                className={`alliance-tab${allianceMode === 'iForThem' ? ' is-active' : ''}`}
+                onClick={() => { setAllianceMode('iForThem'); setAlliancePartyId(''); setAllianceTheirWardId(focusWardId); setAllianceOurWardIds(new Set()) }}
+              >
+                I stand down for them
+              </button>
+            </div>
 
-            {alliancePartyId && (() => {
-              const suggestions = suggestPacts(world, alliancePartyId)
+            {allianceMode === 'theyForMe' && (
+              <select
+                value={alliancePartyId}
+                onChange={(e) => { setAlliancePartyId(e.target.value); setAllianceTheirWardId(''); setAllianceOurWardIds(new Set()) }}
+                className="ac-select"
+              >
+                <option value="">Pick an ally...</option>
+                {opponents.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+              </select>
+            )}
+
+            {allianceMode === 'theyForMe' && alliancePartyId && (() => {
               const ally = world.parties.find((p) => p.id === alliancePartyId)
-              if (suggestions.length === 0) {
-                return <span className="alliance-no-suggestions">No promising pacts found with {ally?.name ?? 'this party'}.</span>
-              }
-              return (
-                <div className="alliance-suggestions">
-                  <div className="alliance-suggestions-label">
-                    Suggested pacts with {ally?.name ?? '?'}:
-                  </div>
+              if (!ally) return null
 
-                  <div className="alliance-filters">
-                    <select
-                      value={filterOurWardId}
-                      onChange={(e) => {
-                        setFilterOurWardId(e.target.value)
-                        setFilterTheirWardId('')
-                      }}
-                      className="ac-select alliance-filter-select"
-                    >
-                      <option value="">Filter: my stand-down ward...</option>
-                      {world.constituencies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={filterTheirWardId}
-                      onChange={(e) => {
-                        setFilterTheirWardId(e.target.value)
-                        setFilterOurWardId('')
-                      }}
-                      className="ac-select alliance-filter-select"
-                    >
-                      <option value="">Filter: their stand-down ward...</option>
-                      {world.constituencies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+              return !allianceTheirWardId ? (() => {
+                const suggestions = suggestPacts(world, alliancePartyId)
+                const uniqueTheirWards = [...new Set(suggestions.map((s) => s.theirWardId))].map((wid) => world.constituencies.find((c) => c.id === wid)).filter(Boolean)
+                if (uniqueTheirWards.length === 0) return <span className="alliance-no-suggestions">No viable wards for {ally.name} to stand down in.</span>
+                return (
+                  <div className="alliance-step-one">
+                    <div className="alliance-step-label">Where should {ally.name} stand down?</div>
+                    {uniqueTheirWards.map((ward) => {
+                      const bestForThisWard = suggestions.find((s) => s.theirWardId === ward!.id)
+                      const allyShare = ward!.results.find((r) => r.partyId === alliancePartyId)?.voteShare ?? 0
+                      return (
+                        <label key={ward!.id} className="alliance-step-option" onClick={() => { setAllianceTheirWardId(ward!.id); setAllianceOurWardIds(new Set()) }}>
+                          <div className="alliance-step-option-body">
+                            <div className="alliance-step-option-row">
+                              <span className="alliance-step-ward-name">{ward!.name}</span>
+                              <span className="alliance-step-ward-meta">{ally.name} has {allyShare.toFixed(1)}% here</span>
+                            </div>
+                            <div className="alliance-step-option-row">
+                              <span className={`alliance-accept-chance${(bestForThisWard?.acceptanceChance ?? 0) >= 70 ? ' is-high' : (bestForThisWard?.acceptanceChance ?? 0) >= 35 ? ' is-mid' : ' is-low'}`}>~{bestForThisWard?.acceptanceChance ?? '?'}% acceptance</span>
+                              {bestForThisWard?.couldFlip && bestForThisWard.flipDelta && <span className="alliance-flip-badge">{'\u2B62'} {bestForThisWard.flipDelta}</span>}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                    <button className="ink-button secondary small" type="button" onClick={() => { setAlliancePartyId(''); setAllianceTheirWardId('') }}>Back</button>
                   </div>
-
+                )
+              })() : (
+                <div className="alliance-step-two">
                   {(() => {
-                    const filtered = suggestions
-                      .filter((s) => !filterOurWardId || s.ourWardId === filterOurWardId)
-                      .filter((s) => !filterTheirWardId || s.theirWardId === filterTheirWardId)
-                      .slice(0, 12)
-                    return filtered.map((s) => {
-                      const i = suggestions.indexOf(s)
-                      const isSelected = selectedSuggestions.has(i)
+                    const theirWard = world.constituencies.find((c) => c.id === allianceTheirWardId)
+                    const reciprocals = reciprocalWards(world, alliancePartyId, allianceTheirWardId)
                     return (
-                      <label key={i} className={`alliance-suggestion-row${isSelected ? ' is-selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            setSelectedSuggestions((prev) => {
-                              const next = new Set(prev)
-                              if (next.has(i)) { next.delete(i) } else { next.add(i) }
-                              return next
-                            })
-                          }}
-                        />
-                        <span className="alliance-suggestion-text">
-                          <strong>You</strong> stand down in <em>{s.ourWardName}</em> ({s.ourWardPlayerShare.toFixed(1)}%)
-                          {' ⇄ '}
-                          <strong>They</strong> stand down in <em>{s.theirWardName}</em> ({s.theirWardAllyShare.toFixed(1)}%)
-                        </span>
-                        <span className="alliance-suggestion-meta">
-                          <span className={`alliance-accept-chance${s.acceptanceChance >= 70 ? ' is-high' : s.acceptanceChance >= 35 ? ' is-mid' : ' is-low'}`}>
-                            {s.acceptanceChance}% acceptance
-                          </span>
-                          {s.couldFlip && s.flipDelta && (
-                            <span className="alliance-flip-badge">{'\u2B62'} {s.flipDelta}</span>
+                      <>
+                        <div className="alliance-step-label">{ally.name} stands down in <em>{theirWard?.name ?? '?'}</em>. In return, where will you stand down?</div>
+                        {reciprocals.length === 0 ? <span className="alliance-no-suggestions">No viable reciprocal wards.</span> : reciprocals.map((s, i) => {
+                          const isSelected = allianceOurWardIds.has(s.ourWardId)
+                          return (
+                            <label key={i} className={`alliance-step-option${isSelected ? ' is-selected' : ''}`}>
+                              <input type="checkbox" checked={isSelected} onChange={() => { setAllianceOurWardIds((prev) => { const next = new Set(prev); if (next.has(s.ourWardId)) next.delete(s.ourWardId); else next.add(s.ourWardId); return next }) }} className="alliance-step-checkbox" />
+                              <div className="alliance-step-option-body">
+                                <div className="alliance-step-option-row">
+                                  <span className="alliance-step-ward-name">{s.ourWardName}</span>
+                                  <span className="alliance-step-ward-meta">You have {s.ourWardPlayerShare.toFixed(1)}% here</span>
+                                  <span className={`alliance-accept-chance${s.acceptanceChance >= 70 ? ' is-high' : s.acceptanceChance >= 35 ? ' is-mid' : ' is-low'}`}>~{s.acceptanceChance}% accept</span>
+                                </div>
+                                {s.couldFlip && s.flipDelta && <div className="alliance-step-option-row"><span className="alliance-flip-badge">{'\u2B62'} {s.flipDelta}</span></div>}
+                              </div>
+                            </label>
+                          )
+                        })}
+                        {allianceOurWardIds.size > 0 && (
+                          <div className="alliance-step-combined">Combined: {(() => { const sel = reciprocals.filter((s) => allianceOurWardIds.has(s.ourWardId)); const avg = sel.reduce((sum, s) => sum + s.acceptanceChance, 0) / sel.length; const total = Math.min(85, Math.round(avg + Math.min(15, (sel.length - 1) * 5))); return <span className={`alliance-accept-chance${total >= 70 ? ' is-high' : total >= 35 ? ' is-mid' : ' is-low'}`}>~{total}%</span> })()} for {allianceOurWardIds.size} ward{allianceOurWardIds.size !== 1 ? 's' : ''}{allianceOurWardIds.size > 1 && <span className="alliance-multi-bonus"> (+{(allianceOurWardIds.size - 1) * 5}% bonus)</span>}</div>
+                        )}
+                        <div className="alliance-step-actions">
+                          {allianceOurWardIds.size > 0 && (
+                            <button className="ink-button small" type="button" onClick={() => {
+                              const b: Array<{ ourWardId: string; theirWardId: string }> = []
+                              for (const wid of allianceOurWardIds) b.push({ ourWardId: wid, theirWardId: allianceTheirWardId })
+                              onAction({ type: 'propose_alliance', label: `Alliance with ${ally.name}`, description: `They stand down in ${theirWard?.name ?? '?'}; you stand down in ${allianceOurWardIds.size} ward${allianceOurWardIds.size !== 1 ? 's' : ''}`, apCost: 2, targetPartyId: ally.id, wardId: b[0].ourWardId, allyWardId: allianceTheirWardId, allianceBatchWards: b.slice(1) })
+                              setShowAllianceConfig(false); setAlliancePartyId(''); setAllianceTheirWardId(''); setAllianceOurWardIds(new Set())
+                            }}>Propose {allianceOurWardIds.size} pact{allianceOurWardIds.size !== 1 ? 's' : ''} (2 AP)</button>
                           )}
-                        </span>
-                      </label>
+                          <button className="ink-button secondary small" type="button" onClick={() => { setAllianceTheirWardId(''); setAllianceOurWardIds(new Set()) }}>Back</button>
+                        </div>
+                      </>
                     )
-                    })
                   })()}
-
-                  <button
-                    className="ink-button small alliance-batch-btn"
-                    type="button"
-                    disabled={selectedSuggestions.size === 0}
-                    onClick={() => {
-                      const ally = world.parties.find((p) => p.id === alliancePartyId)
-                      if (!ally) return
-                      const batchWards: Array<{ ourWardId: string; theirWardId: string }> = []
-                      for (const idx of selectedSuggestions) {
-                        const s = suggestions[idx]
-                        batchWards.push({ ourWardId: s.ourWardId, theirWardId: s.theirWardId })
-                      }
-                      const first = batchWards[0]
-                      onAction({
-                        type: 'propose_alliance',
-                        label: `Alliance with ${ally.name}`,
-                        description: `Stand down in ${batchWards.length} ward${batchWards.length !== 1 ? 's' : ''}; they stand down in ${batchWards.length}`,
-                        apCost: 2,
-                        targetPartyId: ally.id,
-                        wardId: first.ourWardId,
-                        allyWardId: first.theirWardId,
-                        allianceBatchWards: batchWards.slice(1),
-                      })
-                      setShowAllianceConfig(false)
-                      setAlliancePartyId('')
-                      setSelectedSuggestions(new Set())
-                      setFilterOurWardId('')
-                      setFilterTheirWardId('')
-                    }}
-                  >
-                    Propose {selectedSuggestions.size} pact{selectedSuggestions.size !== 1 ? 's' : ''} (2 AP total)
-                  </button>
                 </div>
               )
             })()}
+
+            {allianceMode === 'iForThem' && (
+              <>
+                {!allianceTheirWardId ? (
+                  <div className="alliance-step-one">
+                    <div className="alliance-step-label">Where will you stand down?</div>
+                    {world.constituencies.map((ward) => {
+                      const playerResult = ward.results.find((r) => r.partyId === world.playerPartyId)
+                      const playerShare = playerResult?.voteShare ?? 0
+                      if (playerShare < 3) return null
+                      return (
+                        <label key={ward.id} className="alliance-step-option" onClick={() => setAllianceTheirWardId(ward.id)}>
+                          <div className="alliance-step-option-body">
+                            <div className="alliance-step-option-row">
+                              <span className="alliance-step-ward-name">{ward.name}</span>
+                              <span className="alliance-step-ward-meta">You have {playerShare.toFixed(1)}% · +{(playerShare * 0.01).toFixed(2)} endorsement</span>
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                    <button className="ink-button secondary small" type="button" onClick={() => setAllianceMode('theyForMe')}>Back</button>
+                  </div>
+                ) : (
+                  <div className="alliance-step-two">
+                    {(() => {
+                      const ourWard = world.constituencies.find((c) => c.id === allianceTheirWardId)
+                      const playerShare = ourWard?.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
+                      const beneficiaries = beneficiaryParties(world, allianceTheirWardId)
+                      return (
+                        <>
+                          <div className="alliance-step-label">You stand down in <em>{ourWard?.name ?? '?'}</em> ({playerShare.toFixed(1)}% → +{(playerShare * 0.01).toFixed(2)}). Who benefits?</div>
+                          {beneficiaries.length === 0 ? <span className="alliance-no-suggestions">No viable beneficiaries.</span> : beneficiaries.map((b) => {
+                            const isSelected = allianceOurWardIds.has(b.partyId)
+                            return (
+                              <label key={b.partyId} className={`alliance-step-option${isSelected ? ' is-selected' : ''}`}>
+                                <input type="checkbox" checked={isSelected} onChange={() => { setAllianceOurWardIds((prev) => { const next = new Set(prev); if (next.has(b.partyId)) next.delete(b.partyId); else next.add(b.partyId); return next }) }} className="alliance-step-checkbox" />
+                                <div className="alliance-step-option-body">
+                                  <div className="alliance-step-option-row">
+                                    <span className="alliance-step-swatch" style={{ background: b.colour }} />
+                                    <span className="alliance-step-ward-name">{b.partyName}</span>
+                                    <span className="alliance-step-ward-meta">{b.share.toFixed(1)}% · {b.ideologyMatch}% match</span>
+                                  </div>
+                                  <div className="alliance-step-option-row">
+                                    <span className="alliance-boost">+{b.estimatedGain.toFixed(1)}% projected with your endorsement</span>
+                                    {b.couldFlip && <span className="alliance-flip-badge">{'\u2B62'} Flip from {b.flipFrom}</span>}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                          <div className="alliance-step-actions">
+                            {allianceOurWardIds.size > 0 && (
+                              <button className="ink-button small" type="button" onClick={() => {
+                                const batchWards: Array<{ ourWardId: string; theirWardId: string }> = []
+                                for (const pid of allianceOurWardIds) batchWards.push({ ourWardId: pid, theirWardId: allianceTheirWardId })
+                                const firstPid = [...allianceOurWardIds][0]
+                                const firstParty = world.parties.find((p) => p.id === firstPid)
+                                onAction({ type: 'propose_alliance', label: `Unilateral stand-down for ${firstParty?.name ?? firstPid}`, description: `You stand down in ${ourWard?.name ?? '?'}`, apCost: 1, targetPartyId: firstPid, wardId: allianceTheirWardId, allyWardId: allianceTheirWardId, allianceBatchWards: batchWards.slice(1) })
+                                setShowAllianceConfig(false); setAlliancePartyId(''); setAllianceTheirWardId(''); setAllianceOurWardIds(new Set())
+                              }}>Stand down for {allianceOurWardIds.size} partie{allianceOurWardIds.size !== 1 ? 's' : ''} (1 AP)</button>
+                            )}
+                            <button className="ink-button secondary small" type="button" onClick={() => { setAllianceTheirWardId(''); setAllianceOurWardIds(new Set()) }}>Back</button>
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

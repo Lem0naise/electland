@@ -2402,6 +2402,60 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .alliance-no-suggestions { font-size: 0.68rem; color: var(--ink-soft); font-style: italic; padding: 4px 0; }
 .alliance-batch-btn { width: 100%; margin-top: 4px; }
 
+/* Two-step alliance UI */
+.alliance-step-one, .alliance-step-two { display: flex; flex-direction: column; gap: 4px; }
+.alliance-step-label { font-size: 0.68rem; color: var(--ink-soft); margin-bottom: 2px; }
+.alliance-step-label em { color: var(--ink-mid); font-style: normal; font-weight: 600; }
+.alliance-step-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  align-items: start;
+  padding: 5px 8px;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: background 100ms;
+}
+.alliance-step-option:hover { background: rgba(255,255,255,0.6); }
+.alliance-step-option.is-selected { border-color: var(--safe); background: rgba(26,92,42,0.05); }
+.alliance-step-checkbox { margin: 2px 0 0 0; cursor: pointer; flex-shrink: 0; }
+.alliance-step-option-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.alliance-step-option-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.alliance-step-ward-name { font-weight: 600; }
+.alliance-step-ward-meta { font-size: 0.64rem; color: var(--ink-soft); }
+.alliance-step-actions { display: flex; gap: 6px; margin-top: 4px; }
+.alliance-step-actions .ink-button { flex: 1; }
+.alliance-step-combined {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.3);
+  border: 1px solid var(--ink-faint);
+  text-align: center;
+}
+.alliance-multi-bonus { color: #1a5c2a; font-weight: 600; font-size: 0.62rem; }
+.alliance-flow { display: flex; flex-direction: column; gap: 4px; }
+.alliance-tabs { display: flex; gap: 3px; margin-bottom: 2px; }
+.alliance-tab {
+  appearance: none;
+  flex: 1;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.3);
+  color: var(--ink-mid);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 120ms ease;
+}
+.alliance-tab.is-active { background: var(--ink-mid); color: #f8f0dd; border-color: var(--ink); }
+.alliance-step-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(44,31,14,0.3); }
+
 /* Action section label (incumbent mode header) */
 .action-section-label {
   padding: 5px 0 2px;
