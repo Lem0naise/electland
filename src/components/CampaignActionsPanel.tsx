@@ -220,26 +220,14 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
             const otherParty = world.parties.find((p) => p.id === otherPartyId)
             const playerIsPartyA = pact.partyAId === world.playerPartyId
 
-            let totalGainForUs = 0
-            let totalGainForThem = 0
-            for (const e of pact.entries) {
-              if (playerIsPartyA) {
-                totalGainForUs += e.endorsementForA * 0.01 * 25
-                totalGainForThem += e.endorsementForB * 0.01 * 25
-              } else {
-                totalGainForUs += e.endorsementForB * 0.01 * 25
-                totalGainForThem += e.endorsementForA * 0.01 * 25
-              }
-            }
-
             const isExpanded = expandedBreakdownId === pact.id
             const isConfirming = breakConfirmPactId === pact.id
 
             const pactEntries = pact.entries.map((e) => {
               const ourWard = world.constituencies.find((c) => c.id === (playerIsPartyA ? e.wardA : e.wardB))
               const theirWard = world.constituencies.find((c) => c.id === (playerIsPartyA ? e.wardB : e.wardA))
-              const ourGain = playerIsPartyA ? e.endorsementForB * 0.01 : e.endorsementForA * 0.01
-              const theirGain = playerIsPartyA ? e.endorsementForA * 0.01 : e.endorsementForB * 0.01
+              const ourGain = playerIsPartyA ? e.endorsementForA * 0.01 * 25 : e.endorsementForB * 0.01 * 25
+              const theirGain = playerIsPartyA ? e.endorsementForB * 0.01 * 25 : e.endorsementForA * 0.01 * 25
               return { entry: e, ourWard, theirWard, ourGain, theirGain }
             })
 
@@ -250,9 +238,6 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                   <span className="alliance-pact-text">
                     Pact with <strong>{otherParty?.name ?? otherPartyId}</strong>
                     {' — '}{pact.entries.length} ward{pact.entries.length !== 1 ? 's' : ''}
-                    <span className="alliance-boost">
-                      {' · ~+'}{totalGainForUs.toFixed(1)}% for you, ~+{totalGainForThem.toFixed(1)}% for them
-                    </span>
                   </span>
                   <div className="alliance-pact-actions">
                     <button

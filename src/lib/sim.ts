@@ -2005,8 +2005,8 @@ function evaluateAllianceAcceptance(
   return targetHopelessInInitiator + initiatorCloseInTarget + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested - incumbencyPenalty
 }
 
-function acceptanceSeed(world: World, initiatorId: string, targetId: string, initiatorWardId: string, targetWardId: string): number {
-  const str = `${world.seed}-${world.week}-${initiatorId}-${targetId}-${initiatorWardId}-${targetWardId}`
+function acceptanceSeed(world: World, initiatorId: string, targetId: string, _initiatorWardId: string, _targetWardId: string): number {
+  const str = `${world.seed}-${world.week}-${initiatorId}-${targetId}`
   let hash = 0
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i)
