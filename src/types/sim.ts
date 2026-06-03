@@ -195,8 +195,7 @@ export interface CampaignAction {
   eventChoiceIndex?: number
   // For alliance proposal: which ward the ally should stand down in
   allyWardId?: string
-  // For batch alliance proposals: additional ward pairs
-  allianceBatchWards?: Array<{ ourWardId: string; theirWardId: string }>
+  allianceEntries?: Array<{ ourWardId: string; theirWardId: string; isUnilateral?: boolean }>
 }
 
 export interface ActionResult {
@@ -289,16 +288,23 @@ export interface ActiveCampaign {
   targetPartyId?: string
 }
 
+export interface AlliancePactEntry {
+  id: string
+  wardA: string
+  wardAName: string
+  wardB: string
+  wardBName: string
+  isUnilateral: boolean
+  endorsementForB: number
+  endorsementForA: number
+}
+
 export interface AlliancePact {
   id: string
-  initiatorPartyId: string
-  allyPartyId: string
-  standingDownIn: string
-  standingDownName: string
-  allyStandsDownIn: string
-  allyStandsDownName: string
-  playerEndorsementValue: number
-  allyEndorsementValue: number
+  partyAId: string
+  partyBId: string
+  entries: AlliancePactEntry[]
+  createdAtWeek: number
   expiresWeek: number
   broken?: boolean
 }

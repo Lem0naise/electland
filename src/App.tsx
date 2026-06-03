@@ -551,7 +551,8 @@ function App() {
                     onRejectNpcProposal={() => {
                       if (!world?.pendingNpcProposal) return
                       const p = world.pendingNpcProposal
-                      const repKey = [world.playerPartyId, p.initiatorPartyId].sort().join('_')
+                      const npcId = p.partyAId === world.playerPartyId ? p.partyBId : p.partyAId
+                      const repKey = [world.playerPartyId, npcId].sort().join('_')
                       setWorld({
                         ...world,
                         pendingNpcProposal: undefined,

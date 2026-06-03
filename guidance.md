@@ -1,62 +1,116 @@
 # AI Agent Guidance: Electland Election Simulator
 
-This document provides a roadmap for AI agents to understand and navigate the Electland Election Simulator repository efficiently.
-
 ## Project Overview
-Electland is a procedural election simulator focused on local town council and mayoral races. It generates fictional towns, demographic "blocs," political parties, and wards. The simulation runs week-by-week, showing how events and party momentum influence polling results.
+Electland is a procedural election simulator for local town council races. Fictional towns, demographic blocs, political parties, and wards are generated. The simulation runs week-by-week. Player runs a campaign: canvass, run ads, hold rallies, smear opponents, form alliance pacts, gerrymander boundaries, and negotiate coalition governments after elections.
 
-## Core Files & Roles
+## Files
 
-### 1. Data & Logic (The "Brain")
-*   **[src/types/sim.ts](file:///home/indigo/Code/elections/electland/src/types/sim.ts)**:
-    *   **Purpose**: Contains all interface and type definitions for the simulation state (`World`, `Constituency`, `PartyDefinition`, `PoliticalValues`, etc.).
-    *   **Key Interface**: `PoliticalValues` (change, growth, services) is the core 3-dimensional political space used for matching voters to parties.
-*   **[src/lib/sim.ts](file:///home/indigo/Code/elections/electland/src/lib/sim.ts)**:
-    *   **Purpose**: The "engine" of the simulator.
-    *   **Functions**:
-        *   `generateWorld`: Creates a new town, its landmass, settlement centers, population tiles, and constituencies.
-        *   `simulateWeek`: Advances time, processes geographic "currents" (events), and updates party momentum.
-        *   `calculateResults`: Performs the actual vote counting logic based on voter affinity to party values.
-        *   Voter Affinity: Based on a softmax of scores calculated from spatial geometry (ward fit), value matching, organization, and event bonuses.
+### Core Logic (`src/lib/sim.ts` — ~3600 lines)
 
-### 2. UI Components (The "Look")
-*   **[src/App.tsx](file:///home/indigo/Code/elections/electland/src/App.tsx)**:
-    *   **Purpose**: Main entry point and state coordinator.
-    *   **Functionality**: Manages the `world` state, the "Main Menu" overlay, and the layout of the "Newspaper" interface.
-*   **[src/components/MapFigure.tsx](file:///home/indigo/Code/elections/electland/src/components/MapFigure.tsx)**:
-    *   **Purpose**: Renders the SVG map of wards.
-    *   **Details**: Uses Voronoi cells (calculated in `sim.ts` via `d3-delaunay`) to represent regional wards.
-*   **[src/components/ConstituencyInspector.tsx](file:///home/indigo/Code/elections/electland/src/components/ConstituencyInspector.tsx)**:
-    *   **Purpose**: Detail view for a specific selected ward.
-    *   **Details**: Shows current leads, "What the voters say" headlines, and demographic mix.
-*   **[src/components/PartyWorkbench.tsx](file:///home/indigo/Code/elections/electland/src/components/PartyWorkbench.tsx)**:
-    *   **Purpose**: Interface for viewing and creating custom parties.
+| Function | Purpose |
+|----------|---------|
+| `generateWorld` | Creates town, landmass, settlement centers, population tiles, constituencies, parties |
+| `simulateWeek` | Advances time: evolves currents, drifts tiles, evolves parties, runs AI campaigns, calculates results, handles elections |
+| `calculateResults` | Softmax-based vote counting per tile, aggregated per ward. Exported. |
+| `scorePartyForTile` | Core scorer: wardFit + focus + organization + tagBonus + issueFit + eventBonus + baseUtility + momentum + wardBoost + tileBoost + incumbencyBonus |
+| `estimateTilePreference` | Calls scorePartyForTile + allianceModifier, returns softmax rankings |
+| `allianceModifier` | Per-tile: checks alliance pacts, applies standing-down (-999) and endorsement bonuses |
+| `evaluateAllianceAcceptance` | AI acceptance formula: target hopeless score + initiator close + ideology - reputation - winning penalty - incumbency |
+| `deterministicAcceptance` | Same-pact-same-result within a week. Uses hash of seed+week+party+ward IDs. Adds multi-ward bonus (+0.05 per extra) |
+| `suggestPacts` | Ranks all ward pairs for an ally. Returns top 50 with acceptance, breakdown, flip info |
+| `reciprocalWards` | Given ally stands down in ward X, returns top 4 player wards to offer in return |
+| `beneficiaryParties` | Given player stands down in a ward, returns top 5 parties that benefit |
+| `coalitionCompatibility` | Ideology match 0-100% based on valueDistance |
+| `generateGovernanceDecisions` | Picks N random governance decisions from the pool |
+| `applyCampaignAction` | Processes player actions: canvass, ads, rally, smear, policy_shift, propose_alliance, break_alliance, etc. |
+| `recalculateWardAggregates` | Recomputes ward stats from current tile assignments (for redistricting) |
+| `regenerateCellPaths` | Rebuilds Voronoi cell paths from ward centroids |
+| `redistributeSnapshot` / `restoreRedistributeSnapshot` | Save/restore tile assignments for redistricting undo |
+| `loadCouncillorTenure` / `updateCouncillorTenure` | localStorage councillor tenure tracking across elections |
+| `strategyTagsForValues` | Derives focus tags from party values (exported) |
+| `dominantBlocId` | Finds dominant demographic bloc in a mix (exported) |
+| `getAvailableActions` | Builds list of campaign actions available to player |
 
-### 3. Styling
-*   **[src/App.css](file:///home/indigo/Code/elections/electland/src/App.css)** & **[src/index.css](file:///home/indigo/Code/elections/electland/src/index.css)**:
-    *   **Theme**: Modern "newspaper" aesthetic (serif fonts, ink-style buttons, textured paper background).
+**Key scoring scale:** Scores are in the range -0.5 to +2.5. A +0.20 shift translates to roughly +5% vote share. Standing-down parties get score -999 (effectively zero in softmax).
 
-## Simulation Logic Explained
+### Types (`src/types/sim.ts` — ~400 lines)
+All interfaces: `World`, `Constituency`, `PartyDefinition`, `PoliticalValues`, `PopulationTile`, `AlliancePact`, `CampaignAction`, `GovernanceDecision`, `CouncillorTenure`, `PartyEdit`, `MapMode`, `PactSuggestion`, etc.
 
-### Voter Behavior
-Voters are represented in `PopulationTile` objects. Each tile has:
-1.  **Values**: A set of `PoliticalValues` (Change, Growth, Services).
-2.  **Bloc Mix**: A distribution of demographic groups (e.g., "Market Regulars", "College Corner Crowd").
-3.  **Affinity**: During calculation, voters compare their `values` to each `PartyDefinition.values`, modified by `salience` (how much they care about specific axes).
+`PoliticalValues` (change, growth, services) is the 3-axis ideological space. Values range -100 to +100.
 
-### Procedural Generation
-1.  **Landmass**: Random polygon shape.
-2.  **Centers**: Points of interest (Market, School, Industrial) that influence density and urbanity.
-3.  **Wards**: Voronoi cells seeded from population-weighted points.
+### Persistence (`src/lib/persistence.ts`)
+Save/load to localStorage (`electland_save` key). Export/import as JSON files.
 
-## Quick Start for Agents
-*   **To change how votes are counted**: Edit `calculateResults` in `src/lib/sim.ts`.
-*   **To add new demographic groups**: Add templates to `fictionalBlocTemplates` in `src/lib/sim.ts`.
-*   **To tweak the UI layout**: Start in `src/App.tsx` and check the corresponding component in `src/components/`.
-*   **To add a new political issue/axis**: Update `PoliticalValues` in `src/types/sim.ts` and initialize it in helpers in `src/lib/sim.ts`.
+### UI Components (`src/components/` — 12 files)
+
+| Component | Purpose |
+|-----------|---------|
+| `App.tsx` | Top-level state: world, menu, modals. All handlers defined here. |
+| `SeatBar.tsx` | Horizontal council seat bar. Opens `StatisticsModal` on click. |
+| `MapFigure.tsx` | SVG map with ward/bloc/voter/redistrict modes. Drag seeds to gerrymander. |
+| `CampaignActionsPanel.tsx` | Campaign UI: event cards, ward poll, action cards, auto-campaigns, alliance proposals (pact builder), NPC proposals, active pacts display |
+| `ConstituencyInspector.tsx` | Ward detail: demographics, ideology fit, history, campaign activity |
+| `StatisticsModal.tsx` | Full-screen stats: standings, trends, closest/safest seats, vote history chart, party detail, councillor turnover, longest serving |
+| `ElectionNightModal.tsx` | Click-to-reveal election results, seat comparison, copy results |
+| `CoalitionModal.tsx` | Post-election: invite/accept coalition, minority government, opposition |
+| `GovernanceModal.tsx` | Council decisions during governing phase |
+| `SetupScreen.tsx` | Town generation, ward count, party picker/editor, UK names button, load game |
+| `ActionFlash.tsx` | Toast notification for action results |
+| `VoteHistoryChart.tsx` | SVG sparkline chart for vote share over time |
+| `IdeologyWidget.tsx` | Three-bar position graphic for party/ward values |
+
+### Styling
+`src/App.css` (~66KB) — newspaper aesthetic with serif fonts, ink-style buttons. Key mobile breakpoints at 720px and 900px.
+
+## Alliance System Architecture
+
+### Data flow
+1. Pact created → stored in `world.alliancePacts` with `playerEndorsementValue` and `allyEndorsementValue` (standing-down party's pre-pact vote shares)
+2. `allianceModifier` (called per-tile in `estimateTilePreference`):
+   - Standing-down party → score = -999 (removed from ballot)
+   - Receiving party → endorsement bonus = stored_value × 0.01
+3. Unilateral pacts (`standingDownIn === allyStandsDownIn`): only initiator stands down, ally gets free endorsement
+
+### Acceptance
+- `evaluateAllianceAcceptance`: target hopeless + initiator close + ideology × 0.25 - reputation - winning penalty (share/leaderShare × 0.40) - incumbency (-0.70)
+- `deterministicAcceptance`: uses hash-based seed for stable results within a week. Adds +0.05 per extra ward in batch
+- UI shows ✓/✗ per ward pair (not percentages)
+
+### Pact builder UI
+Single-page two-column layout: "They stand down in" (left) + "You stand down in return" (right). Checkboxes on both sides. Live acceptance bar shows how many combinations will accept. Auto-suggest buttons. Rejected pairs listed with breakdown.
+
+### NPC pacts
+- 5% chance per NPC party per week to propose (no AP cost)
+- NPC-to-player proposals shown as gold-bordered prompt with Accept/Reject
+- Pacts reviewed every 4 weeks: break if standing-down party is now leading comfortably (>20pt margin)
+
+### Pact lifecycle
+- Pacts persist across elections (no auto-expiry)
+- Player can break any pact (0 AP, reputation penalty)
+- NPCs only break via periodic review
+
+## Coalition Government
+
+After elections with No Overall Control, `CoalitionModal` opens:
+- If player is largest party: propose to others
+- If player is not largest: receive invitation from largest party
+- Coalition: 2 governance decisions, partner's utility affected
+- Minority: 1 decision, -0.03 utility penalty
+- Opposition: no governance
+- `blocEffects` on governance decisions applied to coalition partner's baseUtility
+
+## Redistricting
+
+Map mode 'redistrict': drag Voronoi seed points to reshape wards. Tiles reassigned to nearest seed on drop. Done recalcs aggregates, regenerates cellPaths, re-runs calculateResults. Reset restores original boundaries from snapshot.
+
+## Key Constants
+- MAP_WIDTH: 920, MAP_HEIGHT: 640, GRID_STEP: 18
+- Majority = floor(wardCount/2) + 1
+- Player AP: 5 per week, auto-campaign drain cap: 3 AP/week
+- Election cycle: 24 weeks (start 8-20 weeks before first election)
 
 ## Tech Stack
-*   React 18
-*   TypeScript
-*   Vite
-*   d3-delaunay (for Voronoi/Delaunay map geometry)
+- React 19 + TypeScript ~5.9 + Vite 8
+- d3-delaunay (Voronoi/Delaunay)
+- No test framework
+- Deployed to GitHub Pages on push to `master`
