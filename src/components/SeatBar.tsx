@@ -8,6 +8,17 @@ export function SeatBar({ world, onOpenStats }: {
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
 
+  const govLabel = (() => {
+    if (world.coalitionPartnerId) {
+      const partner = world.parties.find((p) => p.id === world.coalitionPartnerId)
+      return `Coalition with ${partner?.name ?? world.coalitionPartnerId}`
+    }
+    if (world.minorityGovernment) return 'Minority Government'
+    if (world.needsCoalition) return 'Hung Council'
+    if (world.isGoverning) return 'Majority Government'
+    return null
+  })()
+
   return (
     <div className="seat-bar-wrap">
       <button
@@ -40,7 +51,7 @@ export function SeatBar({ world, onOpenStats }: {
             ) : null
           })()}
         </div>
-        <span className="seat-bar-majority-label">{majority} for majority</span>
+        <span className="seat-bar-majority-label">{govLabel ? `${govLabel} · ` : ''}{majority} for majority</span>
         <span className="seat-bar-expand-hint">{'📊'}</span>
       </button>
     </div>
