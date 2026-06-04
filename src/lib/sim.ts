@@ -3746,6 +3746,9 @@ export function updateCouncillorTenure(seed: number, week: number, results: Arra
         colour: r.winnerColour,
       }
     } else {
+      const hist = existing
+        ? { name: existing.name, partyName: existing.partyName, colour: existing.colour, termsServed: existing.termsServed, firstElectedWeek: existing.firstElectedWeek, lastElectedWeek: existing.lastElectedWeek }
+        : null
       registry[r.wardId] = {
         wardId: r.wardId,
         wardName: r.wardName,
@@ -3755,6 +3758,7 @@ export function updateCouncillorTenure(seed: number, week: number, results: Arra
         termsServed: 1,
         firstElectedWeek: week,
         lastElectedWeek: week,
+        history: hist ? [...(existing?.history ?? []), hist] : (existing?.history ?? []),
       }
     }
   }

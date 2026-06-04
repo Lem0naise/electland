@@ -398,6 +398,15 @@ export interface PartyEdit {
   values?: PoliticalValues
 }
 
+export interface CouncillorTenureHistory {
+  name: string
+  partyName: string
+  colour: string
+  termsServed: number
+  firstElectedWeek: number
+  lastElectedWeek: number
+}
+
 export interface CouncillorTenure {
   wardId: string
   wardName: string
@@ -407,4 +416,5 @@ export interface CouncillorTenure {
   termsServed: number
   firstElectedWeek: number
   lastElectedWeek: number
+  history: CouncillorTenureHistory[]
 }

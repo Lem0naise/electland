@@ -1,4 +1,5 @@
-import { axisSummary, describeValues, formatPopulation, IDEOLOGY_AXES, topBlocEntries, wardFitSentence } from '../lib/sim'
+import { useState } from 'react'
+import { axisSummary, describeValues, formatPopulation, IDEOLOGY_AXES, loadCouncillorTenure, topBlocEntries, wardFitSentence } from '../lib/sim'
 import type { Constituency, MapMode, PopulationTile, TilePreferenceEstimate, World } from '../types/sim'
 
 interface ConstituencyInspectorProps {
@@ -61,6 +62,19 @@ export function ConstituencyInspector({
   const topTileParty = selectedTileEstimate?.rankings[0]
   const secondTileParty = selectedTileEstimate?.rankings[1]
   const tileLeadMargin = topTileParty && secondTileParty ? topTileParty.support - secondTileParty.support : null
+
+  const [historyTab, setHistoryTab] = useState<'polling' | 'reps'>('polling')
+
+  const tenureRegistry = world ? loadCouncillorTenure(world.seed) : {}
+  const wardTenure = selectedWard ? tenureRegistry[selectedWard.id] : undefined
+
+  const allReps: Array<{ name: string; partyName: string; colour: string; termsServed: number; firstElectedWeek: number; lastElectedWeek: number; isCurrent: boolean }> = []
+  if (wardTenure) {
+    allReps.push({ name: wardTenure.name, partyName: wardTenure.partyName, colour: wardTenure.colour, termsServed: wardTenure.termsServed, firstElectedWeek: wardTenure.firstElectedWeek, lastElectedWeek: wardTenure.lastElectedWeek, isCurrent: true })
+    for (const h of [...(wardTenure.history ?? [])].reverse()) {
+      allReps.push({ ...h, isCurrent: false })
+    }
+  }
 
   return (
     <section className="panel constituency-panel">
@@ -217,57 +231,79 @@ export function ConstituencyInspector({
           })()}
           
 
-          {/* Ward history */}
+          {/* History tabs */}
           {selectedWard.history.length > 0 && (
             <div>
-              <h4>History</h4>
-              <div className="ward-history-scroll">
-                {(() => {
-                  // Show all history, newest first
-                  const reversed = [...selectedWard.history].reverse()
-                  // Scale bars: widest margin in this ward's history = 100%
-                  const maxMargin = Math.max(...reversed.map((e) => e.margin), 1)
-
-                  return reversed.map((entry, i) => {
-                    const party = world.parties.find((p) => p.id === entry.leadingPartyId)
-                    const olderEntry = reversed[i + 1]
-                    const leaderChanged = olderEntry != null && olderEntry.leadingPartyId !== entry.leadingPartyId
-                    const yourPartyGained = leaderChanged && entry.leadingPartyId === playerPartyId
-                    const yourPartyLost = leaderChanged && olderEntry.leadingPartyId === playerPartyId
-                    const barWidth = (entry.margin / maxMargin) * 100
-
-                    return (
-                      <div key={entry.week} className="history-item">
-                        <span className="history-week">Wk {entry.week}</span>
-                        <span
-                          className="history-swatch"
-                          style={{ background: party?.colour ?? '#888' }}
-                        />
-                        <span className="history-party">{party?.name ?? entry.leadingPartyId}</span>
-                        {/* Badge slot — always present to keep grid alignment */}
-                        <span className="history-badge-slot">
-                          {yourPartyGained && <span className="history-change held">GAIN</span>}
-                          {yourPartyLost && <span className="history-change lost">LOSS</span>}
-                          {leaderChanged && !yourPartyGained && !yourPartyLost && (
-                            <span className="history-change neutral">FLIP</span>
-                          )}
-                        </span>
-                        {/* Margin bar, coloured by party */}
-                        <div className="history-bar-wrap">
-                          <div
-                            className="history-bar-fill"
-                            style={{
-                              width: `${barWidth}%`,
-                              background: party?.colour ?? '#888',
-                            }}
-                          />
-                        </div>
-                        <span className="history-margin">+{entry.margin.toFixed(1)}</span>
-                      </div>
-                    )
-                  })
-                })()}
+              <div className="history-tabs">
+                <button type="button" className={`history-tab${historyTab === 'polling' ? ' is-active' : ''}`} onClick={() => setHistoryTab('polling')}>Polling</button>
+                <button type="button" className={`history-tab${historyTab === 'reps' ? ' is-active' : ''}`} onClick={() => setHistoryTab('reps')}>Representatives</button>
               </div>
+
+              {historyTab === 'polling' && (
+                <div className="ward-history-scroll">
+                  {(() => {
+                    const reversed = [...selectedWard.history].reverse()
+                    const maxMargin = Math.max(...reversed.map((e) => e.margin), 1)
+
+                    return reversed.map((entry, i) => {
+                      const party = world.parties.find((p) => p.id === entry.leadingPartyId)
+                      const olderEntry = reversed[i + 1]
+                      const leaderChanged = olderEntry != null && olderEntry.leadingPartyId !== entry.leadingPartyId
+                      const yourPartyGained = leaderChanged && entry.leadingPartyId === playerPartyId
+                      const yourPartyLost = leaderChanged && olderEntry.leadingPartyId === playerPartyId
+                      const barWidth = (entry.margin / maxMargin) * 100
+
+                      return (
+                        <div key={entry.week} className="history-item">
+                          <span className="history-week">Wk {entry.week}</span>
+                          <span
+                            className="history-swatch"
+                            style={{ background: party?.colour ?? '#888' }}
+                          />
+                          <span className="history-party">{party?.name ?? entry.leadingPartyId}</span>
+                          <span className="history-badge-slot">
+                            {yourPartyGained && <span className="history-change held">GAIN</span>}
+                            {yourPartyLost && <span className="history-change lost">LOSS</span>}
+                            {leaderChanged && !yourPartyGained && !yourPartyLost && (
+                              <span className="history-change neutral">FLIP</span>
+                            )}
+                          </span>
+                          <div className="history-bar-wrap">
+                            <div
+                              className="history-bar-fill"
+                              style={{
+                                width: `${barWidth}%`,
+                                background: party?.colour ?? '#888',
+                              }}
+                            />
+                          </div>
+                          <span className="history-margin">+{entry.margin.toFixed(1)}</span>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              )}
+
+              {historyTab === 'reps' && (
+                <div>
+                  <div className="ward-history-scroll">
+                    {allReps.length === 0 ? (
+                      <span className="rep-empty">No election data yet</span>
+                    ) : (
+                      allReps.map((r, i) => (
+                        <div key={i} className={`rep-row${r.isCurrent ? ' is-current' : ''}`}>
+                          <span className="rep-swatch" style={{ background: r.colour }} />
+                          <span className="rep-name">{r.name}</span>
+                          <span className="rep-party">({r.partyName})</span>
+                          <span className="rep-terms">{r.termsServed} term{r.termsServed !== 1 ? 's' : ''}</span>
+                          {r.isCurrent && <span className="rep-inc-tag">INC</span>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -1196,7 +1196,7 @@ button, input, select, textarea { font: inherit; }
   padding: 5px 10px 5px 8px;
 }
 .fwp-cand-bar-track {
-  height: 10px;
+  height: 22px;
   background: rgba(0,0,0,0.07);
   border-radius: 5px;
   overflow: hidden;
@@ -1482,6 +1482,45 @@ div.action-card { }
 .history-change.held { color: #1a5c2a; border-color: rgba(26,92,42,0.4); background: rgba(26,92,42,0.07); }
 .history-change.lost { color: var(--accent-red); border-color: rgba(155,28,28,0.4); background: rgba(155,28,28,0.07); }
 .history-change.neutral { color: var(--ink-soft); border-color: var(--ink-faint); }
+
+/* History tabs */
+.history-tabs { display: flex; gap: 3px; margin-bottom: 4px; }
+.history-tab {
+  appearance: none;
+  flex: 1;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.3);
+  color: var(--ink-mid);
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 120ms ease;
+}
+.history-tab.is-active { background: var(--ink-mid); color: #f8f0dd; border-color: var(--ink); }
+
+/* Representative rows */
+.rep-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ink-faint);
+  font-size: 0.68rem;
+  transition: background 100ms;
+}
+.rep-row:hover { background: rgba(255,255,255,0.35); }
+.rep-row:last-child { border-bottom: none; }
+.rep-row.is-current { background: rgba(26,92,42,0.06); font-weight: 600; }
+.rep-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.rep-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-party { color: var(--ink-soft); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-terms { margin-left: auto; color: var(--ink-soft); font-size: 0.62rem; white-space: nowrap; flex-shrink: 0; }
+.rep-inc-tag { font-size: 0.52rem; color: #1a5c2a; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.rep-empty { display: block; padding: 8px 6px; font-size: 0.66rem; color: var(--ink-soft); font-style: italic; text-align: center; }
 
 /* Incumbent badge */
 .incumbent-badge {
@@ -2023,7 +2062,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   .fwp-cand-name { font-size: 0.68rem; }
   .fwp-cand-party { font-size: 0.56rem; }
   .fwp-cand-bar-col { padding: 3px 7px 3px 5px; }
-  .fwp-cand-bar-track { height: 8px; }
+  .fwp-cand-bar-track { height: 18px; }
   .fwp-cand-pct { font-size: 0.7rem; }
   .fwp-status { padding: 3px 7px; font-size: 0.64rem; }
   .campaign-no-ward { font-size: 0.68rem; padding: 6px 0; }
@@ -3045,29 +3084,6 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .stats-incumbency-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stats-incumbency-ward { font-size: 0.66rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Tenure rows */
-.stats-tenure-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.stats-tenure-row {
-  display: grid;
-  grid-template-columns: 24px 10px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) 56px 68px;
-  gap: 5px;
-  align-items: center;
-  font-size: 0.72rem;
-  padding: 3px 5px;
-  border: 1px solid var(--ink-faint);
-  background: rgba(255,255,255,0.35);
-}
-.stats-tenure-rank { font-size: 0.64rem; color: var(--ink-soft); font-weight: 700; }
-.stats-tenure-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(44,31,14,0.25); }
-.stats-tenure-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stats-tenure-party { font-size: 0.67rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stats-tenure-ward { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stats-tenure-terms { font-weight: 700; text-align: right; }
-.stats-tenure-since { font-size: 0.64rem; color: var(--ink-soft); text-align: right; }
 
 @media (max-width: 900px) {
   .stats-modal { max-width: none; width: auto; margin: 0 2px; padding: 6px 8px; }
@@ -3107,7 +3123,6 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   .spm-label { font-size: 0.52rem; }
   .spm-value { font-size: 0.68rem; }
   .stats-party-ward-row { font-size: 0.64rem; }
-  .stats-tenure-row { font-size: 0.62rem; grid-template-columns: 20px 9px 1fr 1fr 60px 50px; gap: 3px; }
   .stats-trend-row { font-size: 0.64rem; }
   .stats-projection { padding: 4px 5px; }
   .stats-proj-outcome { font-size: 0.7rem; }

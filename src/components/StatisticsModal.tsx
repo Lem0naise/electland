@@ -211,6 +211,123 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
             </div>
           </div>
 
+          {/* ── Incumbency ──────────────────────────────────────────────── */}
+          {world.electionsHeld >= 1 && (() => {
+            const tenure = loadCouncillorTenure(world.seed)
+            const reElected: Array<{ ward: string; wardId: string; name: string; party: string; colour: string; terms: number }> = []
+            const defeated: Array<{ ward: string; wardId: string; name: string; party: string; colour: string; terms: number }> = []
+            const newFaces: Array<{ ward: string; name: string; party: string; colour: string }> = []
+            const heldBySameParty: Array<{ ward: string; name: string; party: string; colour: string; terms: number }> = []
+
+            for (const r of world.electionNightResults) {
+              const prevName = r.previousWinnerCandidateName
+              const currName = r.winner?.name
+              const prevParty = r.previousWinnerPartyName
+              const currParty = r.winner?.partyName
+              const currColour = r.winner?.partyColour
+              const t = tenure[r.wardId]
+              const currTerms = t?.name === currName ? t.termsServed : 0
+
+              if (prevName && currName && prevParty === currParty && prevName === currName) {
+                reElected.push({ ward: r.wardName, wardId: r.wardId, name: currName, party: currParty, colour: currColour, terms: currTerms })
+              } else if (prevName && currName && prevParty === currParty && prevName !== currName) {
+                heldBySameParty.push({ ward: r.wardName, name: currName, party: currParty, colour: currColour, terms: currTerms })
+              } else if (prevName && prevParty !== currParty) {
+                const prevTerms = prevName === t?.name ? 0 : (t?.history.find((h) => h.name === prevName)?.termsServed ?? 0)
+                defeated.push({ ward: r.wardName, wardId: r.wardId, name: prevName, party: prevParty ?? '?', colour: r.previousWinnerColour ?? '#888', terms: prevTerms })
+                if (currName) {
+                  newFaces.push({ ward: r.wardName, name: currName, party: currParty ?? '?', colour: currColour })
+                }
+              } else if (currName && !prevName) {
+                newFaces.push({ ward: r.wardName, name: currName, party: currParty ?? '?', colour: currColour })
+              }
+            }
+
+            reElected.sort((a, b) => b.terms - a.terms)
+            defeated.sort((a, b) => b.terms - a.terms)
+
+            return (
+              <div className="stats-section">
+                <div className="stats-section-label">Councillor turnover</div>
+                <div className="stats-grid-three">
+                  <div className="stats-grid-card">
+                    <div className="stats-grid-card-label">
+                      Re-elected ({reElected.length})
+                    </div>
+                    {reElected.length === 0 ? (
+                      <span className="stats-empty-hint">No councillors were re-elected.</span>
+                    ) : (
+                      <div className="stats-incumbency-list">
+                        {reElected.map((c, i) => (
+                          <div key={i} className="stats-incumbency-row">
+                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
+                            <span className="stats-incumbency-name">{c.name}{c.terms > 0 ? ` · ${c.terms} term${c.terms !== 1 ? 's' : ''}` : ''}</span>
+                            <span className="stats-incumbency-ward">{c.ward}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="stats-grid-card">
+                    <div className="stats-grid-card-label">
+                      New faces ({newFaces.length})
+                    </div>
+                    {newFaces.length === 0 ? (
+                      <span className="stats-empty-hint">No new councillors this election.</span>
+                    ) : (
+                      <div className="stats-incumbency-list">
+                        {newFaces.map((c, i) => (
+                          <div key={i} className="stats-incumbency-row">
+                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
+                            <span className="stats-incumbency-name">{c.name}</span>
+                            <span className="stats-incumbency-ward">{c.ward}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="stats-grid-card">
+                    <div className="stats-grid-card-label">
+                      Defeated ({defeated.length})
+                    </div>
+                    {defeated.length === 0 ? (
+                      <span className="stats-empty-hint">All incumbents held their seats.</span>
+                    ) : (
+                      <div className="stats-incumbency-list">
+                        {defeated.map((c, i) => (
+                          <div key={i} className="stats-incumbency-row">
+                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
+                            <span className="stats-incumbency-name">{c.name}{c.terms > 0 ? ` · ${c.terms} term${c.terms !== 1 ? 's' : ''}` : ''}</span>
+                            <span className="stats-incumbency-ward">{c.ward}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {heldBySameParty.length > 0 && (
+                  <div className="stats-grid-card" style={{ marginTop: 4 }}>
+                    <div className="stats-grid-card-label">
+                      Same party, new candidate ({heldBySameParty.length})
+                    </div>
+                    <div className="stats-incumbency-list">
+                      {heldBySameParty.map((c, i) => (
+                        <div key={i} className="stats-incumbency-row">
+                          <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
+                          <span className="stats-incumbency-name">{c.name}{c.terms > 0 ? ` · ${c.terms} term${c.terms !== 1 ? 's' : ''}` : ''}</span>
+                          <span className="stats-incumbency-ward">{c.ward}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* ── 3-column card grid ───────────────────────────────────────── */}
           <div className="stats-grid-three">
             {/* Closest seats */}
@@ -295,147 +412,6 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
               </div>
             </div>
           </div>
-
-          {/* ── Incumbency ──────────────────────────────────────────────── */}
-          {world.electionsHeld >= 1 && (() => {
-            const reElected: Array<{ ward: string; name: string; party: string; colour: string }> = []
-            const defeated: Array<{ ward: string; name: string; party: string; colour: string }> = []
-            const newFaces: Array<{ ward: string; name: string; party: string; colour: string }> = []
-            const heldBySameParty: Array<{ ward: string; name: string; party: string; colour: string }> = []
-
-            for (const r of world.electionNightResults) {
-              const prevName = r.previousWinnerCandidateName
-              const currName = r.winner?.name
-              const prevParty = r.previousWinnerPartyName
-              const currParty = r.winner?.partyName
-              const prevColour = r.previousWinnerColour
-              const currColour = r.winner?.partyColour
-
-              if (prevName && currName && prevParty === currParty && prevName === currName) {
-                reElected.push({ ward: r.wardName, name: currName, party: currParty, colour: currColour })
-              } else if (prevName && currName && prevParty === currParty && prevName !== currName) {
-                heldBySameParty.push({ ward: r.wardName, name: currName, party: currParty, colour: currColour })
-              } else if (prevName && prevParty !== currParty) {
-                defeated.push({ ward: r.wardName, name: prevName, party: prevParty ?? '?', colour: prevColour ?? '#888' })
-                if (currName) {
-                  newFaces.push({ ward: r.wardName, name: currName, party: currParty ?? '?', colour: currColour })
-                }
-              } else if (currName && !prevName) {
-                newFaces.push({ ward: r.wardName, name: currName, party: currParty ?? '?', colour: currColour })
-              }
-            }
-
-            return (
-              <div className="stats-section">
-                <div className="stats-section-label">Councillor turnover</div>
-                <div className="stats-grid-three">
-                  <div className="stats-grid-card">
-                    <div className="stats-grid-card-label">
-                      Re-elected ({reElected.length})
-                    </div>
-                    {reElected.length === 0 ? (
-                      <span className="stats-empty-hint">No councillors were re-elected.</span>
-                    ) : (
-                      <div className="stats-incumbency-list">
-                        {reElected.map((c, i) => (
-                          <div key={i} className="stats-incumbency-row">
-                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
-                            <span className="stats-incumbency-name">{c.name}</span>
-                            <span className="stats-incumbency-ward">{c.ward}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="stats-grid-card">
-                    <div className="stats-grid-card-label">
-                      New faces ({newFaces.length})
-                    </div>
-                    {newFaces.length === 0 ? (
-                      <span className="stats-empty-hint">No new councillors this election.</span>
-                    ) : (
-                      <div className="stats-incumbency-list">
-                        {newFaces.map((c, i) => (
-                          <div key={i} className="stats-incumbency-row">
-                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
-                            <span className="stats-incumbency-name">{c.name}</span>
-                            <span className="stats-incumbency-ward">{c.ward}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="stats-grid-card">
-                    <div className="stats-grid-card-label">
-                      Defeated ({defeated.length})
-                    </div>
-                    {defeated.length === 0 ? (
-                      <span className="stats-empty-hint">All incumbents held their seats.</span>
-                    ) : (
-                      <div className="stats-incumbency-list">
-                        {defeated.map((c, i) => (
-                          <div key={i} className="stats-incumbency-row">
-                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
-                            <span className="stats-incumbency-name">{c.name}</span>
-                            <span className="stats-incumbency-ward">{c.ward}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {heldBySameParty.length > 0 && (
-                  <div className="stats-grid-card" style={{ marginTop: 4 }}>
-                    <div className="stats-grid-card-label">
-                      Same party, new candidate ({heldBySameParty.length})
-                    </div>
-                    <div className="stats-incumbency-list">
-                      {heldBySameParty.map((c, i) => (
-                        <div key={i} className="stats-incumbency-row">
-                          <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
-                          <span className="stats-incumbency-name">{c.name}</span>
-                          <span className="stats-incumbency-ward">{c.ward}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* ── Longest serving councillors ────────────────────────────── */}
-          {world.electionsHeld >= 1 && (() => {
-            const tenure = loadCouncillorTenure(world.seed)
-            const sorted = Object.values(tenure).sort((a, b) => b.termsServed - a.termsServed || b.lastElectedWeek - a.lastElectedWeek)
-            if (sorted.length === 0) return null
-
-            return (
-              <div className="stats-section">
-                <div className="stats-section-label">Longest serving councillors</div>
-                <div className="stats-tenure-list">
-                  {sorted.map((c, i) => (
-                    <div key={c.wardId} className="stats-tenure-row">
-                      <span className="stats-tenure-rank">#{i + 1}</span>
-                      <span className="stats-tenure-swatch" style={{ background: c.colour }} />
-                      <span className="stats-tenure-name">{c.name}</span>
-                      <span className="stats-tenure-party">{c.partyName}</span>
-                      <span className="stats-tenure-ward">{c.wardName}</span>
-                      <span className="stats-tenure-terms">
-                        {c.termsServed} term{c.termsServed !== 1 ? 's' : ''}
-                      </span>
-                      <span className="stats-tenure-since">
-                        since wk {c.firstElectedWeek}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })()}
 
           {/* ── Vote history chart ──────────────────────────────────────── */}
           {world.voteHistory.length >= 2 && (
