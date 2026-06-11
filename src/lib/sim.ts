@@ -1818,6 +1818,8 @@ export function calculateResults(world: World) {
     seat.leadingPartyName = winner.partyName
     seat.margin = winner.voteShare - runnerUp.voteShare
     seat.turnout = totalVotes / Math.max(1, seat.population)
+    const winnerCandidate = seat.candidates.find((c) => c.partyId === winner.partyId)
+    seat.currentWinner = winnerCandidate ?? seat.candidates[0]
   })
 
   const totalVotes = [...partyVotes.values()].reduce((sum, value) => sum + value, 0)
@@ -1991,18 +1993,18 @@ function evaluateAllianceAcceptance(
     : Math.max(0, 1 - (targetResultInInitiatorWard?.voteShare ?? 100) / 25) * 0.30
   const initiatorCloseInTarget = Math.min(1, (initiatorResultInTargetWard?.voteShare ?? 0) / 25) * 0.25
 
-  // Incumbent check: if target won this ward at the last election, they'll almost certainly refuse
+  // Incumbent check: if target won this ward at the last election, they refuse outright
   const isIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
     (r) => r.wardId === targetWardId && r.winner?.partyId === targetId
   )
-  const incumbencyPenalty = isIncumbent ? 0.70 : 0
+  if (isIncumbent) return -999
 
   const valueDist = valueDistance(initiatorParty.values, targetParty.values, { change: 1, growth: 1, services: 1 })
   const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
-  return targetHopelessInInitiator + initiatorCloseInTarget + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested - incumbencyPenalty
+  return targetHopelessInInitiator + initiatorCloseInTarget + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
 }
 
 function acceptanceSeed(world: World, initiatorId: string, targetId: string, _initiatorWardId: string, _targetWardId: string): number {
@@ -2024,6 +2026,7 @@ function deterministicAcceptance(
   batchSize = 1,
 ): { accepted: boolean; chance: number; roll: number } {
   const baseChance = evaluateAllianceAcceptance(world, initiatorId, targetId, initiatorWardId, targetWardId)
+  if (baseChance <= -998) return { accepted: false, chance: 0, roll: 0 }
   const multiBonus = (batchSize - 1) * 0.10
   const totalChance = Math.max(0.05, Math.min(0.85, baseChance + multiBonus))
   const roll = acceptanceSeed(world, initiatorId, targetId, initiatorWardId, targetWardId)
@@ -2217,39 +2220,62 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
     return { ...party, aiActionPoints: ap, wardBoosts: boosts }
   })
 
-  // Periodic NPC pact review: every 4 weeks, NPCs evaluate whether to keep pacts
+  // Periodic NPC pact review: every 4 weeks, evaluate whether to keep pacts
   if (world.week % 4 === 0) {
     for (const pact of world.alliancePacts) {
       if (pact.broken) continue
-      if (pact.partyAId === world.playerPartyId || pact.partyBId === world.playerPartyId) continue
 
       let breakPact = false
-      let breakReasonPartyId: string | null = null
+      let breakReason: string | null = null
 
       for (const entry of pact.entries) {
         const wardA = world.constituencies.find((c) => c.id === entry.wardA)
         const wardB = world.constituencies.find((c) => c.id === entry.wardB)
         if (!wardA || !wardB) continue
 
-        const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 20
-        const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 20
+        if (world.week >= pact.expiresWeek) {
+          breakPact = true
+          breakReason = 'expired'
+          break
+        }
+
+        const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 10
+        const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 10
 
         if (partyANowWinning) {
           breakPact = true
-          breakReasonPartyId = pact.partyAId
+          breakReason = pact.partyAId
           break
         }
         if (partyBNowWinning) {
           breakPact = true
-          breakReasonPartyId = pact.partyBId
+          breakReason = pact.partyBId
+          break
+        }
+
+        const partyAWinningB = wardB.leadingPartyId === pact.partyAId && wardB.margin > 8
+        const partyBWinningA = wardA.leadingPartyId === pact.partyBId && wardA.margin > 8
+
+        if (partyAWinningB) {
+          breakPact = true
+          breakReason = pact.partyAId
+          break
+        }
+        if (partyBWinningA) {
+          breakPact = true
+          breakReason = pact.partyBId
           break
         }
       }
 
-      if (breakPact && breakReasonPartyId) {
+      if (breakPact) {
         pact.broken = true
-        const partyName = world.parties.find((p) => p.id === breakReasonPartyId)?.name ?? '?'
-        newsFeedLines.push(`${partyName} breaks their alliance pact — they're now too strong in their ward.`)
+        if (breakReason === 'expired') {
+          newsFeedLines.push(`An alliance pact has expired at the end of the election cycle.`)
+        } else {
+          const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
+          newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
+        }
       }
     }
   }
@@ -2503,8 +2529,6 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
         }
       }
 
-      const batchSize = entries.length
-
       const playerCommitted = new Set<string>()
       const allyCommitted = new Set<string>()
       for (const p of world.alliancePacts) {
@@ -2516,6 +2540,9 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
           if (p.partyBId === allyParty.id) allyCommitted.add(e.wardB)
         }
       }
+
+      const eligible = entries.filter((e) => !e.isUnilateral && !playerCommitted.has(e.wardA) && !allyCommitted.has(e.wardB))
+      const batchSize = Math.max(1, eligible.length)
 
       const acceptedEntries: AlliancePactEntry[] = []
       for (const entry of entries) {
@@ -2659,7 +2686,7 @@ export function generateWorld(options: WorldOptions): World {
   // Give the player party slightly lower initial stats to make them underdog
   parties = parties.map((p) => {
     if (p.id === defaultPlayerPartyId) {
-      return { ...p, organization: p.organization * 0.78, baseUtility: p.baseUtility - 0.04 }
+      return { ...p }
     }
     return p
   })
@@ -2836,7 +2863,7 @@ export function simulateWeek(world: World): World {
   // Build election night results if election is happening
   const electionNightResults = electionHappening
     ? results.constituencies.map((seat) => {
-        const winner = seat.candidates.find((c) => c.partyId === seat.leadingPartyId)
+        const winner = seat.currentWinner
         // Previous election winner for this ward (from persisted electionNightResults)
         const prevElectionEntry = world.electionsHeld > 0
           ? world.electionNightResults.find((r) => r.wardId === seat.id)
@@ -2863,7 +2890,7 @@ export function simulateWeek(world: World): World {
         return {
           wardId: seat.id,
           wardName: seat.name,
-          winner: winner ?? seat.candidates[0],
+          winner: winner!,
           results: seat.results,
           swingFromLastElection,
           wasHeld,
@@ -3372,7 +3399,7 @@ export function suggestPacts(world: World, allyPartyId: string, batchSize = 1): 
           breakdown.push({ label: 'They\'re leading here', value: `-${winPct}%` })
         }
         if (incPct > 0) {
-          breakdown.push({ label: 'Incumbent won\'t stand down', value: `-${incPct}%` })
+          breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
         }
 
         const det = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, batchSize)
@@ -3473,7 +3500,7 @@ export function reciprocalWards(world: World, allyPartyId: string, allyWardId: s
         breakdown.push({ label: 'Their votes here', value: `${theirShareInOurWard.toFixed(1)}%` })
       }
       if (incumbencyPenalty > 0) {
-        breakdown.push({ label: 'Incumbent won\'t stand down', value: `-${Math.round(incumbencyPenalty * 100)}%` })
+        breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
       }
 
       const det2 = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id)

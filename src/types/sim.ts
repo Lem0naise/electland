@@ -151,6 +151,7 @@ export interface Constituency {
   leadingPartyName: string
   margin: number
   candidates: WardCandidate[]
+  currentWinner?: WardCandidate
   // History of leading party + margin each week
   history: Array<{ week: number; leadingPartyId: string; margin: number; results: ConstituencyResult[] }>
 }

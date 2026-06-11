@@ -653,6 +653,30 @@ button, input, select, textarea { font: inherit; }
   border-radius: 2px;
 }
 
+.setup-edit-ideology {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+.setup-edit-field-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+.setup-edit-slider {
+  display: grid;
+  grid-template-columns: 62px 1fr 36px;
+  gap: 6px;
+  align-items: center;
+}
+.setup-edit-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--ink-mid);
+}
+.slider-value { font-size: 0.68rem; text-align: right; font-weight: 600; }
+
 /* Minor party section label — flat, not a dropdown */
 .setup-minor-group {
   margin-top: 6px;
@@ -2597,6 +2621,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   align-items: center;
   gap: 4px;
   font-size: 0.58rem;
+  flex-wrap: wrap;
 }
 .alliance-break-confirm-text { color: var(--ink-soft); }
 .alliance-break-btn.is-confirm {

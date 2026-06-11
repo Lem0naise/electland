@@ -78,11 +78,11 @@ export function SetupScreen({
   function applyUKNames() {
     if (!world) return
     const ukColourNames: Array<{ colour: string; name: string; values: { change: number; growth: number; services: number } }> = [
-      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -20, growth: 30, services: -8 } },
-      { colour: '#E4003B', name: 'Labour', values: { change: 25, growth: 5, services: 45 } },
-      { colour: '#FAA61A', name: 'Lib Dems', values: { change: 15, growth: 10, services: 15 } },
-      { colour: '#02A95B', name: 'Green Party', values: { change: 45, growth: -35, services: 30 } },
-      { colour: '#70147A', name: 'Reform UK', values: { change: -50, growth: 20, services: -30 } },
+      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -30, growth: 25, services: -15 } },
+      { colour: '#E4003B', name: 'Labour', values: { change: 15, growth: 5, services: 35 } },
+      { colour: '#FAA61A', name: 'Lib Dems', values: { change: 10, growth: 15, services: 20 } },
+      { colour: '#02A95B', name: 'Green Party', values: { change: 40, growth: -35, services: 30 } },
+      { colour: '#70147A', name: 'Reform UK', values: { change: -45, growth: 15, services: -35 } },
     ]
 
     function hexDist(a: string, b: string) {
@@ -264,6 +264,32 @@ export function SetupScreen({
                               />
                               <span className="colour-preview" style={{ background: edit.colour }} />
                             </label>
+                            <div className="setup-edit-ideology">
+                              <span className="setup-edit-field-label">Ideology</span>
+                              {(['change', 'growth', 'services'] as const).map((axis) => {
+                                const val = edit.values?.[axis] ?? party.values[axis]
+                                const axisLabel = { change: 'Reform', growth: 'Business', services: 'Services' }[axis]
+                                return (
+                                  <label key={axis} className="setup-edit-field setup-edit-slider">
+                                    <span>{axisLabel}</span>
+                                    <input
+                                      type="range"
+                                      min={-100}
+                                      max={100}
+                                      value={val}
+                                      onChange={(e) => {
+                                        const v = Number(e.target.value)
+                                        const cur = edit.values ?? { ...party.values }
+                                        const next = { ...cur, [axis]: v }
+                                        updateEdit(party.id, { values: next })
+                                        onSavePartyEdit({ ...edit, values: next })
+                                      }}
+                                    />
+                                    <span className="slider-value">{val}</span>
+                                  </label>
+                                )
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -337,6 +363,30 @@ export function SetupScreen({
                                   />
                                   <span className="colour-preview" style={{ background: edit.colour }} />
                                 </label>
+                                <div className="setup-edit-ideology">
+                                  <span className="setup-edit-field-label">Ideology</span>
+                                  {(['change', 'growth', 'services'] as const).map((axis) => {
+                                    const val = edit.values?.[axis] ?? party.values[axis]
+                                    const axisLabel = { change: 'Reform', growth: 'Business', services: 'Services' }[axis]
+                                    return (
+                                      <label key={axis} className="setup-edit-field setup-edit-slider">
+                                        <span>{axisLabel}</span>
+                                        <input
+                                          type="range"
+                                          min={-100}
+                                          max={100}
+                                          value={val}
+                                          onChange={(e) => {
+                                            const v = Number(e.target.value)
+                                            const cur = edit.values ?? { ...party.values }
+                                            updateEdit(party.id, { values: { ...cur, [axis]: v } })
+                                          }}
+                                        />
+                                        <span className="slider-value">{val}</span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
                               </div>
                             )}
                           </div>

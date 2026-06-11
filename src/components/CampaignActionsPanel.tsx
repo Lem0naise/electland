@@ -882,7 +882,9 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
             })()}
 
             {allianceMode === 'iForThem' && (() => {
-              const uniWards = world.constituencies.filter((w) => (w.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0) >= 3)
+              const focusWardResult = focusWard?.results.find((r) => r.partyId === world.playerPartyId)
+              const focusWardShare = focusWardResult?.voteShare ?? 0
+              const uniWards = focusWard && focusWardShare >= 3 ? [focusWard] : []
               const selectedWards = uniWards.filter((w) => checkedUniWards.has(w.id))
 
               return (
@@ -898,23 +900,16 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
                     return (
                       <>
-                        <div className="pact-table-controls">
-                          <button className="ink-button secondary tiny" type="button" onClick={() => setCheckedUniWards(new Set())}>Clear all</button>
-                          <button className="ink-button secondary tiny" type="button" onClick={() => setCheckedUniWards(new Set(uniWards.map((w) => w.id)))}>Select all</button>
+                        <div className="pact-builder-label">
+                          Stand down in <em>{focusWard?.name ?? 'selected ward'}</em>, endorsing <em>{ally.name}</em>
                         </div>
 
-                        <div className="pact-builder-label">You stand down in these wards, endorsing <em>{ally.name}</em>:</div>
-
                         {uniWards.length === 0 ? (
-                          <span className="alliance-no-suggestions">No wards where you have meaningful share (&ge;3%).</span>
+                          <span className="alliance-no-suggestions">
+                            {focusWard ? `You have ${focusWardShare.toFixed(1)}% in this ward — need ≥3%.` : 'No ward selected. Click a ward on the map first.'}
+                          </span>
                         ) : (
                           <div className="pact-table-wrap">
-                            <div className="pact-table-header">
-                              <span className="pact-th-chk"></span>
-                              <span>Ward</span>
-                              <span className="pact-th-gain">Your share</span>
-                              <span className="pact-th-gain">Their gain</span>
-                            </div>
                             {uniWards.map((ward) => {
                               const ps = ward.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
                               const isChecked = checkedUniWards.has(ward.id)
@@ -923,18 +918,20 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                               const leaderShare = ward.results[0]?.voteShare ?? 0
                               const couldFlip = ward.leadingPartyId !== alliancePartyId && allyShare + gainForThem > leaderShare
                               return (
-                                <div key={ward.id} className={`pact-table-row${isChecked ? ' is-selected' : ''}`}>
-                                  <span className="pact-td-chk">
+                                <div key={ward.id} className={`pact-table-row${isChecked ? ' is-selected' : ''}`} onClick={() => setUniChecked(ward.id, !isChecked)}>
+                                  <span className="pact-td-chk" onClick={(e) => e.stopPropagation()}>
                                     <input type="checkbox" checked={isChecked} onChange={() => setUniChecked(ward.id, !isChecked)} />
                                   </span>
                                   <span className="pact-td-ward">
                                     <span className="pact-td-ward-name">{ward.name}</span>
+                                    <span className="pact-td-ward-share">({ps.toFixed(1)}% your share)</span>
                                   </span>
-                                  <span className="pact-td-gain">{ps.toFixed(1)}%</span>
+                                  <span className="pact-td-gain" />
                                   <span className="pact-td-gain">
                                     +{gainForThem.toFixed(1)}%
                                     {couldFlip && <span className="alliance-flip-badge">{'\u2B62'} flip</span>}
                                   </span>
+                                  <span className="pact-td-acc" />
                                 </div>
                               )
                             })}
