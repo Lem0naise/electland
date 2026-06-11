@@ -40,7 +40,7 @@ import type {
 const blocPalette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d5524', '#c56b37']
 
 function App() {
-  const [constituencyCount, setConstituencyCount] = useState(8)
+  const [constituencyCount, setConstituencyCount] = useState(10)
   const [world, setWorld] = useState<World | null>(null)
   const [previousWorld, setPreviousWorld] = useState<World | null>(null)
   const [selectedConstituencyId, setSelectedConstituencyId] = useState('')

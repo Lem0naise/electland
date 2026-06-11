@@ -113,7 +113,7 @@ export function SetupScreen({
     }
   }
 
-  const wardCounts = [5, 6, 7, 8, 9, 10, 11, 12]
+  const wardCounts = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
   return (
     <div className={`setup-screen${isFirstTime ? ' is-splash' : ' is-modal'}`}>
@@ -144,7 +144,7 @@ export function SetupScreen({
                 ))}
               </div>
               <p className="setup-hint">
-                {constituencyCount <= 6 ? 'Big wards - fragmented vote, landslides possible' : constituencyCount <= 9 ? 'Classic - balanced, with reasonable margins.' : 'Lots of wards - harder to manage, but clearer strongholds.'}
+                {constituencyCount <= 4 ? 'Tiny council — each ward is a huge prize. Very swingy.' : constituencyCount <= 6 ? 'Big wards — fragmented vote, landslides possible.' : constituencyCount <= 9 ? 'Classic — balanced, with reasonable margins.' : constituencyCount <= 12 ? 'Lots of wards — harder to manage, but clearer strongholds.' : 'Busy council — many small wards, very tactical.'}
               </p>
             </div>
 

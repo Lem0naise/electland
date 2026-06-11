@@ -38,7 +38,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
         <div className="modal-header">
           <span className="modal-kicker">Election Night</span>
           <h2>{world.townName} Council</h2>
-          <p className="modal-sub">Week {world.week} · {revealed.length} of {total} results declared · {majority} seats for majority</p>
+          <p className="modal-sub">Week {world.week} · {revealed.length} of {total} wards declared · {majority} seats for majority</p>
         </div>
 
         <div className="election-night-grid">
@@ -47,6 +47,9 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             const isGain = r.wasHeld && r.winner?.partyId === world.playerPartyId
             const isLoss = r.wasHeld && r.previousWinnerPartyId === world.playerPartyId
             const isFlip = r.wasHeld && !isGain && !isLoss
+            const margin = r.results[0] && r.results[1] ? r.results[0].voteShare - r.results[1].voteShare : 0
+            const marginVotes = r.results[0] && r.results[1] ? Math.round(r.results[0].votes - r.results[1].votes) : 0
+            const isClose = margin < 3 || marginVotes <= 10
             return (
               <div
                 key={r.wardId}
@@ -56,9 +59,12 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   isGain ? 'is-gain' : '',
                   isLoss ? 'is-loss' : '',
                   isFlip ? 'is-flip' : '',
+                  isClose ? 'is-close' : '',
                 ].filter(Boolean).join(' ')}
               >
-                <div className="result-card-ward">{r.wardName}</div>
+                <div className="result-card-ward">
+                  {r.wardName}
+                </div>
                 {r.winner && (
                   <div className="result-card-winner" style={{ borderLeftColor: r.winner.partyColour }}>
                     <span className="result-candidate-initials" style={{ background: r.winner.partyColour }}>
@@ -74,8 +80,9 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   {r.results[0] && (
                     <span className="result-pct-row">
                       <strong className="result-pct">{r.results[0].voteShare.toFixed(1)}%</strong>
+                      <span className="result-votes">({r.results[0].votes.toLocaleString('en-GB')} votes)</span>
                       {r.results[1] && (
-                        <span className="result-margin">+{(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)} pts</span>
+                        <span className="result-margin">+{margin.toFixed(1)} pts</span>
                       )}
                     </span>
                   )}
@@ -84,7 +91,39 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                       {r.swingFromLastElection >= 0 ? '\u25B2' : '\u25BC'} {Math.abs(r.swingFromLastElection).toFixed(1)}pp swing
                     </span>
                   )}
+                  <span className="result-turnout">
+                    Turnout: {(r.turnout * 100).toFixed(1)}%
+                  </span>
                 </div>
+                {r.results[1] && (
+                  <div className="result-runnerup">
+                    2nd: <span className="result-runnerup-party" style={{ color: r.results[1].colour }}>
+                      {r.results[1].partyName}
+                    </span>
+                    {' — '}
+                    <span className="result-runnerup-name">
+                      {(() => {
+                        const ward = world.constituencies.find((c) => c.id === r.wardId)
+                        const cand = ward?.candidates.find((c) => c.partyId === r.results[1].partyId)
+                        return cand?.name ?? r.results[1].partyName
+                      })()}
+                    </span>
+                    {' '}({r.results[1].votes.toLocaleString('en-GB')} votes)
+                  </div>
+                )}
+                {r.results[0] && r.results[1] && (
+                  <div className="result-bar">
+                    <div className="result-bar-fill" style={{ width: `${r.results[0].voteShare}%`, background: r.winner.partyColour }} />
+                    <div className="result-bar-fill" style={{ width: `${r.results[1].voteShare}%`, background: r.results[1].colour }} />
+                  </div>
+                )}
+                {isClose && (
+                  <div className="result-close-banner">
+                    {marginVotes === 0
+                      ? '\u26A0 TIE - WON ON RECOUNT'
+                      : `\u26A0 CALLED BY ${marginVotes.toLocaleString('en-GB')} VOTES`}
+                  </div>
+                )}
                 {r.wasHeld && (
                   <div className="result-card-change">
                     {isGain && (
@@ -112,7 +151,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
 
           {!done && (
             <div className="election-result-card pending-card" onClick={onReveal}>
-              <div className="result-card-ward">Next result...</div>
+              <div className="result-card-ward">Next declaration...</div>
               <div className="pending-reveal">Click to reveal</div>
             </div>
           )}
@@ -208,6 +247,8 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             {(() => {
               const anyMajority = Object.values(electionSeatCounts).some((s) => s >= majority)
               const verdictClass = playerWonThisElection ? ' verdict-win' : anyMajority ? ' verdict-loss' : ' verdict-noc'
+              const aveTurnout = (world.stats.averageTurnout * 100).toFixed(1)
+              const totalVotes = world.electionNightResults.reduce((s, r) => s + r.results.reduce((ss, rr) => ss + rr.votes, 0), 0)
               return (
                 <div className={`election-night-verdict${verdictClass}`}>
                   {playerWonThisElection
@@ -217,6 +258,9 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                       : winnerParty && winnerParty.id !== world.playerPartyId
                         ? `${winnerParty.name} wins the council with ${electionSeatCounts[winnerParty.id] ?? 0} seats — a majority of ${majority}. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`
                         : `A majority was reached. ${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} of ${majority} needed.`}
+                  <div className="en-verdict-stats">
+                    Total votes cast: {totalVotes.toLocaleString('en-GB')} · Average turnout: {aveTurnout}%
+                  </div>
                 </div>
               )
             })()}
@@ -230,7 +274,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                 textParts.push(`${world.townName} Council — Week ${world.week} Election Results`)
                 textParts.push(`${'='.repeat(40)}`)
 
-                // Per-ward results — all candidates
                 textParts.push('')
                 textParts.push('RESULTS BY WARD')
                 textParts.push('-'.repeat(20))
@@ -243,17 +286,16 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   const swingLine = r.swingFromLastElection != null
                     ? ` [swing: ${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp]`
                     : ''
+                  const votesLine = r.results[0] ? ` — ${r.results[0].votes.toLocaleString('en-GB')} votes` : ''
 
-                  textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin}${swingLine}`)
+                  textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin}${swingLine}${votesLine}`)
 
-                  // All candidates
                   for (const p of r.results) {
                     const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
                     const name = candidate?.name ?? '?'
-                    textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}%`)
+                    textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}% (${p.votes.toLocaleString('en-GB')})`)
                   }
 
-                  // Change of hands
                   if (r.wasHeld) {
                     if (r.winner?.partyId === world.playerPartyId) {
                       textParts.push(`  GAIN from ${r.previousWinnerPartyName ?? '?'} (was +${(r.previousMargin ?? 0).toFixed(1)})`)
@@ -266,12 +308,10 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   textParts.push('')
                 }
 
-                // Gains / Losses / Re-elected / Other flips
                 textParts.push('')
                 textParts.push('COUNCILLOR TURNOVER')
                 textParts.push('-'.repeat(20))
 
-                // Re-elected (same person, same party)
                 const reElected = revealed.filter((r) =>
                   r.wasHeld && r.winner?.partyId === r.previousWinnerPartyId &&
                   r.winner?.name === r.previousWinnerCandidateName
@@ -283,7 +323,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // Gains (player)
                 if (gains.length > 0) {
                   textParts.push(`Your gains: ${gains.length}`)
                   for (const r of gains) {
@@ -291,7 +330,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // Losses (player)
                 if (losses.length > 0) {
                   textParts.push(`Your losses: ${losses.length}`)
                   for (const r of losses) {
@@ -299,7 +337,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // Other flips
                 if (otherFlips.length > 0) {
                   textParts.push(`Other upsets: ${otherFlips.length}`)
                   for (const r of otherFlips) {
@@ -307,7 +344,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // First-time winners (no previous winner)
                 const newWards = revealed.filter((r) => !r.previousWinnerPartyId)
                 if (newWards.length > 0) {
                   textParts.push(`New wards: ${newWards.length}`)
@@ -316,7 +352,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // Council: before → after
                 textParts.push('')
                 textParts.push('COUNCIL SEATS')
                 textParts.push('-'.repeat(20))
@@ -336,15 +371,13 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   }
                 }
 
-                // National vote shares
                 textParts.push('')
                 textParts.push('NATIONAL VOTE SHARE')
                 textParts.push('-'.repeat(20))
                 for (const r of world.nationalResults) {
-                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats)`)
+                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats, ${r.votes.toLocaleString('en-GB')} votes)`)
                 }
 
-                // Stats
                 textParts.push('')
                 textParts.push('ELECTION STATISTICS')
                 textParts.push('-'.repeat(20))
@@ -353,7 +386,6 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                 textParts.push(`  Turnout: ${(world.stats.averageTurnout * 100).toFixed(1)}%`)
                 textParts.push(`  Battlegrounds: ${world.stats.battlegroundWardIds.length}`)
 
-                // Verdict
                 textParts.push('')
                 textParts.push('VERDICT')
                 textParts.push('-'.repeat(20))

@@ -1140,7 +1140,7 @@ function createPopulationTiles(rng: () => number, polygon: Array<[number, number
 
   const totalDensity = provisional.reduce((sum, tile) => sum + tile.density, 0)
   // SMALLER population: 600–1,600
-  const totalPopulation = Math.round(randomBetween(rng, 600, 1600))
+  const totalPopulation = Math.round(randomBetween(rng, 600, 1600)) * 2
   let allocated = 0
   const withPopulation = provisional.map((tile, index) => {
     const population = index === provisional.length - 1
@@ -1790,7 +1790,7 @@ export function calculateResults(world: World) {
     let totalVotes = 0
     world.tiles.filter((tile) => tile.constituencyId === seat.id).forEach((tile) => {
       const estimate = estimateTilePreference(world, tile, seat)
-      const activeVotes = tile.population * estimate.turnout
+      const activeVotes = Math.round(tile.population * estimate.turnout)
       totalVotes += activeVotes
       estimate.rankings.forEach((result) => {
         const party = world.parties.find((entry) => entry.id === result.partyId)
@@ -1805,7 +1805,7 @@ export function calculateResults(world: World) {
         partyId: party.id,
         partyName: party.name,
         colour: party.colour,
-        votes: voteTotals.get(party.id) ?? 0,
+        votes: Math.round(voteTotals.get(party.id) ?? 0),
         voteShare: totalVotes > 0 ? ((voteTotals.get(party.id) ?? 0) / totalVotes) * 100 : 0,
       }))
       .sort((a, b) => b.votes - a.votes)
@@ -2892,6 +2892,7 @@ export function simulateWeek(world: World): World {
           wardName: seat.name,
           winner: winner!,
           results: seat.results,
+          turnout: seat.turnout,
           swingFromLastElection,
           wasHeld,
           previousWinnerPartyId: prevWinnerPartyId,
@@ -2902,6 +2903,14 @@ export function simulateWeek(world: World): World {
         }
       })
     : world.electionNightResults
+
+  const sortedResults = electionHappening
+    ? [...electionNightResults].sort((a, b) => {
+        const am = a.results[0] ? a.results[0].voteShare - (a.results[1]?.voteShare ?? 0) : 0
+        const bm = b.results[0] ? b.results[0].voteShare - (b.results[1]?.voteShare ?? 0) : 0
+        return bm - am
+      })
+    : electionNightResults
 
   const newsFeedLines: string[] = [...aiNews]
   if (currents[0] && currents[0].id !== world.currents[0]?.id) {
@@ -2984,7 +2993,7 @@ export function simulateWeek(world: World): World {
   let activeCampaignsAfterFlips = provisionalWithAI.activeCampaigns
 
   if (electionHappening) {
-    for (const r of electionNightResults) {
+    for (const r of sortedResults) {
       const prevWinner = world.electionNightResults.find((p) => p.wardId === r.wardId)?.winner?.partyId
       if (prevWinner !== undefined && r.winner?.partyId !== prevWinner) {
         activeCampaignsAfterFlips = activeCampaignsAfterFlips.filter((c) => !c.wardId || c.wardId !== r.wardId)
@@ -3010,7 +3019,7 @@ export function simulateWeek(world: World): World {
     currentMayorParty: electionHappening && seatLeader ? seatLeader.partyName : world.currentMayorParty,
     currentMayorLeader: electionHappening && seatLeader ? seatLeader.leader : world.currentMayorLeader,
     electionNightActive: electionHappening,
-    electionNightResults,
+    electionNightResults: sortedResults,
     electionNightRevealIndex: 0,
     electionNightPreviousSeats,
     electionsHeld: world.electionsHeld + (electionHappening ? 1 : 0),
@@ -3026,7 +3035,7 @@ export function simulateWeek(world: World): World {
   }
 
   if (electionHappening) {
-    const tenureResults = electionNightResults.map((r) => ({
+    const tenureResults = sortedResults.map((r) => ({
       wardId: r.wardId,
       wardName: r.wardName,
       winnerName: r.winner.name,

@@ -249,8 +249,8 @@ export interface ElectionNightResult {
   wardName: string
   winner: WardCandidate
   results: ConstituencyResult[]
+  turnout: number
   swingFromLastElection?: number
-  // Whether this ward changed hands at this election
   wasHeld: boolean
   // Party that held the seat before this election
   previousWinnerPartyId?: string
