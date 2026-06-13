@@ -49,7 +49,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             const isFlip = r.wasHeld && !isGain && !isLoss
             const margin = r.results[0] && r.results[1] ? r.results[0].voteShare - r.results[1].voteShare : 0
             const marginVotes = r.results[0] && r.results[1] ? Math.round(r.results[0].votes - r.results[1].votes) : 0
-            const isClose = margin < 3 || marginVotes <= 10
+            const isClose = margin < 3 || marginVotes <= 100
             return (
               <div
                 key={r.wardId}

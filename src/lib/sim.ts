@@ -1140,7 +1140,7 @@ function createPopulationTiles(rng: () => number, polygon: Array<[number, number
 
   const totalDensity = provisional.reduce((sum, tile) => sum + tile.density, 0)
   // SMALLER population: 600–1,600
-  const totalPopulation = Math.round(randomBetween(rng, 600, 1600)) * 2
+  const totalPopulation = Math.round(randomBetween(rng, 8000, 10000)) * 2
   let allocated = 0
   const withPopulation = provisional.map((tile, index) => {
     const population = index === provisional.length - 1
