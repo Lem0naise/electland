@@ -2114,7 +2114,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
         if (bestPair) {
           const chance = evaluateAllianceAcceptance(world, party.id, target.id, bestPair.initWard, bestPair.targWard)
-          const accepted = rng() < Math.max(0.05, Math.min(0.85, chance))
+          const accepted = chance > -998 && rng() < Math.max(0.05, Math.min(0.85, chance))
 
           if (accepted) {
             const initW = world.constituencies.find((c) => c.id === bestPair!.initWard)
@@ -2185,7 +2185,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           }
           if (bestPair2) {
             const chance2 = evaluateAllianceAcceptance(world, party.id, world.playerPartyId, bestPair2.initWard, bestPair2.targWard)
-            const accepted2 = rng() < Math.max(0.05, Math.min(0.85, chance2))
+            const accepted2 = chance2 > -998 && rng() < Math.max(0.05, Math.min(0.85, chance2))
           if (accepted2) {
             const initW2 = world.constituencies.find((c) => c.id === bestPair2.initWard)
             const targW2 = world.constituencies.find((c) => c.id === bestPair2.targWard)
@@ -2239,8 +2239,8 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           break
         }
 
-        const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 10
-        const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 10
+        const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 15
+        const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 15
 
         if (partyANowWinning) {
           breakPact = true
@@ -2253,8 +2253,8 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           break
         }
 
-        const partyAWinningB = wardB.leadingPartyId === pact.partyAId && wardB.margin > 8
-        const partyBWinningA = wardA.leadingPartyId === pact.partyBId && wardA.margin > 8
+        const partyAWinningB = wardB.leadingPartyId === pact.partyAId && wardB.margin > 15
+        const partyBWinningA = wardA.leadingPartyId === pact.partyBId && wardA.margin > 15
 
         if (partyAWinningB) {
           breakPact = true
