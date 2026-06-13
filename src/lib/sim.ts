@@ -2233,12 +2233,6 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         const wardB = world.constituencies.find((c) => c.id === entry.wardB)
         if (!wardA || !wardB) continue
 
-        if (world.week >= pact.expiresWeek) {
-          breakPact = true
-          breakReason = 'expired'
-          break
-        }
-
         const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 15
         const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 15
 
@@ -2268,14 +2262,10 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         }
       }
 
-      if (breakPact) {
+      if (breakPact && breakReason) {
         pact.broken = true
-        if (breakReason === 'expired') {
-          newsFeedLines.push(`An alliance pact has expired at the end of the election cycle.`)
-        } else {
-          const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
-          newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
-        }
+        const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
+        newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
       }
     }
   }
@@ -2541,8 +2531,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
         }
       }
 
-      const eligible = entries.filter((e) => !e.isUnilateral && !playerCommitted.has(e.wardA) && !allyCommitted.has(e.wardB))
-      const batchSize = Math.max(1, eligible.length)
+      const batchSize = Math.max(1, entries.length)
 
       const acceptedEntries: AlliancePactEntry[] = []
       for (const entry of entries) {

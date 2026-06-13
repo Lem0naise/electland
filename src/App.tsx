@@ -204,12 +204,15 @@ function App() {
     const nextWorld = simulateWeek(world)
     setWorld(nextWorld)
     // Show NPC pact events
-    const newPactLines = nextWorld.newsFeed.slice(0, 5).filter((l) => l.includes('form a pact') || l.includes('proposes a pact with you'))
+    const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
+      (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact'),
+    )
     if (newPactLines.length > 0) {
       const desc = newPactLines[0].replace(/^Week \d+: /, '')
+      const isBreak = newPactLines[0].includes('breaks')
       setLastActionResult({
-        action: { type: 'propose_alliance', label: '', description: '', apCost: 0 },
-        outcome: 'success' as const,
+        action: { type: isBreak ? 'break_alliance' : 'propose_alliance', label: '', description: '', apCost: 0 },
+        outcome: isBreak ? 'neutral' as const : 'success' as const,
         description: desc,
       })
     }
