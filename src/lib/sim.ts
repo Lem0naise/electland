@@ -2246,20 +2246,6 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           breakReason = pact.partyBId
           break
         }
-
-        const partyAWinningB = wardB.leadingPartyId === pact.partyAId && wardB.margin > 15
-        const partyBWinningA = wardA.leadingPartyId === pact.partyBId && wardA.margin > 15
-
-        if (partyAWinningB) {
-          breakPact = true
-          breakReason = pact.partyAId
-          break
-        }
-        if (partyBWinningA) {
-          breakPact = true
-          breakReason = pact.partyBId
-          break
-        }
       }
 
       if (breakPact && breakReason) {
