@@ -1674,7 +1674,7 @@ function assignPartyFocus(parties: PartyDefinition[], constituencies: Constituen
 
 function softmax(scores: number[]) {
   const max = Math.max(...scores)
-  const values = scores.map((score) => Math.exp(score - max))
+  const values = scores.map((score) => Math.exp((score - max) / 0.6))
   const total = values.reduce((sum, value) => sum + value, 0)
   return values.map((value) => value / total)
 }
@@ -1689,7 +1689,7 @@ function partyEventBonus(party: PartyDefinition, current: GeographicCurrent, til
 
 function scorePartyForTile(world: World, seat: Constituency | undefined, tile: PopulationTile, party: PartyDefinition) {
   // 1. Amplified wardFit: stronger bloc match → much stronger home-ward advantage
-  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 1.8 : 0.9) : 0.22
+  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 2.5 : 0.6) : 0.15
   const focus = seat && party.focusSeatIds.includes(seat.id) ? 0.18 : 0
   // 2. Organization has more range: clearly separates well-organised from weak parties
   const organization = Math.log(party.organization + 1) * 0.55
@@ -1758,7 +1758,9 @@ export function estimateTilePreference(
     if (standingDown) return -999
     return base + endorsementBonus
   })
-  const turnout = clamp(tile.turnout + (Math.max(...scores) - Math.min(...scores)) * 0.01, 0.4, 0.95)
+  const realScores = scores.filter((s) => s > -998)
+  const spread = realScores.length > 0 ? Math.max(...realScores) - Math.min(...realScores) : 0
+  const turnout = clamp(tile.turnout + spread * 0.01, 0.4, 0.95)
   const rankings = softmax(scores)
     .map<TilePartyPreference>((support, partyIndex) => {
       const party = world.parties[partyIndex]
@@ -1951,7 +1953,7 @@ function evolveParties(parties: PartyDefinition[], constituencies: Constituency[
       aiActionPoints: isPlayer ? party.aiActionPoints : (party.tier === 'major' ? 3 : 2),
       // Decay ward boosts more slowly — canvass effect lasts ~4 weeks
       wardBoosts: Object.fromEntries(
-        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.78]),
+        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.85]),
       ),
     }
   })
@@ -3003,8 +3005,8 @@ export function simulateWeek(world: World): World {
     isGoverning: electionHappening ? playerWon : world.isGoverning,
     governanceDecisions: electionHappening ? [] : world.governanceDecisions,
     needsCoalition: electionHappening && !playerWon && !results.nationalResults.some((r) => r.seatsWon >= majority),
-    minorityGovernment: false,
-    coalitionPartnerId: undefined,
+    minorityGovernment: electionHappening ? false : world.minorityGovernment,
+    coalitionPartnerId: electionHappening ? undefined : world.coalitionPartnerId,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
     alliancePacts: world.alliancePacts,
   }

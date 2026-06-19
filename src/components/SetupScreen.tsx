@@ -78,11 +78,11 @@ export function SetupScreen({
   function applyUKNames() {
     if (!world) return
     const ukColourNames: Array<{ colour: string; name: string; values: { change: number; growth: number; services: number } }> = [
-      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -30, growth: 25, services: -15 } },
+      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -30, growth: 15, services: 25 } },
       { colour: '#E4003B', name: 'Labour', values: { change: 15, growth: 5, services: 35 } },
       { colour: '#FAA61A', name: 'Lib Dems', values: { change: 10, growth: 15, services: 20 } },
       { colour: '#02A95B', name: 'Green Party', values: { change: 40, growth: -35, services: 30 } },
-      { colour: '#70147A', name: 'Reform UK', values: { change: -45, growth: 15, services: -35 } },
+      { colour: '#70147A', name: 'Reform UK', values: { change: -35, growth: 15, services: 15 } },
     ]
 
     function hexDist(a: string, b: string) {
