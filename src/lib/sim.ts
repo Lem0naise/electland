@@ -1674,7 +1674,7 @@ function assignPartyFocus(parties: PartyDefinition[], constituencies: Constituen
 
 function softmax(scores: number[]) {
   const max = Math.max(...scores)
-  const values = scores.map((score) => Math.exp((score - max) / 0.6))
+  const values = scores.map((score) => Math.exp((score - max) / 0.85))
   const total = values.reduce((sum, value) => sum + value, 0)
   return values.map((value) => value / total)
 }
@@ -1689,7 +1689,7 @@ function partyEventBonus(party: PartyDefinition, current: GeographicCurrent, til
 
 function scorePartyForTile(world: World, seat: Constituency | undefined, tile: PopulationTile, party: PartyDefinition) {
   // 1. Amplified wardFit: stronger bloc match → much stronger home-ward advantage
-  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 2.5 : 0.6) : 0.15
+  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 1.8 : 0.9) : 0.15
   const focus = seat && party.focusSeatIds.includes(seat.id) ? 0.18 : 0
   // 2. Organization has more range: clearly separates well-organised from weak parties
   const organization = Math.log(party.organization + 1) * 0.55
@@ -1953,7 +1953,7 @@ function evolveParties(parties: PartyDefinition[], constituencies: Constituency[
       aiActionPoints: isPlayer ? party.aiActionPoints : (party.tier === 'major' ? 3 : 2),
       // Decay ward boosts more slowly — canvass effect lasts ~4 weeks
       wardBoosts: Object.fromEntries(
-        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.85]),
+        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.78]),
       ),
     }
   })
@@ -2055,10 +2055,17 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
     while (ap > 0 && targetWards.length > 0) {
       const ward = pickOne(rng, targetWards.slice(0, 3))
       if (!ward) break
-      boosts[ward.id] = clamp((boosts[ward.id] ?? 0) + 0.04, 0, 0.25)
-      ap -= 1
-      if (rng() < 0.3) {
-        newsFeedLines.push(`${party.name} campaigners spotted knocking doors in ${ward.name}.`)
+      const rallying = rng() < 0.10 && ap >= 2
+      if (rallying) {
+        boosts[ward.id] = clamp((boosts[ward.id] ?? 0) + 0.08, 0, 0.35)
+        ap -= 2
+        newsFeedLines.push(`${party.name} held a campaign rally in ${ward.name}.`)
+      } else {
+        boosts[ward.id] = clamp((boosts[ward.id] ?? 0) + 0.04, 0, 0.35)
+        ap -= 1
+        if (rng() < 0.3) {
+          newsFeedLines.push(`${party.name} campaigners spotted knocking doors in ${ward.name}.`)
+        }
       }
     }
 

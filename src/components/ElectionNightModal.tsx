@@ -80,7 +80,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   {r.results[0] && (
                     <span className="result-pct-row">
                       <strong className="result-pct">{r.results[0].voteShare.toFixed(1)}%</strong>
-                      <span className="result-votes">({r.results[0].votes.toLocaleString('en-GB')} votes)</span>
+                      <span className="result-votes">({Math.round(r.results[0].votes).toLocaleString('en-GB')} votes)</span>
                       {r.results[1] && (
                         <span className="result-margin">+{margin.toFixed(1)} pts</span>
                       )}
@@ -108,7 +108,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                         return cand?.name ?? r.results[1].partyName
                       })()}
                     </span>
-                    {' '}({r.results[1].votes.toLocaleString('en-GB')} votes)
+                    {' '}({Math.round(r.results[1].votes).toLocaleString('en-GB')} votes)
                   </div>
                 )}
                 {r.results[0] && r.results[1] && (
@@ -286,14 +286,14 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   const swingLine = r.swingFromLastElection != null
                     ? ` [swing: ${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp]`
                     : ''
-                  const votesLine = r.results[0] ? ` — ${r.results[0].votes.toLocaleString('en-GB')} votes` : ''
+                  const votesLine = r.results[0] ? ` — ${Math.round(r.results[0].votes).toLocaleString('en-GB')} votes` : ''
 
                   textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin}${swingLine}${votesLine}`)
 
                   for (const p of r.results) {
                     const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
                     const name = candidate?.name ?? '?'
-                    textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}% (${p.votes.toLocaleString('en-GB')})`)
+                    textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}% (${Math.round(p.votes).toLocaleString('en-GB')})`)
                   }
 
                   if (r.wasHeld) {
@@ -375,7 +375,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                 textParts.push('NATIONAL VOTE SHARE')
                 textParts.push('-'.repeat(20))
                 for (const r of world.nationalResults) {
-                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats, ${r.votes.toLocaleString('en-GB')} votes)`)
+                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats, ${Math.round(r.votes).toLocaleString('en-GB')} votes)`)
                 }
 
                 textParts.push('')
