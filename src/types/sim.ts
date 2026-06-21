@@ -249,6 +249,7 @@ export interface ElectionNightResult {
   wardName: string
   winner: WardCandidate
   results: ConstituencyResult[]
+  candidates: Array<{ partyId: string; name: string; colour: string }>
   turnout: number
   swingFromLastElection?: number
   wasHeld: boolean

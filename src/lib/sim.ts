@@ -2878,6 +2878,7 @@ export function simulateWeek(world: World): World {
           wardName: seat.name,
           winner: winner!,
           results: seat.results,
+          candidates: seat.candidates.map((c) => ({ partyId: c.partyId, name: c.name, colour: c.partyColour })),
           turnout: seat.turnout,
           swingFromLastElection,
           wasHeld,

@@ -103,8 +103,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                     {' — '}
                     <span className="result-runnerup-name">
                       {(() => {
-                        const ward = world.constituencies.find((c) => c.id === r.wardId)
-                        const cand = ward?.candidates.find((c) => c.partyId === r.results[1].partyId)
+                        const cand = r.candidates.find((c) => c.partyId === r.results[1].partyId)
                         return cand?.name ?? r.results[1].partyName
                       })()}
                     </span>
@@ -289,7 +288,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin} ${votes}`)
 
                   for (const p of r.results) {
-                    const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
+                    const candidate = r.candidates.find((cand) => cand.partyId === p.partyId)
                     const name = candidate?.name ?? '?'
                     textParts.push(`  ${p.partyName}: ${name} ${p.voteShare.toFixed(1)}% (${Math.round(p.votes).toLocaleString('en-GB')})`)
                   }
