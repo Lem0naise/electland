@@ -270,25 +270,23 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
               type="button"
               onClick={() => {
                 const textParts: string[] = []
+                const totalVotes = world.electionNightResults.reduce((s, r) => s + r.results.reduce((ss, rr) => ss + Math.round(rr.votes), 0), 0)
 
                 textParts.push(`${world.townName} Council — Week ${world.week} Election Results`)
-                textParts.push(`${'='.repeat(40)}`)
-
+                textParts.push(`${'='.repeat(50)}`)
                 textParts.push('')
+
                 textParts.push('RESULTS BY WARD')
-                textParts.push('-'.repeat(20))
+                textParts.push('-'.repeat(50))
                 for (const r of revealed) {
                   const winnerName = r.winner?.name ?? '?'
                   const winnerParty = r.winner?.partyName ?? '?'
                   const margin = r.results[0] && r.results[1]
                     ? `(+${(r.results[0].voteShare - r.results[1].voteShare).toFixed(1)}pts)`
                     : ''
-                  const swingLine = r.swingFromLastElection != null
-                    ? ` [swing: ${r.swingFromLastElection >= 0 ? '+' : ''}${r.swingFromLastElection.toFixed(1)}pp]`
-                    : ''
-                  const votesLine = r.results[0] ? ` — ${Math.round(r.results[0].votes).toLocaleString('en-GB')} votes` : ''
+                  const votes = r.results[0] ? `— ${Math.round(r.results[0].votes).toLocaleString('en-GB')} votes` : ''
 
-                  textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin}${swingLine}${votesLine}`)
+                  textParts.push(`${r.wardName}: ${winnerParty} — ${winnerName} ${r.results[0]?.voteShare.toFixed(1) ?? '0'}% ${margin} ${votes}`)
 
                   for (const p of r.results) {
                     const candidate = world.constituencies.find((c) => c.id === r.wardId)?.candidates.find((cand) => cand.partyId === p.partyId)
@@ -309,52 +307,8 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                 }
 
                 textParts.push('')
-                textParts.push('COUNCILLOR TURNOVER')
-                textParts.push('-'.repeat(20))
-
-                const reElected = revealed.filter((r) =>
-                  r.wasHeld && r.winner?.partyId === r.previousWinnerPartyId &&
-                  r.winner?.name === r.previousWinnerCandidateName
-                )
-                if (reElected.length > 0) {
-                  textParts.push(`Re-elected: ${reElected.length}`)
-                  for (const r of reElected) {
-                    textParts.push(`  ${r.winner?.name ?? '?'} (${r.winner?.partyName ?? '?'}) — ${r.wardName}`)
-                  }
-                }
-
-                if (gains.length > 0) {
-                  textParts.push(`Your gains: ${gains.length}`)
-                  for (const r of gains) {
-                    textParts.push(`  ${r.wardName} from ${r.previousWinnerPartyName ?? '?'} — ${r.winner?.name ?? '?'}`)
-                  }
-                }
-
-                if (losses.length > 0) {
-                  textParts.push(`Your losses: ${losses.length}`)
-                  for (const r of losses) {
-                    textParts.push(`  ${r.wardName} to ${r.winner?.partyName ?? '?'} — ${r.winner?.name ?? '?'}`)
-                  }
-                }
-
-                if (otherFlips.length > 0) {
-                  textParts.push(`Other upsets: ${otherFlips.length}`)
-                  for (const r of otherFlips) {
-                    textParts.push(`  ${r.wardName}: ${r.previousWinnerPartyName ?? '?'} → ${r.winner?.partyName ?? '?'}`)
-                  }
-                }
-
-                const newWards = revealed.filter((r) => !r.previousWinnerPartyId)
-                if (newWards.length > 0) {
-                  textParts.push(`New wards: ${newWards.length}`)
-                  for (const r of newWards) {
-                    textParts.push(`  ${r.wardName} — ${r.winner?.partyName ?? '?'} (${r.winner?.name ?? '?'})`)
-                  }
-                }
-
-                textParts.push('')
                 textParts.push('COUNCIL SEATS')
-                textParts.push('-'.repeat(20))
+                textParts.push('-'.repeat(50))
                 if (world.electionsHeld > 1) {
                   textParts.push('Before → After:')
                   for (const p of allParties) {
@@ -365,36 +319,25 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                     textParts.push(`  ${p.name}: ${before} → ${after}${deltaStr}`)
                   }
                 } else {
-                  for (const p of allParties) {
+                  for (const p of world.parties) {
                     const seats = electionSeatCounts[p.id] ?? 0
+                    if (seats === 0) continue
                     textParts.push(`  ${p.name}: ${seats} seat${seats !== 1 ? 's' : ''}`)
                   }
                 }
-
-                textParts.push('')
-                textParts.push('NATIONAL VOTE SHARE')
-                textParts.push('-'.repeat(20))
-                for (const r of world.nationalResults) {
-                  textParts.push(`  ${r.partyName}: ${r.voteShare.toFixed(1)}% (${r.seatsWon} seats, ${Math.round(r.votes).toLocaleString('en-GB')} votes)`)
-                }
-
-                textParts.push('')
-                textParts.push('ELECTION STATISTICS')
-                textParts.push('-'.repeat(20))
-                textParts.push(`  Wards: ${world.constituencies.length}`)
                 textParts.push(`  Majority: ${majority} seats`)
                 textParts.push(`  Turnout: ${(world.stats.averageTurnout * 100).toFixed(1)}%`)
-                textParts.push(`  Battlegrounds: ${world.stats.battlegroundWardIds.length}`)
+                textParts.push(`  Total votes: ${totalVotes.toLocaleString('en-GB')}`)
 
                 textParts.push('')
                 textParts.push('VERDICT')
-                textParts.push('-'.repeat(20))
+                textParts.push('-'.repeat(50))
                 const anyMajority = Object.values(electionSeatCounts).some((s) => s >= majority)
                 if (playerWonThisElection) {
                   textParts.push(`${playerParty?.name ?? 'Your party'} wins the council with ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''} — a majority of ${majority}.`)
                 } else if (!anyMajority) {
                   textParts.push(`No Overall Control (NOC)`)
-                  textParts.push(`${winnerParty?.name ?? 'Largest party'} is the largest party with ${electionSeatCounts[winnerPartyId ?? ''] ?? 0} seats (${majority} needed for a majority).`)
+                  textParts.push(`${winnerParty?.name ?? 'Largest party'} is the largest party with ${electionSeatCounts[winnerPartyId ?? ''] ?? 0} seats (${majority} needed).`)
                   textParts.push(`${playerParty?.name ?? 'Your party'} won ${playerElectionSeats} seat${playerElectionSeats !== 1 ? 's' : ''}.`)
                 } else if (winnerParty && winnerParty.id !== world.playerPartyId) {
                   textParts.push(`${winnerParty.name} wins the council with ${electionSeatCounts[winnerParty.id] ?? 0} seats — a majority of ${majority}.`)
