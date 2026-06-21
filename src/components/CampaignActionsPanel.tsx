@@ -20,7 +20,6 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
   const [alliancePartyId, setAlliancePartyId] = useState('')
   const [allianceMode, setAllianceMode] = useState<'theyForMe' | 'iForThem'>('theyForMe')
   const [checkedPairs, setCheckedPairs] = useState<Set<string>>(new Set())
-  const [checkedUniWards, setCheckedUniWards] = useState<Set<string>>(new Set())
   const [expandedBreakdownId, setExpandedBreakdownId] = useState<string | null>(null)
   const [breakConfirmPactId, setBreakConfirmPactId] = useState<string | null>(null)
 
@@ -79,10 +78,6 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
   const setPairChecked = (key: string, checked: boolean) => {
     setCheckedPairs((p) => { const n = new Set(p); if (checked) n.add(key); else n.delete(key); return n })
-  }
-
-  const setUniChecked = (wardId: string, checked: boolean) => {
-    setCheckedUniWards((p) => { const n = new Set(p); if (checked) n.add(wardId); else n.delete(wardId); return n })
   }
 
   const activePlayerPacts = world.alliancePacts.filter((p) =>
@@ -704,7 +699,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
               const ally = world.parties.find((p) => p.id === alliancePartyId)
               const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId) : []
               const suggs = focusWardId
-                ? allSuggs.filter((s) => s.ourWardId === focusWardId || s.theirWardId === focusWardId)
+                ? allSuggs.filter((s) => s.theirWardId === focusWardId)
                 : allSuggs
 
               const acceptCount = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept).length
@@ -718,161 +713,65 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                   </select>
 
                   {alliancePartyId && ally && (
-                    <div className="pact-builder">
-                      {focusWardId && allSuggs.length > 0 && (
-                        <div className="pact-builder-filter-note">
-                          Showing trades involving <strong>{focusWard?.name ?? 'selected ward'}</strong> ({suggs.length} of {allSuggs.length} pairs).
-                        </div>
-                      )}
-
-                      <div className="pact-table-controls">
-                        <button className="ink-button secondary tiny" type="button" onClick={() => setCheckedPairs(new Set())}>Clear all</button>
-                        <button className="ink-button secondary tiny" type="button" onClick={() => {
-                          const top = suggs.slice(0, 8)
-                          setCheckedPairs(new Set(top.map((s) => `${s.ourWardId}|${s.theirWardId}`)))
-                        }}>Auto-select top 8</button>
-                        <button className="ink-button secondary tiny" type="button" onClick={() => {
-                          const acc = suggs.filter((s) => s.willAccept)
-                          setCheckedPairs(new Set(acc.map((s) => `${s.ourWardId}|${s.theirWardId}`)))
-                        }}>Select all accepted</button>
+                    <div className="negotiation-card">
+                      <div className="neg-header">
+                        For <strong style={{ color: ally.colour }}>{ally.name}</strong> to stand down in{' '}
+                        <strong>{focusWard?.name ?? 'selected ward'}</strong>, you'd need to stand down in:
                       </div>
 
-                      {suggs.length === 0 ? (
-                        <span className="alliance-no-suggestions">
-                          {focusWardId && allSuggs.length > 0
-                            ? `No viable trades involving ${focusWard?.name ?? 'selected ward'}. Try a different ward.`
-                            : 'No viable ward-pairs.'}
-                        </span>
+                      {!focusWardId ? (
+                        <span className="alliance-no-suggestions">Click a ward on the map first.</span>
+                      ) : suggs.length === 0 ? (
+                        <div className="neg-no-deal">
+                          No deal — {ally.name} won't stand down in {focusWard?.name}.{' '}
+                          {allSuggs.filter((s) => s.theirWardId === focusWardId).length === 0 && allSuggs.filter((s) => s.ourWardId === focusWardId).length > 0
+                            ? 'Try the "Stand down for them" tab instead — they might accept if you stand down here.'
+                            : ''}
+                        </div>
                       ) : (
-                        <div className="pact-table-wrap">
-                          <div className="pact-table-header">
-                            <span className="pact-th-chk"></span>
-                            <span>You stand down</span>
-                            <span className="pact-th-arrow"></span>
-                            <span>They stand down</span>
-                            <span className="pact-th-gain">~You</span>
-                            <span className="pact-th-gain">~Them</span>
-                            <span className="pact-th-acc">Accept</span>
+                        <>
+                          <div className="neg-list">
+                            {suggs.map((s) => {
+                              const key = `${s.ourWardId}|${s.theirWardId}`
+                              const isChecked = checkedPairs.has(key)
+                              const ourBoost = s.ourWardPlayerShare * 0.01 * 25
+                              return (
+                                <div
+                                  key={key}
+                                  className={`neg-row${isChecked ? ' is-checked' : ''}${s.willAccept ? '' : ' is-rejected'}`}
+                                  onClick={() => setPairChecked(key, !isChecked)}
+                                >
+                                  <span className="neg-chk" onClick={(e) => e.stopPropagation()}>
+                                    <input type="checkbox" checked={isChecked} onChange={() => setPairChecked(key, !isChecked)} />
+                                  </span>
+                                  <span className="neg-ward">{s.ourWardName}</span>
+                                  <span className="neg-share">{s.ourWardPlayerShare.toFixed(1)}%</span>
+                                  <span className="neg-gain">~+{ourBoost.toFixed(1)}% for them</span>
+                                  <span className={`neg-accept${s.willAccept ? '' : ' is-reject'}`}>
+                                    {s.willAccept ? `\u2713 ${s.acceptanceChance}%` : `\u2717 ${s.acceptanceChance}%`}
+                                  </span>
+                                </div>
+                              )
+                            })}
                           </div>
-                          {suggs.map((s) => {
-                            const key = `${s.ourWardId}|${s.theirWardId}`
-                            const isChecked = checkedPairs.has(key)
-                            const ourBoost = s.ourWardPlayerShare * 0.01 * 25
-                            const theirBoost = s.theirWardAllyShare * 0.01 * 25
-                            return (
-                              <div
-                                key={key}
-                                className={`pact-table-row${isChecked ? ' is-selected' : ''}${!s.willAccept ? ' is-rejected-row' : ''}`}
-                                onClick={() => setPairChecked(key, !isChecked)}
-                              >
-                                <span className="pact-td-chk" onClick={(e) => e.stopPropagation()}>
-                                  <input type="checkbox" checked={isChecked} onChange={() => setPairChecked(key, !isChecked)} />
-                                </span>
-                                <span className="pact-td-ward">
-                                  <span className="pact-td-ward-name">{s.ourWardName}</span>
-                                  <span className="pact-td-ward-share">({s.ourWardPlayerShare.toFixed(1)}%)</span>
-                                </span>
-                                <span className="pact-td-arrow">{'\u21C4'}</span>
-                                <span className="pact-td-ward">
-                                  <span className="pact-td-ward-name">{s.theirWardName}</span>
-                                  <span className="pact-td-ward-share">({s.theirWardAllyShare.toFixed(1)}%)</span>
-                                </span>
-                                <span className="pact-td-gain">
-                                  +{ourBoost.toFixed(1)}%
-                                  {s.couldFlip && s.flipDelta && <span className="alliance-flip-badge">{'\u2B62'}</span>}
-                                </span>
-                                <span className="pact-td-gain">+{theirBoost.toFixed(1)}%</span>
-                                <span className={`pact-td-acc alliance-accept-chance${s.willAccept ? ' is-high' : ' is-low'}`}>
-                                  {s.willAccept ? '\u2713' : '\u2717'}{' '}{s.acceptanceChance}%
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
 
-                      {allCheckedCount > 0 && (
-                        <div className="pact-builder-breakdowns">
-                          {(() => {
-                            const checkedAccepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
-                            const checkedRejected = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && !s.willAccept)
-                            return (
-                              <>
-                                {checkedAccepted.length > 0 && (
-                                  <div className="pact-builder-breakdown-group">
-                                    <div className="pact-builder-breakdown-group-label accepted">
-                                      {'\u2713'} {checkedAccepted.length} will accept
-                                    </div>
-                                  {checkedAccepted.map((s) => {
-                                    const key = `${s.ourWardId}|${s.theirWardId}`
-                                    return (
-                                      <div key={key} className="pact-builder-reject-row">
-                                        <span className="alliance-accept-chance is-high">{'\u2713'}</span>
-                                        <span>{s.ourWardName} {'\u21C4'} {s.theirWardName}</span>
-                                        <div className="alliance-breakdown">
-                                          <span className="alliance-breakdown-item">Threshold: <strong>{s.acceptanceChance}%</strong></span>
-                                          <span className="alliance-breakdown-item">Roll: <strong>{s.acceptanceRoll}%</strong></span>
-                                          {s.multiBonus > 0 && <span className="alliance-breakdown-item">Multi-ward: <strong>+{s.multiBonus}%</strong></span>}
-                                          {s.breakdown && s.breakdown.length > 0 && s.breakdown.map((b, j) => (
-                                            <span key={j} className="alliance-breakdown-item">{b.label}: <strong>{b.value}</strong></span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                  </div>
-                                )}
-                                {checkedRejected.length > 0 && (
-                                  <div className="pact-builder-breakdown-group">
-                                    <div className="pact-builder-breakdown-group-label rejected">
-                                      {'\u2717'} {checkedRejected.length} rejected by {ally.name}
-                                    </div>
-                                  {checkedRejected.map((s) => {
-                                    const key = `${s.ourWardId}|${s.theirWardId}`
-                                    return (
-                                      <div key={key} className="pact-builder-reject-row">
-                                        <span className="alliance-accept-chance is-low">{'\u2717'}</span>
-                                        <span>{s.ourWardName} {'\u21C4'} {s.theirWardName}</span>
-                                        <div className="alliance-breakdown">
-                                          <span className="alliance-breakdown-item">Threshold: <strong>{s.acceptanceChance}%</strong></span>
-                                          <span className="alliance-breakdown-item">Roll: <strong>{s.acceptanceRoll}%</strong></span>
-                                          {s.multiBonus > 0 && <span className="alliance-breakdown-item">Multi-ward: <strong>+{s.multiBonus}%</strong></span>}
-                                          {s.breakdown && s.breakdown.map((b, j) => (
-                                            <span key={j} className="alliance-breakdown-item">{b.label}: <strong>{b.value}</strong></span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                  </div>
-                                )}
-                              </>
-                            )
-                          })()}
-                          {acceptCount > 0 && (
-                            <button className="ink-button small" type="button" onClick={() => {
-                              const accepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
-                              if (accepted.length === 0) return
-                              const f = accepted[0]
-                              const rest = accepted.slice(1).map((s) => ({ ourWardId: s.ourWardId, theirWardId: s.theirWardId }))
-                              onAction({
-                                type: 'propose_alliance',
-                                label: `Alliance with ${ally.name}`,
-                                description: `Pact covering ${accepted.length} ward-pair${accepted.length !== 1 ? 's' : ''}`,
-                                apCost: 2,
-                                targetPartyId: ally.id,
-                                wardId: f.ourWardId,
-                                allyWardId: f.theirWardId,
-                                allianceEntries: rest,
-                              })
-                              setShowAllianceConfig(false)
-                              setAlliancePartyId('')
-                              setCheckedPairs(new Set())
-                            }}>Propose {acceptCount} pact{acceptCount !== 1 ? 's' : ''} (2 AP)</button>
+                          {allCheckedCount > 0 && (
+                            <div className="neg-summary">
+                              <span style={{ color: '#1a5c2a', fontWeight: 700 }}>{acceptCount} of {allCheckedCount} will accept</span>
+                              {acceptCount > 0 && (
+                                <button className="ink-button small" type="button" onClick={() => {
+                                  const accepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
+                                  if (accepted.length === 0) return
+                                  const f = accepted[0]
+                                  const rest = accepted.slice(1).map((s) => ({ ourWardId: s.ourWardId, theirWardId: s.theirWardId }))
+                                  onAction({ type: 'propose_alliance', label: `Alliance with ${ally.name}`, description: `Pact covering ${accepted.length} ward${accepted.length !== 1 ? 's' : ''}`, apCost: 2, targetPartyId: ally.id, wardId: f.ourWardId, allyWardId: f.theirWardId, allianceEntries: rest })
+                                  setShowAllianceConfig(false); setAlliancePartyId(''); setCheckedPairs(new Set())
+                                }}>Propose {acceptCount} deal{acceptCount !== 1 ? 's' : ''} (2 AP)</button>
+                              )}
+                            </div>
                           )}
-                        </div>
+                        </>
                       )}
-
                       <button className="ink-button secondary small" type="button" onClick={() => { setAlliancePartyId(''); setCheckedPairs(new Set()) }}>Back</button>
                     </div>
                   )}
@@ -881,88 +780,83 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
             })()}
 
             {allianceMode === 'iForThem' && (() => {
-              const focusWardResult = focusWard?.results.find((r) => r.partyId === world.playerPartyId)
-              const focusWardShare = focusWardResult?.voteShare ?? 0
-              const uniWards = focusWard && focusWardShare >= 3 ? [focusWard] : []
-              const selectedWards = uniWards.filter((w) => checkedUniWards.has(w.id))
+              const ally = world.parties.find((p) => p.id === alliancePartyId)
+              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId) : []
+              const suggs = focusWardId
+                ? allSuggs.filter((s) => s.ourWardId === focusWardId)
+                : allSuggs
+
+              const acceptCount = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept).length
+              const allCheckedCount = checkedPairs.size
 
               return (
-                <div className="pact-builder">
-                  <select value={alliancePartyId} onChange={(e) => { setAlliancePartyId(e.target.value); setCheckedUniWards(new Set()) }} className="ac-select">
-                    <option value="">Pick who to help...</option>
+                <>
+                  <select value={alliancePartyId} onChange={(e) => { setAlliancePartyId(e.target.value); setCheckedPairs(new Set()) }} className="ac-select">
+                    <option value="">Pick an ally...</option>
                     {opponents.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                   </select>
 
-                  {alliancePartyId && (() => {
-                    const ally = world.parties.find((p) => p.id === alliancePartyId)
-                    if (!ally) return null
+                  {alliancePartyId && ally && (
+                    <div className="negotiation-card">
+                      <div className="neg-header">
+                        If you stand down in <strong>{focusWard?.name ?? 'selected ward'}</strong>,{' '}
+                        <strong style={{ color: ally.colour }}>{ally.name}</strong> could reciprocate in:
+                      </div>
 
-                    return (
-                      <>
-                        <div className="pact-builder-label">
-                          Stand down in <em>{focusWard?.name ?? 'selected ward'}</em>, endorsing <em>{ally.name}</em>
+                      {!focusWardId ? (
+                        <span className="alliance-no-suggestions">Click a ward on the map first.</span>
+                      ) : suggs.length === 0 ? (
+                        <div className="neg-no-deal">
+                          No deal — standing down in {focusWard?.name} won't persuade {ally.name} to reciprocate.
                         </div>
-
-                        {uniWards.length === 0 ? (
-                          <span className="alliance-no-suggestions">
-                            {focusWard ? `You have ${focusWardShare.toFixed(1)}% in this ward — need ≥3%.` : 'No ward selected. Click a ward on the map first.'}
-                          </span>
-                        ) : (
-                          <div className="pact-table-wrap">
-                            {uniWards.map((ward) => {
-                              const ps = ward.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
-                              const isChecked = checkedUniWards.has(ward.id)
-                              const allyShare = ward.results.find((r) => r.partyId === alliancePartyId)?.voteShare ?? 0
-                              const gainForThem = ps * 0.01 * 25
-                              const leaderShare = ward.results[0]?.voteShare ?? 0
-                              const couldFlip = ward.leadingPartyId !== alliancePartyId && allyShare + gainForThem > leaderShare
+                      ) : (
+                        <>
+                          <div className="neg-list">
+                            {suggs.map((s) => {
+                              const key = `${s.ourWardId}|${s.theirWardId}`
+                              const isChecked = checkedPairs.has(key)
+                              const theirBoost = s.theirWardAllyShare * 0.01 * 25
                               return (
-                                <div key={ward.id} className={`pact-table-row${isChecked ? ' is-selected' : ''}`} onClick={() => setUniChecked(ward.id, !isChecked)}>
-                                  <span className="pact-td-chk" onClick={(e) => e.stopPropagation()}>
-                                    <input type="checkbox" checked={isChecked} onChange={() => setUniChecked(ward.id, !isChecked)} />
+                                <div
+                                  key={key}
+                                  className={`neg-row${isChecked ? ' is-checked' : ''}${s.willAccept ? '' : ' is-rejected'}`}
+                                  onClick={() => setPairChecked(key, !isChecked)}
+                                >
+                                  <span className="neg-chk" onClick={(e) => e.stopPropagation()}>
+                                    <input type="checkbox" checked={isChecked} onChange={() => setPairChecked(key, !isChecked)} />
                                   </span>
-                                  <span className="pact-td-ward">
-                                    <span className="pact-td-ward-name">{ward.name}</span>
-                                    <span className="pact-td-ward-share">({ps.toFixed(1)}% your share)</span>
+                                  <span className="neg-ward">{s.theirWardName}</span>
+                                  <span className="neg-share">{s.theirWardAllyShare.toFixed(1)}%</span>
+                                  <span className="neg-gain">~+{theirBoost.toFixed(1)}% for you</span>
+                                  <span className={`neg-accept${s.willAccept ? '' : ' is-reject'}`}>
+                                    {s.willAccept ? `\u2713 ${s.acceptanceChance}%` : `\u2717 ${s.acceptanceChance}%`}
                                   </span>
-                                  <span className="pact-td-gain" />
-                                  <span className="pact-td-gain">
-                                    +{gainForThem.toFixed(1)}%
-                                    {couldFlip && <span className="alliance-flip-badge">{'\u2B62'} flip</span>}
-                                  </span>
-                                  <span className="pact-td-acc" />
                                 </div>
                               )
                             })}
                           </div>
-                        )}
 
-                        {selectedWards.length > 0 && (
-                          <button className="ink-button small" type="button" style={{ marginTop: 4 }} onClick={() => {
-                            const entries = selectedWards.map((w) => ({ ourWardId: w.id, theirWardId: w.id, isUnilateral: true }))
-                            const f = entries[0]
-                            const rest = entries.slice(1)
-                            onAction({
-                              type: 'propose_alliance',
-                              label: `Stand down for ${ally.name}`,
-                              description: `Unilateral stand-down in ${selectedWards.length} ward${selectedWards.length !== 1 ? 's' : ''}`,
-                              apCost: 2,
-                              targetPartyId: ally.id,
-                              wardId: f.ourWardId,
-                              allyWardId: f.theirWardId,
-                              allianceEntries: rest,
-                            })
-                            setShowAllianceConfig(false)
-                            setAlliancePartyId('')
-                            setCheckedUniWards(new Set())
-                          }}>Stand down in {selectedWards.length} ward{selectedWards.length !== 1 ? 's' : ''} (2 AP)</button>
-                        )}
-
-                        <button className="ink-button secondary small" type="button" onClick={() => { setAlliancePartyId(''); setCheckedUniWards(new Set()) }}>Back</button>
-                      </>
-                    )
-                  })()}
-                </div>
+                          {allCheckedCount > 0 && (
+                            <div className="neg-summary">
+                              <span style={{ color: '#1a5c2a', fontWeight: 700 }}>{acceptCount} of {allCheckedCount} will accept</span>
+                              {acceptCount > 0 && (
+                                <button className="ink-button small" type="button" onClick={() => {
+                                  const accepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
+                                  if (accepted.length === 0) return
+                                  const f = accepted[0]
+                                  const rest = accepted.slice(1).map((s) => ({ ourWardId: s.ourWardId, theirWardId: s.theirWardId }))
+                                  onAction({ type: 'propose_alliance', label: `Alliance with ${ally.name}`, description: `Pact covering ${accepted.length} ward${accepted.length !== 1 ? 's' : ''}`, apCost: 2, targetPartyId: ally.id, wardId: f.ourWardId, allyWardId: f.theirWardId, allianceEntries: rest })
+                                  setShowAllianceConfig(false); setAlliancePartyId(''); setCheckedPairs(new Set())
+                                }}>Propose {acceptCount} deal{acceptCount !== 1 ? 's' : ''} (2 AP)</button>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <button className="ink-button secondary small" type="button" onClick={() => { setAlliancePartyId(''); setCheckedPairs(new Set()) }}>Back</button>
+                    </div>
+                  )}
+                </>
               )
             })()}
           </div>

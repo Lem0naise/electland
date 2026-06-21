@@ -2007,8 +2007,10 @@ function evaluateAllianceAcceptance(
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
   const asymmetryBonus = Math.max(0, (targetHopelessInInitiator - initiatorCloseInTarget) * 0.5)
+  const initiatorShare = initiatorWard.results.find((r) => r.partyId === initiatorId)?.voteShare ?? 0
+  const endorsementValueBonus = (initiatorShare / 100) * 0.30
 
-  return targetHopelessInInitiator + initiatorCloseInTarget + asymmetryBonus + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
+  return targetHopelessInInitiator + initiatorCloseInTarget + asymmetryBonus + endorsementValueBonus + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
 }
 
 function acceptanceSeed(world: World, initiatorId: string, targetId: string, _initiatorWardId: string, _targetWardId: string): number {
@@ -2106,12 +2108,16 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         for (const initWard of world.constituencies) {
           if (initCommittedWards.has(initWard.id)) continue
           const initShare = initWard.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
+          const initClose = initShare > 0 && initWard.results[0].voteShare - initShare < 5
+          if (initClose) continue
           const initStrength = Math.max(0, initShare / 40)
           const initLeading = initWard.leadingPartyId === party.id && initWard.margin > 8
           for (const targWard of world.constituencies) {
             if (initWard.id === targWard.id) continue
             if (targCommittedWards.has(targWard.id)) continue
             const targShare = targWard.results.find((r) => r.partyId === target.id)?.voteShare ?? 0
+            const targClose = targShare > 0 && targWard.results[0].voteShare - targShare < 5
+            if (targClose) continue
             const targStrength = Math.max(0, targShare / 40)
             const targLeading = targWard.leadingPartyId === target.id && targWard.margin > 8
             const pairScore = (initLeading ? initStrength * 0.2 : initStrength * 0.5) +

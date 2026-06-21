@@ -2504,6 +2504,60 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 .alliance-pact-row.is-npc { opacity: 0.75; font-size: 0.65rem; }
 
+/* Negotiation pact builder */
+.negotiation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255,255,255,0.4);
+  border: 1px solid var(--ink-faint);
+}
+.neg-header {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--ink-mid);
+}
+.neg-header strong { color: var(--ink); }
+.neg-no-deal {
+  font-size: 0.66rem;
+  color: var(--accent-red);
+  padding: 6px 8px;
+  background: rgba(155,28,28,0.05);
+  border: 1px solid rgba(155,28,28,0.2);
+  line-height: 1.4;
+}
+.neg-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
+.neg-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--ink-faint);
+  background: rgba(255,255,255,0.25);
+  cursor: pointer;
+  font-size: 0.66rem;
+  transition: background 100ms;
+}
+.neg-row:hover { background: rgba(255,255,255,0.5); }
+.neg-row.is-checked { border-color: var(--safe); background: rgba(26,92,42,0.06); }
+.neg-row.is-rejected { opacity: 0.7; }
+.neg-chk { display: flex; align-items: center; }
+.neg-chk input { margin: 0; cursor: pointer; }
+.neg-ward { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.neg-share { font-size: 0.58rem; color: var(--ink-soft); }
+.neg-gain { font-size: 0.56rem; color: var(--ink-soft); white-space: nowrap; }
+.neg-accept { font-size: 0.62rem; font-weight: 700; white-space: nowrap; margin-left: auto; }
+.neg-accept.is-reject { color: var(--accent-red); }
+.neg-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
 /* NPC proposal prompt */
 .npc-proposal-prompt {
   display: flex;
