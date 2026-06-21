@@ -2006,7 +2006,9 @@ function evaluateAllianceAcceptance(
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
-  return targetHopelessInInitiator + initiatorCloseInTarget + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
+  const asymmetryBonus = Math.max(0, (targetHopelessInInitiator - initiatorCloseInTarget) * 0.5)
+
+  return targetHopelessInInitiator + initiatorCloseInTarget + asymmetryBonus + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
 }
 
 function acceptanceSeed(world: World, initiatorId: string, targetId: string, _initiatorWardId: string, _targetWardId: string): number {
@@ -2025,11 +2027,11 @@ function deterministicAcceptance(
   targetId: string,
   initiatorWardId: string,
   targetWardId: string,
-  batchSize = 1,
+  totalSacrifice = 0,
 ): { accepted: boolean; chance: number; roll: number } {
   const baseChance = evaluateAllianceAcceptance(world, initiatorId, targetId, initiatorWardId, targetWardId)
   if (baseChance <= -998) return { accepted: false, chance: 0, roll: 0 }
-  const multiBonus = (batchSize - 1) * 0.10
+  const multiBonus = Math.min(0.50, totalSacrifice * 1.5)
   const totalChance = Math.max(0.05, Math.min(0.85, baseChance + multiBonus))
   const roll = acceptanceSeed(world, initiatorId, targetId, initiatorWardId, targetWardId)
   return { accepted: roll < totalChance, chance: Math.round(totalChance * 100), roll: Math.round(roll * 100) }
@@ -2526,7 +2528,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
         }
       }
 
-      const batchSize = Math.max(1, entries.length)
+      const totalSacrifice = entries.reduce((sum, e) => sum + e.endorsementForB / 100, 0)
 
       const acceptedEntries: AlliancePactEntry[] = []
       for (const entry of entries) {
@@ -2535,7 +2537,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
           acceptedEntries.push(entry)
           continue
         }
-        const det = deterministicAcceptance(world, world.playerPartyId, action.targetPartyId, entry.wardA, entry.wardB, batchSize)
+        const det = deterministicAcceptance(world, world.playerPartyId, action.targetPartyId, entry.wardA, entry.wardB, totalSacrifice)
         if (det.accepted) {
           acceptedEntries.push(entry)
         }
@@ -3283,7 +3285,7 @@ export interface PactSuggestion {
   breakdown?: { label: string; value: string }[]
 }
 
-export function suggestPacts(world: World, allyPartyId: string, batchSize = 1): PactSuggestion[] {
+export function suggestPacts(world: World, allyPartyId: string, totalSacrifice = 0): PactSuggestion[] {
   const allyParty = world.parties.find((p) => p.id === allyPartyId)
   const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
   if (!allyParty || !playerParty) return []
@@ -3395,7 +3397,7 @@ export function suggestPacts(world: World, allyPartyId: string, batchSize = 1): 
           breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
         }
 
-        const det = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, batchSize)
+        const det = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, totalSacrifice)
 
         suggestions.push({
           ourWardId: ourWard.id,
@@ -3407,7 +3409,7 @@ export function suggestPacts(world: World, allyPartyId: string, batchSize = 1): 
           score,
           acceptanceChance: det.chance,
           acceptanceRoll: det.roll,
-          multiBonus: (batchSize - 1) * 10,
+          multiBonus: Math.round(Math.min(0.50, totalSacrifice * 1.5) * 100),
           willAccept: det.accepted,
           couldFlip,
           flipDelta,
@@ -3496,7 +3498,7 @@ export function reciprocalWards(world: World, allyPartyId: string, allyWardId: s
         breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
       }
 
-      const det2 = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id)
+      const det2 = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, 0)
 
       suggestions.push({
         ourWardId: ourWard.id,

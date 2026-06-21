@@ -702,8 +702,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
             {allianceMode === 'theyForMe' && (() => {
               const ally = world.parties.find((p) => p.id === alliancePartyId)
-              const batchSize = Math.max(1, checkedPairs.size)
-              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId, batchSize) : []
+              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId) : []
               const suggs = focusWardId
                 ? allSuggs.filter((s) => s.ourWardId === focusWardId || s.theirWardId === focusWardId)
                 : allSuggs
