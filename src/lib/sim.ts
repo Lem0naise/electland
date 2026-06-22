@@ -2239,16 +2239,41 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
   // Periodic NPC pact review: every 4 weeks, evaluate whether to keep pacts
   if (world.week % 4 === 0) {
+    const standingDown: Record<string, Set<string>> = {}
+    for (const p of world.alliancePacts) {
+      if (p.broken) continue
+      for (const e of p.entries) {
+        if (!standingDown[e.wardA]) standingDown[e.wardA] = new Set()
+        standingDown[e.wardA].add(p.partyAId)
+        if (!e.isUnilateral) {
+          if (!standingDown[e.wardB]) standingDown[e.wardB] = new Set()
+          standingDown[e.wardB].add(p.partyBId)
+        }
+      }
+    }
+
     for (const pact of world.alliancePacts) {
       if (pact.broken) continue
 
       let breakPact = false
       let breakReason: string | null = null
+      let alreadyAnnounced = false
 
       for (const entry of pact.entries) {
         const wardA = world.constituencies.find((c) => c.id === entry.wardA)
         const wardB = world.constituencies.find((c) => c.id === entry.wardB)
         if (!wardA || !wardB) continue
+
+        const sdA = standingDown[entry.wardA]
+        if (sdA && sdA.has(pact.partyBId)) {
+          const partyName = world.parties.find((p) => p.id === pact.partyAId)?.name ?? '?'
+          const allyName = world.parties.find((p) => p.id === pact.partyBId)?.name ?? '?'
+          breakPact = true
+          breakReason = pact.partyAId
+          alreadyAnnounced = true
+          newsFeedLines.push(`${partyName} abandons their pact with ${allyName} — their endorsement is wasted in ${entry.wardAName}.`)
+          break
+        }
 
         const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 15
         const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 15
@@ -2267,8 +2292,10 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
       if (breakPact && breakReason) {
         pact.broken = true
-        const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
-        newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
+        if (!alreadyAnnounced) {
+          const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
+          newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
+        }
       }
     }
   }
