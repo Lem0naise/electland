@@ -697,7 +697,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
             {allianceMode === 'theyForMe' && (() => {
               const ally = world.parties.find((p) => p.id === alliancePartyId)
-              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId) : []
+              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId, 0, Math.max(1, checkedPairs.size)) : []
               const suggs = focusWardId
                 ? allSuggs.filter((s) => s.theirWardId === focusWardId)
                 : allSuggs
@@ -757,16 +757,20 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
                           {allCheckedCount > 0 && (
                             <div className="neg-summary">
-                              <span style={{ color: '#1a5c2a', fontWeight: 700 }}>{acceptCount} of {allCheckedCount} will accept</span>
-                              {acceptCount > 0 && (
-                                <button className="ink-button small" type="button" onClick={() => {
-                                  const accepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
-                                  if (accepted.length === 0) return
-                                  const f = accepted[0]
-                                  const rest = accepted.slice(1).map((s) => ({ ourWardId: s.ourWardId, theirWardId: s.theirWardId }))
-                                  onAction({ type: 'propose_alliance', label: `Alliance with ${ally.name}`, description: `Pact covering ${accepted.length} ward${accepted.length !== 1 ? 's' : ''}`, apCost: 2, targetPartyId: ally.id, wardId: f.ourWardId, allyWardId: f.theirWardId, allianceEntries: rest })
-                                  setShowAllianceConfig(false); setAlliancePartyId(''); setCheckedPairs(new Set())
-                                }}>Propose {acceptCount} deal{acceptCount !== 1 ? 's' : ''} (2 AP)</button>
+                              {acceptCount > 0 ? (
+                                <>
+                                  <span style={{ color: '#1a5c2a', fontWeight: 700 }}>{acceptCount} of {allCheckedCount} will accept</span>
+                                  <button className="ink-button small" type="button" onClick={() => {
+                                    const accepted = suggs.filter((s) => checkedPairs.has(`${s.ourWardId}|${s.theirWardId}`) && s.willAccept)
+                                    if (accepted.length === 0) return
+                                    const f = accepted[0]
+                                    const rest = accepted.slice(1).map((s) => ({ ourWardId: s.ourWardId, theirWardId: s.theirWardId }))
+                                    onAction({ type: 'propose_alliance', label: `Alliance with ${ally.name}`, description: `Pact covering ${accepted.length} ward${accepted.length !== 1 ? 's' : ''}`, apCost: 2, targetPartyId: ally.id, wardId: f.ourWardId, allyWardId: f.theirWardId, allianceEntries: rest })
+                                    setShowAllianceConfig(false); setAlliancePartyId(''); setCheckedPairs(new Set())
+                                  }}>Propose {acceptCount} deal{acceptCount !== 1 ? 's' : ''} (2 AP)</button>
+                                </>
+                              ) : (
+                                <span style={{ color: 'var(--accent-red)', fontWeight: 700 }}>NO DEAL — none of {allCheckedCount} will accept</span>
                               )}
                             </div>
                           )}
@@ -781,7 +785,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
 
             {allianceMode === 'iForThem' && (() => {
               const ally = world.parties.find((p) => p.id === alliancePartyId)
-              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId) : []
+              const allSuggs = alliancePartyId ? suggestPacts(world, alliancePartyId, 0, Math.max(1, checkedPairs.size)) : []
               const suggs = focusWardId
                 ? allSuggs.filter((s) => s.ourWardId === focusWardId)
                 : allSuggs
