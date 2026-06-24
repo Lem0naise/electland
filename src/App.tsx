@@ -205,7 +205,7 @@ function App() {
     setWorld(nextWorld)
     // Show NPC pact events
     const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
-      (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact'),
+      (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
     )
     if (newPactLines.length > 0) {
       const desc = newPactLines[0].replace(/^Week \d+: /, '')

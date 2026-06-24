@@ -2113,6 +2113,10 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           const initShare = initWard.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
           const initClose = initShare > 0 && initWard.results[0].voteShare - initShare < 5
           if (initClose) continue
+          const initIsIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
+            (r) => r.wardId === initWard.id && r.winner?.partyId === party.id,
+          )
+          if (initIsIncumbent) continue
           const initStrength = Math.max(0, initShare / 40)
           const initLeading = initWard.leadingPartyId === party.id && initWard.margin > 8
           for (const targWard of world.constituencies) {
@@ -2192,6 +2196,10 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
             const initShare = initWard.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
             const initClose = initShare > 0 && initWard.results[0].voteShare - initShare < 5
             if (initClose) continue
+            const initIsIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
+              (r) => r.wardId === initWard.id && r.winner?.partyId === party.id,
+            )
+            if (initIsIncumbent) continue
             const initStrength = Math.max(0, initShare / 40)
           const initLeading = initWard.leadingPartyId === party.id && initWard.margin > 8
             for (const targWard of world.constituencies) {
