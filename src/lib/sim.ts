@@ -6,9 +6,11 @@ import {
   type ActiveCampaign,
   type AlliancePact,
   type AlliancePactEntry,
+  type Budget,
   type CampaignAction,
   type Constituency,
   type ConstituencyResult,
+  type CouncilDecisionRecord,
   type CouncillorTenure,
   type CustomPartyDraft,
   type FictionalBloc,
@@ -1987,7 +1989,7 @@ function evaluateAllianceAcceptance(
   const initiatorResultInTargetWard = targetWard.results.find((r) => r.partyId === initiatorId)
   const targetStandingInTargetWard = targetWard.results.find((r) => r.partyId === targetId)
 
-  const leaderShare = targetWard.results[0]?.voteShare ?? 0
+  const leaderShare = targetWard.results[0]?.voteShare ?? 1
   const targetWinningInRequested = Math.min(1, (targetStandingInTargetWard?.voteShare ?? 0) / Math.max(1, leaderShare)) * 0.40
   const isLeading = targetWard.leadingPartyId === targetId && (targetWard.margin ?? 0) > 8
   const targetHopelessInInitiator = isLeading
@@ -2281,7 +2283,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         if (!wardA || !wardB) continue
 
         const sdA = standingDown[entry.wardA]
-        if (sdA && sdA.has(pact.partyBId)) {
+        if (sdA && sdA.has(pact.partyBId) && pact.partyAId !== world.playerPartyId) {
           const partyName = world.parties.find((p) => p.id === pact.partyAId)?.name ?? '?'
           const allyName = world.parties.find((p) => p.id === pact.partyBId)?.name ?? '?'
           breakPact = true
@@ -2291,7 +2293,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           break
         }
         const sdB = standingDown[entry.wardB]
-        if (sdB && sdB.has(pact.partyAId)) {
+        if (sdB && sdB.has(pact.partyAId) && pact.partyBId !== world.playerPartyId) {
           const partyName = world.parties.find((p) => p.id === pact.partyBId)?.name ?? '?'
           const allyName = world.parties.find((p) => p.id === pact.partyAId)?.name ?? '?'
           breakPact = true
@@ -2304,12 +2306,12 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         const partyANowWinning = wardA.leadingPartyId === pact.partyAId && wardA.margin > 15
         const partyBNowWinning = wardB.leadingPartyId === pact.partyBId && wardB.margin > 15
 
-        if (partyANowWinning) {
+        if (partyANowWinning && pact.partyAId !== world.playerPartyId) {
           breakPact = true
           breakReason = pact.partyAId
           break
         }
-        if (partyBNowWinning) {
+        if (partyBNowWinning && pact.partyBId !== world.playerPartyId) {
           breakPact = true
           breakReason = pact.partyBId
           break
@@ -2795,6 +2797,8 @@ export function generateWorld(options: WorldOptions): World {
     allianceReputation: {} as Record<string, number>,
     needsCoalition: false,
     minorityGovernment: false,
+    budget: getDefaultBudget(),
+    councilHistory: [] as CouncilDecisionRecord[],
     headlines: [] as string[],
   }
 
@@ -3847,4 +3851,21 @@ export function updateCouncillorTenure(seed: number, week: number, results: Arra
   }
 
   saveCouncillorTenure(seed, registry)
+}
+
+// ─── Budget system ──────────────────────────────────────────────────────
+
+export function getDefaultBudget(): Budget {
+  return {
+    totalBudget: 350,
+    categories: [
+      { id: 'roads',      label: 'Roads & Potholes',     funding: 50, blocs: ['workshop_crews', 'market_regulars'] },
+      { id: 'buses',      label: 'Buses & Transport',     funding: 50, blocs: ['river_walkers', 'college_corner'] },
+      { id: 'parks',      label: 'Parks & Recreation',    funding: 50, blocs: ['river_walkers', 'pondside_peacemakers'] },
+      { id: 'libraries',  label: 'Libraries & Culture',   funding: 50, blocs: ['old_town_loyalists', 'college_corner'] },
+      { id: 'bins',       label: 'Bins & Recycling',      funding: 50, blocs: ['hill_street_households', 'market_regulars'] },
+      { id: 'safety',     label: 'Community Safety',      funding: 50, blocs: ['pondside_peacemakers', 'hill_street_households'] },
+      { id: 'youth',      label: 'Youth Services',        funding: 50, blocs: ['college_corner', 'workshop_crews'] },
+    ],
+  }
 }

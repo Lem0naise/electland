@@ -5,6 +5,8 @@ import { ConstituencyInspector } from './components/ConstituencyInspector'
 import { MapFigure } from './components/MapFigure'
 import { StatisticsModal } from './components/StatisticsModal'
 import { CoalitionModal } from './components/CoalitionModal'
+import { BudgetModal } from './components/BudgetModal'
+import { GovernmentDashboard } from './components/GovernmentDashboard'
 import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
@@ -53,6 +55,8 @@ function App() {
   const [showGovernance, setShowGovernance] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [showCoalitionModal, setShowCoalitionModal] = useState(false)
+  const [showBudgetModal, setShowBudgetModal] = useState(false)
+  const [showGovDashboard, setShowGovDashboard] = useState(false)
   const [redistrictTargetWardId, setRedistrictTargetWardId] = useState('')
   const [redistrictSnapshot, setRedistrictSnapshot] = useState<Map<string, string> | null>(null)
 
@@ -280,24 +284,31 @@ function App() {
 
   const handleGovernanceDecision = (decisionId: string, choiceIndex: number) => {
     if (!world) return
+    const decision = world.governanceDecisions.find((d) => d.id === decisionId)
+    const choice = decision?.choices[choiceIndex]
+    const newsFeedLine = `Week ${world.week}: Council decision — ${decision?.headline ?? 'decision made'} — you chose "${choice?.label ?? '?'}".`
+    const newRecord = decision && choice ? { week: world.week, headline: decision.headline, choice: choice.label } : null
+    setWorld((prev) => prev ? {
+      ...prev,
+      governanceDecisions: prev.governanceDecisions.map((d) =>
+        d.id === decisionId ? { ...d, resolved: true, chosenIndex: choiceIndex } : d,
+      ),
+      parties: prev.parties.map((p) => {
+        if (p.id === world.playerPartyId && choice) {
+          return { ...p, baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta) }
+        }
+        if (prev.coalitionPartnerId && p.id === prev.coalitionPartnerId && choice) {
+          const blocBonus = Object.values(choice.effect.blocEffects).reduce((sum, v) => sum + v, 0) / Math.max(1, Object.keys(choice.effect.blocEffects).length)
+          return { ...p, baseUtility: Math.min(1.2, p.baseUtility + blocBonus * 0.3) }
+        }
+        return p
+      }),
+      newsFeed: [newsFeedLine, ...prev.newsFeed].slice(0, 30),
+      councilHistory: newRecord ? [...(prev.councilHistory ?? []), newRecord] : (prev.councilHistory ?? []),
+    } : prev)
     const nextDecisions = world.governanceDecisions.map((d) =>
       d.id === decisionId ? { ...d, resolved: true, chosenIndex: choiceIndex } : d,
     )
-    const decision = world.governanceDecisions.find((d) => d.id === decisionId)
-    const choice = decision?.choices[choiceIndex]
-    let updatedParties = world.parties.map((p) => {
-      if (p.id === world.playerPartyId && choice) {
-        return { ...p, baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta) }
-      }
-      // Apply blocEffects to coalition partner
-      if (world.coalitionPartnerId && p.id === world.coalitionPartnerId && choice) {
-        const blocBonus = Object.values(choice.effect.blocEffects).reduce((sum, v) => sum + v, 0) / Math.max(1, Object.keys(choice.effect.blocEffects).length)
-        return { ...p, baseUtility: Math.min(1.2, p.baseUtility + blocBonus * 0.3) }
-      }
-      return p
-    })
-    const newsFeedLine = `Week ${world.week}: Council decision — ${decision?.headline ?? 'decision made'} — you chose "${choice?.label ?? '?'}".`
-    setWorld((prev) => prev ? { ...prev, parties: updatedParties, governanceDecisions: nextDecisions, newsFeed: [newsFeedLine, ...prev.newsFeed].slice(0, 30) } : prev)
     const stillPending = nextDecisions.filter((d) => !d.resolved)
     if (stillPending.length === 0) setShowGovernance(false)
   }
@@ -462,7 +473,7 @@ function App() {
           {world ? (
             <>
               <div className="seat-bar-row">
-                <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} />
+                <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} onOpenDashboard={() => setShowGovDashboard(true)} />
               </div>
 
               <section className="panel map-panel">
@@ -644,6 +655,28 @@ function App() {
           decisions={world.governanceDecisions}
           onDecide={handleGovernanceDecision}
           onClose={() => setShowGovernance(false)}
+        />
+      )}
+
+      {showBudgetModal && world?.budget && (
+        <BudgetModal
+          budget={world.budget}
+          onSave={(b) => {
+            setWorld((prev) => prev ? { ...prev, budget: b } : prev)
+            setShowBudgetModal(false)
+          }}
+          onClose={() => setShowBudgetModal(false)}
+        />
+      )}
+
+      {showGovDashboard && world && (
+        <GovernmentDashboard
+          world={world}
+          onOpenBudget={() => {
+            setShowGovDashboard(false)
+            setShowBudgetModal(true)
+          }}
+          onClose={() => setShowGovDashboard(false)}
         />
       )}
     </div>

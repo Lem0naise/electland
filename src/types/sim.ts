@@ -1,3 +1,21 @@
+export interface BudgetCategory {
+  id: string
+  label: string
+  funding: number
+  blocs: string[]
+}
+
+export interface Budget {
+  categories: BudgetCategory[]
+  totalBudget: number
+}
+
+export interface CouncilDecisionRecord {
+  week: number
+  headline: string
+  choice: string
+}
+
 export const VALUE_KEYS = [
   'change',
   'growth',
@@ -374,6 +392,9 @@ export interface World {
   needsCoalition: boolean
   coalitionPartnerId?: string
   minorityGovernment: boolean
+  // Budget system
+  budget?: Budget
+  councilHistory: CouncilDecisionRecord[]
 }
 
 export interface CustomPartyDraft {
