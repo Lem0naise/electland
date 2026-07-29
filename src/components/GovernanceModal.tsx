@@ -13,7 +13,7 @@ export function GovernanceModal({ world, decisions, onDecide, onClose }: {
   if (pending.length === 0) {
     return (
       <div className="modal-backdrop">
-        <div className="modal governance-modal">
+        <div className="modal governance-modal" role="dialog" aria-modal="true">
           <div className="modal-header">
             <span className="modal-kicker">Council Chambers</span>
             <h2>Governing {world.townName}</h2>
@@ -29,7 +29,7 @@ export function GovernanceModal({ world, decisions, onDecide, onClose }: {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal governance-modal">
+      <div className="modal governance-modal" role="dialog" aria-modal="true">
         <div className="modal-header">
           <span className="modal-kicker">
             {govType === 'Coalition' && coalitionPartner

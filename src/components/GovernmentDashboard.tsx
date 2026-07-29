@@ -28,7 +28,7 @@ export function GovernmentDashboard({ world, onOpenBudget, onClose }: {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal gov-dashboard" onClick={(e) => e.stopPropagation()}>
+      <div className="modal gov-dashboard" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-header">
           <span className="modal-kicker">Government Dashboard</span>
           <h2>{govLabel}</h2>

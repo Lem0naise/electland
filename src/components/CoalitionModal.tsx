@@ -100,10 +100,11 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
     }
     if (!option.partnerId) return
 
+    setAttemptId(option.partnerId)
     if (option.accepted) {
+      setAttemptResult(null)
       onFormCoalition(option.partnerId, generateGovernanceDecisions(2))
     } else {
-      setAttemptId(option.partnerId)
       const cannotMajority = option.combinedSeats < majority
       const message = cannotMajority
         ? `${option.label.replace('with ', '')} — only ${option.combinedSeats} seats combined (need ${majority}). Not enough for a majority.`
@@ -114,7 +115,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
 
   return (
     <div className="modal-backdrop">
-      <div className="modal coalition-modal">
+      <div className="modal coalition-modal" role="dialog" aria-modal="true">
         <div className="modal-header">
           <span className="modal-kicker">Government Formation</span>
           <h2>No Overall Control</h2>

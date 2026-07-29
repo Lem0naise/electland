@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Budget } from '../types/sim'
 
 export function BudgetModal({ budget, onSave, onClose }: {
@@ -6,7 +6,13 @@ export function BudgetModal({ budget, onSave, onClose }: {
   onSave: (b: Budget) => void
   onClose: () => void
 }) {
+  const budgetKey = useMemo(() => JSON.stringify(budget.categories.map((c) => c.funding)), [budget])
   const [cats, setCats] = useState(budget.categories.map((c) => ({ ...c })))
+  const [prevKey, setPrevKey] = useState(budgetKey)
+  if (prevKey !== budgetKey) {
+    setPrevKey(budgetKey)
+    setCats(budget.categories.map((c) => ({ ...c })))
+  }
   const currentTotal = cats.reduce((s, c) => s + c.funding, 0)
   const delta = currentTotal - budget.totalBudget
   const balanced = Math.abs(delta) <= 2
@@ -17,7 +23,7 @@ export function BudgetModal({ budget, onSave, onClose }: {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal budget-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal budget-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-header">
           <span className="modal-kicker">Council Chambers</span>
           <h2>Set the Budget</h2>

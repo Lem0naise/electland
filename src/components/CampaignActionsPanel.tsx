@@ -64,8 +64,8 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
       onTogglePermanent(existing)
     } else {
       const newCampaign: ActiveCampaign = {
-        id: `${action.type}-${action.wardId}-${Date.now()}`,
-        type: action.type,
+        id: `${action.type}-${action.wardId}-${world.week}`,
+        type: action.type as ActiveCampaign['type'],
         label: action.label,
         apCostPerTurn: action.permanentApCost ?? 1,
         wardId: action.wardId,

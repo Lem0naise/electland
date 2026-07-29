@@ -37,6 +37,14 @@ const MAP_WIDTH = 920
 const MAP_HEIGHT = 640
 const GRID_STEP = 18
 
+const ISSUE_FIT_SCALE = 7000
+const ALLIANCE_IDEOLOGY_SCALE = 8000
+const COALITION_IDEOLOGY_SCALE = 12000
+const SOFTMAX_TEMP = 0.85
+const STANDING_DOWN_SCORE = -999
+const WARD_BOOST_DECAY = 0.78
+const CAMPAIGN_BOOST_DECAY = 0.78
+
 const defaultSalience: PoliticalValues = { change: 1, growth: 1, services: 1 }
 
 // ─── Issue currents pool ────────────────────────────────────────────────────
@@ -793,6 +801,15 @@ function createRng(seed: number) {
   }
 }
 
+function shuffle<T>(arr: T[], rng: () => number): T[] {
+  const result = [...arr]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 function randomBetween(rng: () => number, min: number, max: number) {
   return min + (max - min) * rng()
 }
@@ -1041,7 +1058,7 @@ function buildTileTags(point: { x: number; y: number }, urbanity: number, polygo
 }
 
 function generateBlocs(rng: () => number) {
-  const chosen = [...fictionalBlocTemplates].sort(() => rng() - 0.5).slice(0, 5)
+  const chosen = shuffle(fictionalBlocTemplates, rng).slice(0, 5)
   const rawWeights = chosen.map((template) => randomBetween(rng, template.weightRange[0], template.weightRange[1]))
   const total = rawWeights.reduce((sum, value) => sum + value, 0)
   return chosen.map<FictionalBloc>((template, index) => ({
@@ -1141,7 +1158,6 @@ function createPopulationTiles(rng: () => number, polygon: Array<[number, number
   }
 
   const totalDensity = provisional.reduce((sum, tile) => sum + tile.density, 0)
-  // SMALLER population: 600–1,600
   const totalPopulation = Math.round(randomBetween(rng, 8000, 10000)) * 2
   let allocated = 0
   const withPopulation = provisional.map((tile, index) => {
@@ -1156,7 +1172,7 @@ function createPopulationTiles(rng: () => number, polygon: Array<[number, number
   blocs.forEach((bloc) => {
     const matching = centers.filter((center) => center.role === bloc.homeRole)
     const source = matching.length > 0 ? matching : centers
-    anchorsByBloc[bloc.id] = [...source].sort(() => rng() - 0.5).slice(0, bloc.concentration > 0.7 ? 1 : 2).map((center) => ({ x: center.x, y: center.y }))
+    anchorsByBloc[bloc.id] = shuffle(source, rng).slice(0, bloc.concentration > 0.7 ? 1 : 2).map((center) => ({ x: center.x, y: center.y }))
   })
 
   const mixes = allocateBlocMixes(withPopulation, blocs, anchorsByBloc)
@@ -1676,7 +1692,7 @@ function assignPartyFocus(parties: PartyDefinition[], constituencies: Constituen
 
 function softmax(scores: number[]) {
   const max = Math.max(...scores)
-  const values = scores.map((score) => Math.exp((score - max) / 0.85))
+  const values = scores.map((score) => Math.exp((score - max) / SOFTMAX_TEMP))
   const total = values.reduce((sum, value) => sum + value, 0)
   return values.map((value) => value / total)
 }
@@ -1685,7 +1701,9 @@ function partyEventBonus(party: PartyDefinition, current: GeographicCurrent, til
   if (!current.tags.some((tag) => tileTags.includes(tag))) return 0
   if (!current.popularityEffect) return 0
   if (current.popularityEffect.target === 'all') return current.popularityEffect.amount
-  if (current.popularityEffect.target === party.tier) return current.popularityEffect.amount
+  const tierMatch = current.popularityEffect.target === party.tier ||
+    (current.popularityEffect.target === 'minor' && party.tier === 'custom')
+  if (tierMatch) return current.popularityEffect.amount
   return 0
 }
 
@@ -1698,7 +1716,7 @@ function scorePartyForTile(world: World, seat: Constituency | undefined, tile: P
   // 3. Tag bonus raised: home-turf tags meaningfully reinforce strength
   const tagBonus = party.strategyTags.reduce((sum, tag) => sum + (tile.tags.includes(tag) ? 0.20 : 0), 0)
   // 4. Tighter issueFit: ideological distance hurts more — mismatched parties lose real ground
-  const issueFit = -valueDistance(tile.values, party.values, tile.salience) / 7000
+  const issueFit = -valueDistance(tile.values, party.values, tile.salience) / ISSUE_FIT_SCALE
   const eventBonus = world.currents.reduce((sum, current) => sum + partyEventBonus(party, current, tile.tags), 0)
   // Campaign boost from canvassing/ads/rally
   const wardBoost = seat ? (party.wardBoosts[seat.id] ?? 0) : 0
@@ -1757,10 +1775,10 @@ export function estimateTilePreference(
   const scores = world.parties.map((party) => {
     const base = scorePartyForTile(world, constituency, tile, party)
     const { standingDown, endorsementBonus } = allianceModifier(world, tile, party)
-    if (standingDown) return -999
+    if (standingDown) return STANDING_DOWN_SCORE
     return base + endorsementBonus
   })
-  const realScores = scores.filter((s) => s > -998)
+  const realScores = scores.filter((s) => s > STANDING_DOWN_SCORE + 1)
   const spread = realScores.length > 0 ? Math.max(...realScores) - Math.min(...realScores) : 0
   const turnout = clamp(tile.turnout + spread * 0.01, 0.4, 0.95)
   const rankings = softmax(scores)
@@ -1843,7 +1861,7 @@ export function calculateResults(world: World) {
   }
 }
 
-function buildStats(world: Omit<World, 'stats' | 'headlines'> & { nationalResults: PartyPerformance[]; constituencies: Constituency[] }): TownStats {
+function buildStats(world: Omit<World, 'stats'> & { nationalResults: PartyPerformance[]; constituencies: Constituency[] }): TownStats {
   const sortedByMargin = [...world.constituencies].sort((a, b) => a.margin - b.margin)
   const leader = world.nationalResults[0]
   const battlegroundWardIds = world.constituencies
@@ -1855,50 +1873,15 @@ function buildStats(world: Omit<World, 'stats' | 'headlines'> & { nationalResult
     projectedMayorParty: leader?.partyName ?? 'No one yet',
     projectedMayorLeader: leader?.leader ?? 'No one yet',
     projectedMayorWards: leader?.seatsWon ?? 0,
-    currentMayorParty: world.currentMayorParty,
-    currentMayorLeader: world.currentMayorLeader,
     closestWardName: sortedByMargin[0]?.name ?? 'None',
     closestWardMargin: sortedByMargin[0]?.margin ?? 0,
     safestWardName: sortedByMargin[sortedByMargin.length - 1]?.name ?? 'None',
     safestWardMargin: sortedByMargin[sortedByMargin.length - 1]?.margin ?? 0,
     totalWards: world.constituencies.length,
-    electionCycleWeeks: world.electionCycleWeeks,
-    weeksUntilElection: world.weeksUntilElection,
     battlegroundWardIds,
   }
 }
 
-function summarizeHeadlines(world: World): string[] {
-  const leader = world.nationalResults[0]
-  const second = world.nationalResults[1]
-  const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
-  const playerResult = world.nationalResults.find((r) => r.partyId === world.playerPartyId)
-  const closest = world.constituencies.find((c) => c.name === world.stats.closestWardName)
-
-  const lines: string[] = []
-  if (leader) {
-    lines.push(`${leader.partyName} leads with ${leader.seatsWon} ward${leader.seatsWon !== 1 ? 's' : ''} — ${leader.voteShare.toFixed(1)}% of the vote.`)
-  }
-  if (closest && closest.margin < 8) {
-    lines.push(`${closest.name} is tonight's squeaker — only ${closest.margin.toFixed(1)} points between the top two.`)
-  }
-  if (world.currents[0]) {
-    lines.push(`${world.currents[0].label} is the talk of the town this week.`)
-  }
-  if (playerParty && playerResult) {
-    const seatsNeeded = world.stats.councilMajority - playerResult.seatsWon
-    if (seatsNeeded <= 0) {
-      lines.push(`${playerParty.name} is on course for a majority! Keep it up.`)
-    } else if (seatsNeeded === 1) {
-      lines.push(`${playerParty.name} needs just one more ward for a majority.`)
-    } else {
-      lines.push(`${playerParty.name} needs ${seatsNeeded} more wards. ${world.weeksUntilElection} weeks left.`)
-    }
-  } else if (second) {
-    lines.push(`${second.partyName} is ${Math.max(0, leader.seatsWon - second.seatsWon)} ward${Math.abs(leader.seatsWon - second.seatsWon) !== 1 ? 's' : ''} behind with ${world.weeksUntilElection} weeks to go.`)
-  }
-  return lines
-}
 
 function evolveCurrents(currents: GeographicCurrent[], rng: () => number) {
   const reshuffled = [...currents].map((current) => ({
@@ -1926,14 +1909,19 @@ function driftTiles(world: World, rng: () => number) {
         values = addValues(values, current.effect, current.intensity * 0.03)
       }
     })
+    const decayedBoosts: Record<string, number> = {}
+    for (const [pid, val] of Object.entries(tile.campaignBoosts ?? {})) {
+      const decayed = val * CAMPAIGN_BOOST_DECAY
+      if (decayed > 0.005) decayedBoosts[pid] = decayed
+    }
     return {
       ...tile,
-      // Tiny weekly noise — just enough to prevent perfectly frozen polls
       values: addValues(values, {
         change: gaussian(rng, 0, 0.25),
         growth: gaussian(rng, 0, 0.25),
         services: gaussian(rng, 0, 0.25),
       }),
+      campaignBoosts: decayedBoosts,
     }
   })
 }
@@ -1955,7 +1943,7 @@ function evolveParties(parties: PartyDefinition[], constituencies: Constituency[
       aiActionPoints: isPlayer ? party.aiActionPoints : (party.tier === 'major' ? 3 : 2),
       // Decay ward boosts more slowly — canvass effect lasts ~4 weeks
       wardBoosts: Object.fromEntries(
-        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * 0.78]),
+        Object.entries(party.wardBoosts).map(([k, v]) => [k, v * WARD_BOOST_DECAY]),
       ),
     }
   })
@@ -1979,9 +1967,9 @@ function evaluateAllianceAcceptance(
     if (pact.broken) continue
     for (const e of pact.entries) {
       if ((pact.partyAId === initiatorId && e.wardA === initiatorWardId) ||
-          (pact.partyBId === initiatorId && e.wardB === initiatorWardId)) return -999
+          (pact.partyBId === initiatorId && e.wardB === initiatorWardId)) return STANDING_DOWN_SCORE
       if ((pact.partyAId === targetId && e.wardA === targetWardId) ||
-          (pact.partyBId === targetId && e.wardB === targetWardId)) return -999
+          (pact.partyBId === targetId && e.wardB === targetWardId)) return STANDING_DOWN_SCORE
     }
   }
 
@@ -2001,10 +1989,10 @@ function evaluateAllianceAcceptance(
   const isIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
     (r) => r.wardId === targetWardId && r.winner?.partyId === targetId
   )
-  if (isIncumbent) return -999
+  if (isIncumbent) return STANDING_DOWN_SCORE
 
   const valueDist = valueDistance(initiatorParty.values, targetParty.values, { change: 1, growth: 1, services: 1 })
-  const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
+  const ideologicalBonus = Math.max(0, 1 - valueDist / ALLIANCE_IDEOLOGY_SCALE)
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
@@ -2015,8 +2003,8 @@ function evaluateAllianceAcceptance(
   return targetHopelessInInitiator + initiatorCloseInTarget + asymmetryBonus + endorsementValueBonus + ideologicalBonus * 0.25 - repPenalty - targetWinningInRequested
 }
 
-function acceptanceSeed(world: World, initiatorId: string, targetId: string, _initiatorWardId: string, _targetWardId: string): number {
-  const str = `${world.seed}-${world.week}-${initiatorId}-${targetId}`
+function acceptanceSeed(world: World, initiatorId: string, targetId: string, initiatorWardId: string, targetWardId: string): number {
+  const str = `${world.seed}-${world.week}-${initiatorId}-${targetId}-${initiatorWardId}-${targetWardId}`
   let hash = 0
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i)
@@ -2035,7 +2023,7 @@ function deterministicAcceptance(
   batchCount = 1,
 ): { accepted: boolean; chance: number; roll: number } {
   const baseChance = evaluateAllianceAcceptance(world, initiatorId, targetId, initiatorWardId, targetWardId)
-  if (baseChance <= -998) return { accepted: false, chance: 0, roll: 0 }
+  if (baseChance <= STANDING_DOWN_SCORE + 1) return { accepted: false, chance: 0, roll: 0 }
   const endorsementBonus = Math.min(0.50, totalSacrifice * 1.5)
   const countBonus = Math.min(0.15, Math.max(0, batchCount - 1) * 0.03)
   const multiBonus = endorsementBonus + countBonus
@@ -2055,10 +2043,10 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
     // AI prioritises focus seats and closest battlegrounds
     const targetWards = [...world.constituencies]
       .filter((c) => party.focusSeatIds.includes(c.id) || world.stats.battlegroundWardIds.includes(c.id))
-      .sort((a) => {
-        // Prefer wards where this party is close but not leading
-        const isLeading = a.leadingPartyId === party.id
-        return isLeading ? 1 : -1
+      .sort((a, b) => {
+        const aLeading = a.leadingPartyId === party.id ? 1 : 0
+        const bLeading = b.leadingPartyId === party.id ? 1 : 0
+        return aLeading - bLeading
       })
 
     while (ap > 0 && targetWards.length > 0) {
@@ -2091,7 +2079,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
         // Pick target: prefer ideologically close
         const scoredTargets = potentialTargets.map((t) => ({
           party: t,
-          score: Math.max(0, 1 - valueDistance(party.values, t.values, { change: 1, growth: 1, services: 1 }) / 8000),
+          score: Math.max(0, 1 - valueDistance(party.values, t.values, { change: 1, growth: 1, services: 1 }) / ALLIANCE_IDEOLOGY_SCALE),
         })).sort((a, b) => b.score - a.score)
         const target = scoredTargets[0].party
 
@@ -2140,7 +2128,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
         if (bestPair) {
           const chance = evaluateAllianceAcceptance(world, party.id, target.id, bestPair.initWard, bestPair.targWard)
-          const accepted = chance > -998 && rng() < Math.max(0.05, Math.min(0.85, chance))
+          const accepted = chance > STANDING_DOWN_SCORE + 1 && rng() < Math.max(0.05, Math.min(0.85, chance))
 
           if (accepted) {
             const initW = world.constituencies.find((c) => c.id === bestPair!.initWard)
@@ -2148,12 +2136,13 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
             if (initW && targW) {
               const endorsementForA = targW.results.find((r) => r.partyId === target.id)?.voteShare ?? 0
               const endorsementForB = initW.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
+              const npcPactIdx = world.alliancePacts.length
               world.alliancePacts.push({
-                id: `pact-npc-${Date.now()}-${rng().toString(36).slice(2, 6)}`,
+                id: `pact-npc-${world.seed}-${world.week}-${npcPactIdx}`,
                 partyAId: party.id,
                 partyBId: target.id,
                 entries: [{
-                  id: `pact-e-npc-${Date.now()}-${rng().toString(36).slice(2, 6)}`,
+                  id: `pact-e-npc-${world.seed}-${world.week}-${npcPactIdx}`,
                   wardA: initW.id,
                   wardAName: initW.name,
                   wardB: targW.id,
@@ -2170,7 +2159,6 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
                 description: `🤝 ${party.name} and ${target.name} form a pact — ${party.name} stands down in ${initW.name}, ${target.name} in ${targW.name}.`,
                 outcome: 'success',
               })
-              console.log(`[NPC_PACT] ${party.name} ↔ ${target.name}: ${initW.name} ⇄ ${targW.name}`)
             }
           }
         }
@@ -2220,7 +2208,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           }
           if (bestPair2) {
             const chance2 = evaluateAllianceAcceptance(world, party.id, world.playerPartyId, bestPair2.initWard, bestPair2.targWard)
-            const accepted2 = chance2 > -998 && rng() < Math.max(0.05, Math.min(0.85, chance2))
+            const accepted2 = chance2 > STANDING_DOWN_SCORE + 1 && rng() < Math.max(0.05, Math.min(0.85, chance2))
           if (accepted2) {
             const initW2 = world.constituencies.find((c) => c.id === bestPair2.initWard)
             const targW2 = world.constituencies.find((c) => c.id === bestPair2.targWard)
@@ -2228,11 +2216,11 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
               const endorsementForA = targW2.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
               const endorsementForB = initW2.results.find((r) => r.partyId === party.id)?.voteShare ?? 0
               world.pendingNpcProposal = {
-                id: `pact-npc-player-${Date.now()}`,
+                id: `pact-npc-player-${world.seed}-${world.week}`,
                 partyAId: party.id,
                 partyBId: world.playerPartyId,
                 entries: [{
-                  id: `pact-e-npc-p-${Date.now()}`,
+                  id: `pact-e-npc-p-${world.seed}-${world.week}`,
                   wardA: initW2.id,
                   wardAName: initW2.name,
                   wardB: targW2.id,
@@ -2339,7 +2327,7 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
 // ─── Apply player campaign action ────────────────────────────────────────────
 export function applyCampaignAction(world: World, action: CampaignAction): { world: World; result: ActionResult } {
-  const rng = createRng(world.seed + world.week * 999 + Date.now() % 1000)
+  const rng = createRng(world.seed + world.week * 999 + world.actionsThisWeek.length * 7)
   const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
   if (!playerParty) {
     return {
@@ -2353,13 +2341,12 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
   let voteShareDelta = 0
   let outcome: ActionResult['outcome'] = 'success'
   let description = ''
-  let wardName: string | undefined
   let targetPartyName: string | undefined
   let newAlliancePact: AlliancePact | undefined
   let brokenPactId: string | undefined
 
   const targetWard = action.wardId ? world.constituencies.find((c) => c.id === action.wardId) : undefined
-  wardName = targetWard?.name
+  const wardName = targetWard?.name
 
   switch (action.type) {
     case 'canvass': {
@@ -2450,17 +2437,21 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       const choiceIndex = action.eventChoiceIndex ?? 0
       const choice = world.weeklyEvent.choices[choiceIndex]
       if (!choice) break
-      // Apply event effect to matching tiles
       updatedTiles = updatedTiles.map((tile) => {
         const matches = choice.effect.tags.some((tag) => tile.tags.includes(tag))
         if (!matches) return tile
+        const boosts = { ...tile.campaignBoosts }
+        boosts[world.playerPartyId] = clamp((boosts[world.playerPartyId] ?? 0) + choice.effect.playerBoost, 0, 0.4)
+        if (choice.effect.opponentBoost) {
+          for (const p of world.parties) {
+            if (p.id === world.playerPartyId) continue
+            boosts[p.id] = clamp((boosts[p.id] ?? 0) + choice.effect.opponentBoost, 0, 0.4)
+          }
+        }
         return {
           ...tile,
           values: addValues(tile.values, choice.effect.valueDrift, 0.8),
-          campaignBoosts: {
-            ...tile.campaignBoosts,
-            [world.playerPartyId]: clamp((tile.campaignBoosts?.[world.playerPartyId] ?? 0) + choice.effect.playerBoost, 0, 0.4),
-          },
+          campaignBoosts: boosts,
         }
       })
       voteShareDelta = choice.effect.playerBoost * 80
@@ -2519,7 +2510,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       if (!targetWard) break
       // Higher risk/reward — can fall flat or be a hit
       const successChance = 0.55
-      const success = createRng(world.seed + world.week * 777 + Date.now() % 999)() < successChance
+      const success = createRng(world.seed + world.week * 777 + world.actionsThisWeek.length * 13)() < successChance
       if (success) {
         updatedParties = updatedParties.map((p) =>
           p.id === world.playerPartyId
@@ -2556,12 +2547,14 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
 
       const entries: AlliancePactEntry[] = []
 
+      let entryIdx = 0
       const makeEntry = (ourWardId: string, theirWardId: string, uni: boolean): AlliancePactEntry | null => {
         const ow = world.constituencies.find((c) => c.id === ourWardId)
         const tw = world.constituencies.find((c) => c.id === theirWardId)
         if (!ow || !tw) return null
+        entryIdx++
         return {
-          id: `pact-e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id: `pact-e-${world.seed}-${world.week}-${entryIdx}`,
           wardA: ow.id,
           wardAName: ow.name,
           wardB: tw.id,
@@ -2625,7 +2618,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
           }
         } else {
           newAlliancePact = {
-            id: `pact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: `pact-${world.seed}-${world.week}-${world.alliancePacts.length}`,
             partyAId: world.playerPartyId,
             partyBId: action.targetPartyId!,
             entries: acceptedEntries,
@@ -2684,7 +2677,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
   const results = calculateResults(updatedWorld)
   const withResults = { ...updatedWorld, constituencies: results.constituencies, nationalResults: results.nationalResults }
   const stats = buildStats(withResults)
-  const finalWorld = { ...withResults, stats, headlines: summarizeHeadlines({ ...withResults, stats, headlines: [] }) }
+  const finalWorld = { ...withResults, stats }
 
   const result: ActionResult = {
     action,
@@ -2736,10 +2729,9 @@ export function generateWorld(options: WorldOptions): World {
     ? options.playerPartyId
     : majorParties[majorParties.length - 1]?.id ?? parties[0]?.id ?? ''
 
-  // Give the player party slightly lower initial stats to make them underdog
   parties = parties.map((p) => {
     if (p.id === defaultPlayerPartyId) {
-      return { ...p }
+      return { ...p, baseUtility: p.baseUtility - 0.08, organization: p.organization * 0.9 }
     }
     return p
   })
@@ -2747,7 +2739,7 @@ export function generateWorld(options: WorldOptions): World {
   const electionCycleWeeks = 24
   // Start 8–20 weeks before the first election so you can campaign
   const weeksUntilElection = Math.floor(randomBetween(rng, 8, 20))
-  const currents = [...issueCurrents].sort(() => rng() - 0.5).slice(0, 3).map<GeographicCurrent>((current) => ({
+  const currents = shuffle(issueCurrents, rng).slice(0, 3).map<GeographicCurrent>((current) => ({
     ...current,
     intensity: randomBetween(rng, 0.7, 1.25),
   }))
@@ -2757,7 +2749,6 @@ export function generateWorld(options: WorldOptions): World {
   const baseWorld = {
     seed: options.seed,
     week: 1,
-    name: townName,
     townName,
     councilName,
     width: MAP_WIDTH,
@@ -2790,8 +2781,6 @@ export function generateWorld(options: WorldOptions): World {
     electionNightRevealIndex: 0,
     electionNightPreviousSeats: {},
     electionsHeld: 0,
-    playerWon: false,
-    playerLost: false,
     policyShiftUsedThisCycle: false,
     alliancePacts: [] as AlliancePact[],
     allianceReputation: {} as Record<string, number>,
@@ -2799,7 +2788,6 @@ export function generateWorld(options: WorldOptions): World {
     minorityGovernment: false,
     budget: getDefaultBudget(),
     councilHistory: [] as CouncilDecisionRecord[],
-    headlines: [] as string[],
   }
 
   // Build a temporary stats object so calculateResults can run
@@ -2809,23 +2797,18 @@ export function generateWorld(options: WorldOptions): World {
     projectedMayorParty: '',
     projectedMayorLeader: '',
     projectedMayorWards: 0,
-    currentMayorParty: baseWorld.currentMayorParty,
-    currentMayorLeader: baseWorld.currentMayorLeader,
     closestWardName: '',
     closestWardMargin: 0,
     safestWardName: '',
     safestWardMargin: 0,
     totalWards: constituencies.length,
-    electionCycleWeeks: baseWorld.electionCycleWeeks,
-    weeksUntilElection: baseWorld.weeksUntilElection,
     battlegroundWardIds: [],
   }
   const worldForCalc = { ...baseWorld, stats: tempStats } as World
   const results = calculateResults(worldForCalc)
   const withResults = { ...baseWorld, constituencies: results.constituencies, nationalResults: results.nationalResults }
   const stats = buildStats(withResults as Parameters<typeof buildStats>[0])
-  const world = { ...withResults, stats, headlines: [] as string[] }
-  return { ...world, headlines: summarizeHeadlines(world as World) }
+  return { ...withResults, stats } as World
 }
 
 // ─── Week simulation ──────────────────────────────────────────────────────────
@@ -2902,7 +2885,6 @@ export function simulateWeek(world: World): World {
   const playerResult = results.nationalResults.find((r) => r.partyId === world.playerPartyId)
   const majority = Math.floor(provisionalWithAI.constituencies.length / 2) + 1
   const playerWon = electionHappening && (playerResult?.seatsWon ?? 0) >= majority
-  const playerLost = electionHappening && !playerWon
 
   // Capture seat counts BEFORE this election for before/after comparison
   const electionNightPreviousSeats: Record<string, number> = electionHappening
@@ -3079,8 +3061,6 @@ export function simulateWeek(world: World): World {
     electionNightRevealIndex: 0,
     electionNightPreviousSeats,
     electionsHeld: world.electionsHeld + (electionHappening ? 1 : 0),
-    playerWon: world.playerWon || playerWon,
-    playerLost: !playerWon && playerLost ? true : world.playerLost,
     isGoverning: electionHappening ? playerWon : world.isGoverning,
     governanceDecisions: electionHappening ? [] : world.governanceDecisions,
     needsCoalition: electionHappening && !playerWon && !results.nationalResults.some((r) => r.seatsWon >= majority),
@@ -3102,7 +3082,7 @@ export function simulateWeek(world: World): World {
   }
 
   const stats = buildStats(merged)
-  return { ...merged, stats, headlines: summarizeHeadlines({ ...merged, stats, headlines: [] }) }
+  return { ...merged, stats }
 }
 
 // ─── Redistricting / ward recalculation ────────────────────────────────────
@@ -3329,13 +3309,17 @@ export function axisSummary(values: PoliticalValues) {
 
 export function generateGovernanceDecisions(count: number): GovernanceDecision[] {
   const n = Math.min(count, governanceDecisionPool.length)
-  const shuffled = [...governanceDecisionPool].sort(() => Math.random() - 0.5)
+  const shuffled = [...governanceDecisionPool]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
   return shuffled.slice(0, n).map((d) => ({ ...d, resolved: false }))
 }
 
 export function coalitionCompatibility(playerValues: PoliticalValues, partnerValues: PoliticalValues): number {
   const dist = valueDistance(playerValues, partnerValues, { change: 1, growth: 1, services: 1 })
-  return Math.max(0, Math.min(100, Math.round(100 - (dist / 12000) * 100)))
+  return Math.max(0, Math.min(100, Math.round(100 - (dist / COALITION_IDEOLOGY_SCALE) * 100)))
 }
 
 export interface PactSuggestion {
@@ -3617,7 +3601,7 @@ export function beneficiaryParties(world: World, wardId: string): BeneficiaryInf
     const share = result?.voteShare ?? 0
     if (share < 1) continue
 
-    const compat = playerParty ? Math.max(0, Math.round(100 - (valueDistance(playerParty.values, party.values, { change: 1, growth: 1, services: 1 }) / 12000) * 100)) : 50
+    const compat = playerParty ? Math.max(0, Math.round(100 - (valueDistance(playerParty.values, party.values, { change: 1, growth: 1, services: 1 }) / COALITION_IDEOLOGY_SCALE) * 100)) : 50
     const couldFlip = ward.leadingPartyId !== party.id && share + estimatedGain > (ward.results[0]?.voteShare ?? 0)
 
     beneficiaries.push({

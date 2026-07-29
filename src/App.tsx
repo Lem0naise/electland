@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Delaunay } from 'd3-delaunay'
 
 import './App.css'
 import { ConstituencyInspector } from './components/ConstituencyInspector'
@@ -35,6 +36,7 @@ import type {
   MapMode,
   PartyEdit,
   PartyDefinition,
+  PartyPerformance,
   PopulationTile,
   World,
 } from './types/sim'
@@ -44,7 +46,7 @@ const blocPalette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d
 function App() {
   const [constituencyCount, setConstituencyCount] = useState(10)
   const [world, setWorld] = useState<World | null>(null)
-  const [previousWorld, setPreviousWorld] = useState<World | null>(null)
+  const [previousNationalResults, setPreviousNationalResults] = useState<PartyPerformance[] | null>(null)
   const [selectedConstituencyId, setSelectedConstituencyId] = useState('')
   const [selectedBlocId, setSelectedBlocId] = useState('')
   const [selectedTileId, setSelectedTileId] = useState('')
@@ -88,8 +90,8 @@ function App() {
   const selectedTileEstimate = selectedTile ? tilePreferenceById.get(selectedTile.id) ?? null : null
 
   const previousNationalById = useMemo(
-    () => new Map((previousWorld?.nationalResults ?? []).map((result) => [result.partyId, result])),
-    [previousWorld],
+    () => new Map((previousNationalResults ?? []).map((result) => [result.partyId, result])),
+    [previousNationalResults],
   )
 
   const playerParty = world?.parties.find((party) => party.id === world.playerPartyId)
@@ -130,6 +132,18 @@ function App() {
     }
   }, [world?.isGoverning, world?.governanceDecisions])
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showStatsModal) { setShowStatsModal(false); return }
+      if (showBudgetModal) { setShowBudgetModal(false); return }
+      if (showGovDashboard) { setShowGovDashboard(false); return }
+      if (menuOpen && world) { setMenuOpen(false); return }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [showStatsModal, showBudgetModal, showGovDashboard, menuOpen, world])
+
   const handleSavePartyEdit = useCallback((edit: PartyEdit) => {
     setWorld((prev) => {
       if (!prev) return prev
@@ -158,7 +172,7 @@ function App() {
   const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string, edits?: PartyEdit[]) => {
     if (seed !== undefined && seed !== world?.seed) {
       const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId: playerPartyIdArg })
-      setPreviousWorld(null)
+      setPreviousNationalResults(null)
       setWorld(nextWorld)
       setShowElectionNight(false)
       setShowGovernance(false)
@@ -202,12 +216,11 @@ function App() {
     setMenuOpen(false)
   }, [world?.seed, constituencyCount])
 
-  const advanceWeek = () => {
+  const advanceWeek = useCallback(() => {
     if (!world) return
-    setPreviousWorld(world)
+    setPreviousNationalResults(world.nationalResults)
     const nextWorld = simulateWeek(world)
     setWorld(nextWorld)
-    // Show NPC pact events
     const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
       (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
     )
@@ -220,39 +233,39 @@ function App() {
         description: desc,
       })
     }
-  }
+  }, [world])
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!world) return
-    saveGame(world, previousWorld, constituencyCount)
+    saveGame(world, previousNationalResults, constituencyCount)
     setLastActionResult({
       action: { type: 'canvass', label: '', description: '', apCost: 0 },
       outcome: 'success',
       description: `Game saved — Week ${world.week}, ${world.townName}`,
     })
-  }
+  }, [world, previousNationalResults, constituencyCount])
 
   const handleLoad = () => {
-    const data = loadGame()
-    if (!data) return
-    applyLoadedSave(data)
+    const result = loadGame()
+    if (!result.data) return
+    applyLoadedSave(result.data)
   }
 
   const handleExport = () => {
     if (!world) return
-    exportSaveGame(world, previousWorld, constituencyCount)
+    exportSaveGame(world, previousNationalResults, constituencyCount)
   }
 
   const handleImport = async () => {
     const data = await importSaveGame()
     if (!data) return
-    saveGame(data.world, data.previousWorld, data.constituencyCount)
+    saveGame(data.world, data.previousNationalResults, data.constituencyCount)
     applyLoadedSave(data)
   }
 
-  const applyLoadedSave = (data: { world: World; previousWorld: World | null; constituencyCount: number }) => {
+  const applyLoadedSave = (data: { world: World; previousNationalResults: PartyPerformance[] | null; constituencyCount: number }) => {
     setWorld(data.world)
-    setPreviousWorld(data.previousWorld)
+    setPreviousNationalResults(data.previousNationalResults)
     setConstituencyCount(data.constituencyCount)
     setShowElectionNight(false)
     setShowGovernance(false)
@@ -334,14 +347,20 @@ function App() {
 
   const handleDragSeeds = (seeds: Array<{ wardId: string; x: number; y: number }>) => {
     if (!world) return
-    for (const s of seeds) {
-      const ward = world.constituencies.find((c) => c.id === s.wardId)
-      if (ward) {
-        ward.seed.x = s.x
-        ward.seed.y = s.y
-      }
-    }
-    setWorld({ ...world })
+    const seedMap = new Map(seeds.map((s) => [s.wardId, s]))
+    const updatedConstituencies = world.constituencies.map((ward) => {
+      const s = seedMap.get(ward.id)
+      if (!s) return ward
+      return { ...ward, seed: { x: s.x, y: s.y } }
+    })
+    const points = updatedConstituencies.map((c) => [c.seed.x, c.seed.y] as [number, number])
+    const delaunay = Delaunay.from(points)
+    const updatedTiles = world.tiles.map((tile) => {
+      const idx = delaunay.find(tile.x, tile.y)
+      const newId = updatedConstituencies[idx]?.id ?? tile.constituencyId
+      return newId !== tile.constituencyId ? { ...tile, constituencyId: newId } : tile
+    })
+    setWorld({ ...world, constituencies: updatedConstituencies, tiles: updatedTiles })
   }
 
   const handleDoneRedistrict = () => {
@@ -411,7 +430,7 @@ function App() {
             onImport={handleImport}
             onGenerate={() => {
               const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], playerPartyId: undefined })
-              setPreviousWorld(null)
+              setPreviousNationalResults(null)
               setWorld(nextWorld)
               setShowElectionNight(false)
               setShowGovernance(false)
@@ -617,13 +636,13 @@ function App() {
             if (!w) return
             if (w.isGoverning) {
               const decisions = generateGovernanceDecisions(2)
-              setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false, playerLost: false })
+              setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false })
               setShowGovernance(true)
             } else if (w.needsCoalition) {
               setShowCoalitionModal(true)
-              setWorld({ ...w, electionNightActive: false, playerLost: false })
+              setWorld({ ...w, electionNightActive: false })
             } else {
-              setWorld({ ...w, electionNightActive: false, playerLost: false })
+              setWorld({ ...w, electionNightActive: false })
             }
           }}
         />

@@ -23,6 +23,8 @@ export function ConstituencyInspector({
   selectedTile,
   selectedTileEstimate,
 }: ConstituencyInspectorProps) {
+  const [historyTab, setHistoryTab] = useState<'polling' | 'reps'>('polling')
+
   if (!world) {
     return (
       <section className="panel constituency-panel">
@@ -63,9 +65,7 @@ export function ConstituencyInspector({
   const secondTileParty = selectedTileEstimate?.rankings[1]
   const tileLeadMargin = topTileParty && secondTileParty ? topTileParty.support - secondTileParty.support : null
 
-  const [historyTab, setHistoryTab] = useState<'polling' | 'reps'>('polling')
-
-  const tenureRegistry = world ? loadCouncillorTenure(world.seed) : {}
+  const tenureRegistry = loadCouncillorTenure(world.seed)
   const wardTenure = selectedWard ? tenureRegistry[selectedWard.id] : undefined
 
   const allReps: Array<{ name: string; partyName: string; colour: string; termsServed: number; firstElectedWeek: number; lastElectedWeek: number; isCurrent: boolean }> = []

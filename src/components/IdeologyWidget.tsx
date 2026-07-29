@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import { IDEOLOGY_AXES } from '../lib/sim'
 
-export function IdeologyWidget({ values, colour, compact = false }: {
+export const IdeologyWidget = memo(function IdeologyWidget({ values, colour, compact = false }: {
   values: { change: number; growth: number; services: number }
   colour?: string
   compact?: boolean
@@ -36,4 +37,4 @@ export function IdeologyWidget({ values, colour, compact = false }: {
       })}
     </div>
   )
-}
+})

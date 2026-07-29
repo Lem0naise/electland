@@ -137,15 +137,6 @@ export function MapFigure({
         }}
         onMouseUp={() => {
           if (!dragWardId || !dragPos) return
-          const updatedDisplaySeeds = world.constituencies.map((c) => {
-            if (c.id === dragWardId) return [dragPos.x, dragPos.y] as [number, number]
-            return [c.seed.x, c.seed.y] as [number, number]
-          })
-          const finalDelaunay = Delaunay.from(updatedDisplaySeeds)
-          for (const tile of world.tiles) {
-            const idx = finalDelaunay.find(tile.x, tile.y)
-            tile.constituencyId = world.constituencies[idx]?.id ?? tile.constituencyId ?? ''
-          }
           const seeds = world.constituencies.map((c) => ({
             wardId: c.id,
             x: c.id === dragWardId ? dragPos.x : c.seed.x,

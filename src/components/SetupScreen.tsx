@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ideologySummary } from '../lib/sim'
 import type { PartyEdit, World } from '../types/sim'
 import { IdeologyWidget } from './IdeologyWidget'
@@ -36,18 +36,19 @@ export function SetupScreen({
     return Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }]))
   })
 
-  const worldRef = world
-  useEffect(() => {
-    if (!worldRef) {
+  const [prevSeed, setPrevSeed] = useState<number | undefined>(world?.seed)
+  if (world?.seed !== prevSeed) {
+    setPrevSeed(world?.seed)
+    if (!world) {
       setPartyEdits({})
       setSelectedPartyId('')
-      return
+    } else {
+      setPartyEdits(Object.fromEntries(
+        world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])
+      ))
+      setSelectedPartyId(world.playerPartyId)
     }
-    setPartyEdits(Object.fromEntries(
-      worldRef.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])
-    ))
-    setSelectedPartyId(worldRef.playerPartyId)
-  }, [worldRef?.seed])
+  }
 
   const parties = world?.parties ?? []
   const majorParties = parties.filter((p) => p.tier === 'major' || p.tier === 'custom')
@@ -379,7 +380,9 @@ export function SetupScreen({
                                           onChange={(e) => {
                                             const v = Number(e.target.value)
                                             const cur = edit.values ?? { ...party.values }
-                                            updateEdit(party.id, { values: { ...cur, [axis]: v } })
+                                            const next = { ...cur, [axis]: v }
+                                            updateEdit(party.id, { values: next })
+                                            onSavePartyEdit({ ...edit, values: next })
                                           }}
                                         />
                                         <span className="slider-value">{val}</span>

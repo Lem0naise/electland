@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import type { World } from '../types/sim'
 
-export function SeatBar({ world, onOpenStats, onOpenDashboard }: {
+export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboard }: {
   world: World
   onOpenStats: () => void
   onOpenDashboard: () => void
@@ -69,4 +70,4 @@ export function SeatBar({ world, onOpenStats, onOpenDashboard }: {
       </div>
     </div>
   )
-}
+})

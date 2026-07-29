@@ -34,7 +34,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal election-night-modal">
+      <div className="modal election-night-modal" role="dialog" aria-modal="true">
         <div className="modal-header">
           <span className="modal-kicker">Election Night</span>
           <h2>{world.townName} Council</h2>
@@ -149,10 +149,10 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
           })}
 
           {!done && (
-            <div className="election-result-card pending-card" onClick={onReveal}>
+            <button type="button" className="election-result-card pending-card" onClick={onReveal}>
               <div className="result-card-ward">Next declaration...</div>
               <div className="pending-reveal">Click to reveal</div>
-            </div>
+            </button>
           )}
         </div>
 

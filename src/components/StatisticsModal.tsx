@@ -76,7 +76,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal stats-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="stats-modal-header">
           <div className="stats-modal-title-row">
             <div>

@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import type { PartyPerformance, VoteHistoryEntry, World } from '../types/sim'
 
-export function VoteHistoryChart({ world, tall = false }: { world: World; tall?: boolean }) {
+export const VoteHistoryChart = memo(function VoteHistoryChart({ world, tall = false }: { world: World; tall?: boolean }) {
   const history = world.voteHistory
   if (history.length < 2) {
     return <div className="history-empty">Advance a few weeks to see vote trends.</div>
@@ -45,6 +46,8 @@ export function VoteHistoryChart({ world, tall = false }: { world: World; tall?:
   return (
     <div className="history-chart-wrap">
       <svg viewBox={`0 0 ${width} ${height}`} className={`history-svg${tall ? ' tall' : ''}`}>
+        <title>Vote share history</title>
+        <desc>Sparkline chart showing party vote share trends over time</desc>
         {gridlines.map((pct) => (
           <g key={pct}>
             <line x1={padL} x2={padL + chartW} y1={y(pct)} y2={y(pct)} className="chart-gridline" />
@@ -88,4 +91,4 @@ export function VoteHistoryChart({ world, tall = false }: { world: World; tall?:
       </div>
     </div>
   )
-}
+})

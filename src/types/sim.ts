@@ -180,20 +180,17 @@ export interface TownStats {
   projectedMayorParty: string
   projectedMayorLeader: string
   projectedMayorWards: number
-  currentMayorParty: string
-  currentMayorLeader: string
   closestWardName: string
   closestWardMargin: number
   safestWardName: string
   safestWardMargin: number
   totalWards: number
-  electionCycleWeeks: number
-  weeksUntilElection: number
   battlegroundWardIds: string[]
 }
 
-// Campaign actions the player can take
 export type CampaignActionType = 'canvass' | 'ads' | 'rally' | 'smear' | 'policy_shift' | 'respond_event' | 'fix_potholes' | 'improve_bins' | 'ward_festival' | 'propose_alliance' | 'break_alliance'
+
+export type PermanentCampaignType = 'canvass' | 'ads' | 'fix_potholes' | 'improve_bins'
 
 export interface CampaignAction {
   type: CampaignActionType
@@ -202,19 +199,15 @@ export interface CampaignAction {
   apCost: number
   isPermanent?: boolean
   permanentApCost?: number
-  // For ward-targeted actions
   wardId?: string
-  // For smear: target party
   targetPartyId?: string
-  // For policy shift: which axis and direction
   policyAxis?: PoliticalValueKey
   policyDirection?: 1 | -1
-  // For event response
   eventId?: string
   eventChoiceIndex?: number
-  // For alliance proposal: which ward the ally should stand down in
   allyWardId?: string
   allianceEntries?: Array<{ ourWardId: string; theirWardId: string; isUnilateral?: boolean }>
+  pactId?: string
 }
 
 export interface ActionResult {
@@ -301,7 +294,7 @@ export interface GovernanceDecision {
 
 export interface ActiveCampaign {
   id: string
-  type: CampaignActionType
+  type: PermanentCampaignType
   label: string
   apCostPerTurn: number
   wardId?: string
@@ -332,7 +325,6 @@ export interface AlliancePact {
 export interface World {
   seed: number
   week: number
-  name: string
   townName: string
   councilName: string
   width: number
@@ -347,53 +339,33 @@ export interface World {
   nationalResults: PartyPerformance[]
   tiles: PopulationTile[]
   playerPartyId: string
-  headlines: string[]
   stats: TownStats
   currentMayorParty: string
   currentMayorLeader: string
   electionCycleWeeks: number
   weeksUntilElection: number
-  // Campaign resources
   playerActionPoints: number
   maxActionPoints: number
-  // Active permanent campaigns
   activeCampaigns: ActiveCampaign[]
-  // Actions taken this week (cleared at start of each week)
   actionsThisWeek: ActionResult[]
-  // Weekly event (one per week, optional)
   weeklyEvent?: WeeklyEvent
-  // News feed: most recent first
   newsFeed: string[]
-  // Vote history for sparklines/charts
   voteHistory: VoteHistoryEntry[]
-  // Governance mode
   isGoverning: boolean
   governanceDecisions: GovernanceDecision[]
-  // Election night state
   electionNightActive: boolean
   electionNightResults: ElectionNightResult[]
   electionNightRevealIndex: number
-  // Seat counts from BEFORE this election (for before/after comparison)
   electionNightPreviousSeats: Record<string, number>
-  // How many elections have been held
   electionsHeld: number
-  // Whether the player has won
-  playerWon: boolean
-  playerLost: boolean
-  // Policy shift cooldown (resets each cycle)
   policyShiftUsedThisCycle: boolean
-  // Alliance pacts
   alliancePacts: AlliancePact[]
-  // Tracks broken pacts per party pair (affects AI willingness)
   allianceReputation: Record<string, number>
-  // Pending NPC pact proposal (player must accept/reject)
   pendingNpcProposal?: AlliancePact
-  // Coalition government
   needsCoalition: boolean
   coalitionPartnerId?: string
   minorityGovernment: boolean
-  // Budget system
-  budget?: Budget
+  budget: Budget
   councilHistory: CouncilDecisionRecord[]
 }
 
