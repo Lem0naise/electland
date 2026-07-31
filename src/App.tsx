@@ -12,22 +12,43 @@ import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
 import { CampaignActionsPanel } from './components/CampaignActionsPanel'
+import { PoliticianActionsPanel } from './components/PoliticianActionsPanel'
+import { CouncilChamber, ProposalForm } from './components/CouncilChamber'
+import { RelationshipsPanel } from './components/RelationshipsPanel'
+import { CareerTracker } from './components/CareerTracker'
+import { CouncilComposition } from './components/CouncilComposition'
+import { WardSwitchModal } from './components/WardSwitchModal'
+import { CurrentPollingPanel } from './components/CurrentPollingPanel'
+import { WorkspaceTabs, type WorkspaceTab } from './components/WorkspaceTabs'
+import { CouncilLegislationRegister } from './components/CouncilLegislationRegister'
 import { SeatBar } from './components/SeatBar'
 import { SetupScreen } from './components/SetupScreen'
 import { saveGame, loadGame, hasSave, exportSaveGame, importSaveGame } from './lib/persistence'
 import {
   applyCampaignAction,
+  applyRelationshipAction,
+  applyPartyEdits,
+  applyPoliticianAction,
   calculateResults,
+  castPlayerVote,
   dominantBlocId,
+  lobbyCouncillor,
+  promoteCareer,
+  createCustomMotion,
+  queueCustomMotion,
   estimateTilePreference,
+  generateCouncilSession,
   generateGovernanceDecisions,
   generateWorld,
   recalculateWardAggregates,
   redistributeSnapshot,
   regenerateCellPaths,
+  resolveCouncilSession,
+  requestWardSwitch,
   restoreRedistributeSnapshot,
+  shouldTriggerCouncilSession,
   simulateWeek,
-  strategyTagsForValues,
+  type PoliticianActionResult,
 } from './lib/sim'
 import type {
   ActionResult,
@@ -35,8 +56,8 @@ import type {
   CampaignAction,
   MapMode,
   PartyEdit,
-  PartyDefinition,
   PartyPerformance,
+  PoliticianActionMeta,
   PopulationTile,
   World,
 } from './types/sim'
@@ -53,12 +74,20 @@ function App() {
   const [mapMode, setMapMode] = useState<MapMode>('ward')
   const [menuOpen, setMenuOpen] = useState(true)
   const [lastActionResult, setLastActionResult] = useState<ActionResult | null>(null)
+  const [lastPolResult, setLastPolResult] = useState<PoliticianActionResult | null>(null)
   const [showElectionNight, setShowElectionNight] = useState(false)
   const [showGovernance, setShowGovernance] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [showCoalitionModal, setShowCoalitionModal] = useState(false)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [showGovDashboard, setShowGovDashboard] = useState(false)
+  const [polElectionOutcome, setPolElectionOutcome] = useState<'won' | 'lost' | null>(null)
+  const [showCouncilChamber, setShowCouncilChamber] = useState(false)
+  const [showMotionComposer, setShowMotionComposer] = useState(false)
+  const [showWardSwitchModal, setShowWardSwitchModal] = useState(false)
+  const [wardNominationDismissed, setWardNominationDismissed] = useState(false)
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('campaign')
+  const [mapFocus, setMapFocus] = useState(false)
   const [redistrictTargetWardId, setRedistrictTargetWardId] = useState('')
   const [redistrictSnapshot, setRedistrictSnapshot] = useState<Map<string, string> | null>(null)
 
@@ -95,7 +124,6 @@ function App() {
   )
 
   const playerParty = world?.parties.find((party) => party.id === world.playerPartyId)
-  const playerResult = world?.nationalResults.find((r) => r.partyId === world.playerPartyId)
 
   useEffect(() => {
     if (!world) {
@@ -127,6 +155,17 @@ function App() {
   }, [world?.electionNightActive])
 
   useEffect(() => {
+    const pol = world?.politicianMode?.politician
+    if (pol && !pol.wardId && world.weeksUntilElection <= 4 && !wardNominationDismissed) {
+      setShowWardSwitchModal(true)
+    }
+  }, [wardNominationDismissed, world?.politicianMode?.politician, world?.weeksUntilElection])
+
+  useEffect(() => {
+    setWardNominationDismissed(false)
+  }, [world?.seed])
+
+  useEffect(() => {
     if (world?.isGoverning && world.governanceDecisions.some((d) => !d.resolved)) {
       setShowGovernance(true)
     }
@@ -144,69 +183,25 @@ function App() {
     return () => document.removeEventListener('keydown', handleEscape)
   }, [showStatsModal, showBudgetModal, showGovDashboard, menuOpen, world])
 
-  const handleSavePartyEdit = useCallback((edit: PartyEdit) => {
-    setWorld((prev) => {
-      if (!prev) return prev
-      const patchParty = (p: PartyDefinition) => {
-        if (p.id !== edit.id) return p
-        const updated: PartyDefinition = { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
-        if (edit.values) {
-          updated.values = edit.values
-          updated.strategyTags = strategyTagsForValues(edit.values)
-        }
-        return updated
-      }
-      return {
-        ...prev,
-        parties: prev.parties.map(patchParty),
-        constituencies: prev.constituencies.map((c) => ({
-          ...c,
-          candidates: c.candidates.map((cand) =>
-            cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
-          ),
-        })),
-      }
-    })
-  }, [])
-
-  const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string, edits?: PartyEdit[]) => {
-    if (seed !== undefined && seed !== world?.seed) {
-      const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], playerPartyId: playerPartyIdArg })
+  const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string, edits?: PartyEdit[], playerName?: string) => {
+    const needsRegeneration = seed !== undefined
+    if (needsRegeneration) {
+      const nextWorld = generateWorld({ seed, constituencyCount, customParties: [], partyEdits: edits, playerPartyId: playerPartyIdArg, gameMode: 'single-politician', playerName })
       setPreviousNationalResults(null)
       setWorld(nextWorld)
       setShowElectionNight(false)
       setShowGovernance(false)
       setLastActionResult(null)
-      setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
-      setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
-      setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
+      const polWardId = nextWorld.politicianMode?.politician.wardId
+      const firstWardId = polWardId ?? nextWorld.constituencies[0]?.id ?? ''
+      setSelectedConstituencyId(firstWardId)
+      setSelectedBlocId(dominantBlocId(nextWorld.constituencies.find((c) => c.id === firstWardId)?.blocMix ?? {}))
+      setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === firstWardId)?.id ?? '')
     } else {
       setWorld((prev) => {
         if (!prev) return prev
         let next = prev
-        if (edits && edits.length > 0) {
-          next = edits.reduce((w, edit) => {
-            const patchParty = (p: PartyDefinition) => {
-              if (p.id !== edit.id) return p
-              const updated: PartyDefinition = { ...p, name: edit.name || p.name, leader: edit.leader || p.leader, colour: edit.colour }
-              if (edit.values) {
-                updated.values = edit.values
-                updated.strategyTags = strategyTagsForValues(edit.values)
-              }
-              return updated
-            }
-            return {
-              ...w,
-              parties: w.parties.map(patchParty),
-              constituencies: w.constituencies.map((c) => ({
-                ...c,
-                candidates: c.candidates.map((cand) =>
-                  cand.partyId !== edit.id ? cand : { ...cand, partyName: edit.name || cand.partyName, partyColour: edit.colour },
-                ),
-              })),
-            }
-          }, next)
-        }
+        if (edits && edits.length > 0) next = applyPartyEdits(next, edits)
         if (playerPartyIdArg && playerPartyIdArg !== next.playerPartyId) {
           next = { ...next, playerPartyId: playerPartyIdArg }
         }
@@ -214,12 +209,18 @@ function App() {
       })
     }
     setMenuOpen(false)
-  }, [world?.seed, constituencyCount])
+    setActiveWorkspaceTab('campaign')
+  }, [constituencyCount])
 
   const advanceWeek = useCallback(() => {
     if (!world) return
     setPreviousNationalResults(world.nationalResults)
-    const nextWorld = simulateWeek(world)
+    let nextWorld = simulateWeek(world)
+    if (shouldTriggerCouncilSession(nextWorld)) {
+      nextWorld = generateCouncilSession(nextWorld)
+      setShowCouncilChamber(true)
+      setActiveWorkspaceTab('council')
+    }
     setWorld(nextWorld)
     const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
       (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
@@ -270,10 +271,19 @@ function App() {
     setShowElectionNight(false)
     setShowGovernance(false)
     setLastActionResult(null)
-    setSelectedConstituencyId(data.world.constituencies[0]?.id ?? '')
-    setSelectedBlocId(dominantBlocId(data.world.constituencies[0]?.blocMix ?? {}))
-    setSelectedTileId(data.world.tiles.find((t) => t.constituencyId === data.world.constituencies[0]?.id)?.id ?? '')
+    const wardId = data.world.politicianMode?.politician.wardId || data.world.constituencies[0]?.id || ''
+    setSelectedConstituencyId(wardId)
+    setSelectedBlocId(dominantBlocId(data.world.constituencies.find((seat) => seat.id === wardId)?.blocMix ?? {}))
+    setSelectedTileId(data.world.tiles.find((tile) => tile.constituencyId === wardId)?.id ?? '')
     setMenuOpen(false)
+    setActiveWorkspaceTab('campaign')
+  }
+
+  const handlePoliticianAction = (action: PoliticianActionMeta) => {
+    if (!world) return
+    const { world: nextWorld, result } = applyPoliticianAction(world, action)
+    setWorld(nextWorld)
+    setLastPolResult(result)
   }
 
   const handleAction = (action: CampaignAction) => {
@@ -283,15 +293,36 @@ function App() {
     setLastActionResult(result)
   }
 
+  const handleRelationshipAction = (councillorId: string, action: 'reach_out' | 'antagonise') => {
+    if (!world) return
+    const result = applyRelationshipAction(world, councillorId, action)
+    setWorld(result.world)
+    setLastPolResult(result.result)
+  }
+
   const handleTogglePermanent = (campaign: ActiveCampaign) => {
     if (!world) return
-    const existing = world.activeCampaigns.find((c) => c.id === campaign.id || (c.wardId === campaign.wardId && c.type === campaign.type))
+    const existing = world.activeCampaigns.find((entry) => entry.id === campaign.id || (entry.wardId === campaign.wardId && entry.type === campaign.type))
     if (existing) {
-      setWorld((prev) => prev ? { ...prev, activeCampaigns: prev.activeCampaigns.filter((c) => c !== existing) } : prev)
-    } else {
-      const upfrontCost = campaign.apCostPerTurn
-      if (world.playerActionPoints < upfrontCost) return
-      setWorld((prev) => prev ? { ...prev, playerActionPoints: prev.playerActionPoints - upfrontCost, activeCampaigns: [...prev.activeCampaigns, campaign] } : prev)
+      setWorld({ ...world, activeCampaigns: world.activeCampaigns.filter((entry) => entry !== existing) })
+      return
+    }
+    setWorld({ ...world, activeCampaigns: [...world.activeCampaigns, campaign] })
+  }
+
+  const handleWardSelection = (wardId: string) => {
+    if (!world) return
+    const result = requestWardSwitch(world, wardId)
+    setWorld(result.world)
+    setLastPolResult({
+      action: { type: 'call_party_support', label: 'Ward nomination', description: result.reason, apCost: 0 },
+      outcome: result.approved ? 'success' : 'neutral',
+      description: result.reason,
+    })
+    if (result.approved) {
+      setSelectedConstituencyId(wardId)
+      setShowWardSwitchModal(false)
+      setWardNominationDismissed(false)
     }
   }
 
@@ -333,6 +364,14 @@ function App() {
     setSelectedTileId(tile.id)
     setSelectedBlocId(dominantBlocId(tile.blocMix))
     if (tile.constituencyId) setSelectedConstituencyId(tile.constituencyId)
+    setActiveWorkspaceTab('ward')
+  }
+
+  const focusWard = (wardId: string) => {
+    setSelectedConstituencyId(wardId)
+    setSelectedBlocId(dominantBlocId(world?.constituencies.find((ward) => ward.id === wardId)?.blocMix ?? {}))
+    setSelectedTileId(world?.tiles.find((tile) => tile.constituencyId === wardId)?.id ?? '')
+    setActiveWorkspaceTab('ward')
   }
 
   const handleStartRedistrict = () => {
@@ -393,31 +432,14 @@ function App() {
   }
 
   const electionIn = world?.weeksUntilElection ?? 0
-  const majority = world?.stats.councilMajority ?? 0
-  const playerSeats = playerResult?.seatsWon ?? 0
-  const seatsNeeded = majority - playerSeats
+  const scheduledAutoAp = world?.politicianMode?.autoCampaigns.reduce((total, type) => {
+    if (type === 'attend_event') return total
+    if (type === 'hold_surgery' && !world.politicianMode?.politician.isIncumbent) return total
+    return total + (type === 'local_media' || type === 'call_party_support' || type === 'smear_opponent' ? 2 : 1)
+  }, 0) ?? 0
 
   return (
     <div className="newspaper-shell">
-      {!menuOpen && (
-      <header className="masthead">
-        <div className="masthead-rule" />
-        <div className="masthead-inner">
-          <h1>Electland Gazette</h1>
-          {world && (
-            <div className="masthead-meta">
-              <span>{world.townName} Council</span>
-              <span>Week {world.week}</span>
-              <span className={`election-countdown${electionIn <= 4 ? ' urgent' : ''}`}>
-                {electionIn === 0 ? 'Election today!' : `Election in ${electionIn} week${electionIn !== 1 ? 's' : ''}`}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="masthead-rule" />
-      </header>
-      )}
-
       <main className="front-page">
         {menuOpen && (
           <SetupScreen
@@ -428,8 +450,8 @@ function App() {
             onLoad={handleLoad}
             onExport={handleExport}
             onImport={handleImport}
-            onGenerate={() => {
-              const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], playerPartyId: undefined })
+            onGenerate={(partyEdits, playerPartyId) => {
+              const nextWorld = generateWorld({ seed: Date.now(), constituencyCount, customParties: [], partyEdits, playerPartyId, gameMode: 'single-politician' })
               setPreviousNationalResults(null)
               setWorld(nextWorld)
               setShowElectionNight(false)
@@ -440,50 +462,48 @@ function App() {
               setSelectedTileId(nextWorld.tiles.find((t) => t.constituencyId === nextWorld.constituencies[0]?.id)?.id ?? '')
             }}
             onStart={handleSetupStart}
-            onSavePartyEdit={handleSavePartyEdit}
             onClose={world ? () => setMenuOpen(false) : undefined}
           />
         )}
 
         {world && !menuOpen && (
-          <div className="game-topbar">
-            <div className="topbar-party-block" style={{ borderLeftColor: playerParty?.colour ?? '#888' }}>
-              {playerParty && (
-                <>
-                  <div className="party-initials-badge" style={{ background: playerParty.colour }}>
-                    {playerParty.leader.split(' ').map((n) => n[0]).join('')}
-                  </div>
-                  <div>
-                    <strong>{playerParty.name}</strong>
-                    <small>{playerParty.leader} · {playerSeats} seat{playerSeats !== 1 ? 's' : ''}{seatsNeeded > 0 ? ` · need ${seatsNeeded} more` : ' · MAJORITY!'}</small>
-                  </div>
-                </>
-              )}
+          <div className="game-topbar command-strip">
+            <div className="command-identity" style={{ borderLeftColor: playerParty?.colour ?? '#888' }}>
+              <span className="party-initials-badge" style={{ background: playerParty?.colour ?? '#888' }}>
+                {(world.politicianMode?.politician.name ?? playerParty?.leader ?? '?').split(' ').map((name) => name[0]).join('')}
+              </span>
+              <strong>{world.politicianMode ? `Cllr. ${world.politicianMode.politician.name}` : playerParty?.name}</strong>
             </div>
-
-            <div className="topbar-ap-block">
-              <span className="ap-label-small">AP</span>
+            <div className="command-meta">
+              <span>Week {world.week}</span>
+              {world.politicianMode?.politician.isIncumbent && <span>{world.politicianMode.politician.influence} influence</span>}
+            </div>
+            <div className={`topbar-countdown${electionIn <= 4 ? ' urgent' : ''}`} aria-label={electionIn === 0 ? 'Election today' : `${electionIn} weeks until election`}>
+              <span className="countdown-number">{electionIn === 0 ? 'NOW' : electionIn}</span>
+              <span className="countdown-label">{electionIn === 0 ? 'Election' : 'weeks to election'}</span>
+            </div>
+            <div className="topbar-ap-block" aria-label={`${world.playerActionPoints} action points remaining`}>
+              <span className="ap-label-small">This week</span>
               <div className="ap-pips-small">
                 {Array.from({ length: world.maxActionPoints }).map((_, i) => (
-                  <span key={i} className={`ap-pip-small${i < world.playerActionPoints ? ' filled' : ''}`} />
+                  <span
+                    key={i}
+                    className={`ap-pip-small${i < world.playerActionPoints ? ' filled' : ''}${i >= world.playerActionPoints && i < world.playerActionPoints + scheduledAutoAp ? ' scheduled' : ''}`}
+                    title={i < world.playerActionPoints ? 'Available this week' : i < world.playerActionPoints + scheduledAutoAp ? 'Scheduled for weekly actions next week' : 'Spent this week'}
+                  />
                 ))}
               </div>
-              <span className="ap-count-small">{world.playerActionPoints}/{world.maxActionPoints}</span>
+              <span className="ap-count-small">{world.playerActionPoints}/{world.maxActionPoints}{scheduledAutoAp > 0 ? ` · ${scheduledAutoAp} weekly` : ''}</span>
             </div>
-
-            <div className={`topbar-countdown${electionIn <= 4 ? ' urgent' : ''}`}>
-              <span className="countdown-number">{electionIn}</span>
-              <span className="countdown-label">week{electionIn !== 1 ? 's' : ''} to election</span>
-            </div>
-
             <div className="topbar-actions">
-              <button className="ink-button secondary small" type="button" onClick={() => setMenuOpen(true)}>Menu</button>
-              <button className="ink-button secondary small save-btn" type="button" onClick={handleSave} title="Save game">
-                {'\uD83D\uDCBE'}
-              </button>
-              <button className="ink-button advance-week-btn" type="button" onClick={advanceWeek}>
-                Advance Week {'\u2192'}
-              </button>
+              <details className="command-overflow">
+                <summary aria-label="Open game utilities">•••</summary>
+                <div>
+                  <button type="button" onClick={() => setMenuOpen(true)}>Menu</button>
+                  <button type="button" onClick={handleSave}>Save game</button>
+                </div>
+              </details>
+              <button className="ink-button advance-week-btn" type="button" onClick={advanceWeek}>Advance Week</button>
             </div>
           </div>
         )}
@@ -495,14 +515,14 @@ function App() {
                 <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} onOpenDashboard={() => setShowGovDashboard(true)} />
               </div>
 
-              <section className="panel map-panel">
+              <section className={`panel map-panel${mapFocus ? ' is-focused' : ''}`}>
                 <div className="map-panel-header">
                   <div>
                     <div className="panel-kicker">Campaign Map</div>
                     <h3>{world.townName}</h3>
                   </div>
                   <div className="map-mode-row">
-                    {(['ward', 'bloc', 'voter', 'redistrict'] as MapMode[]).map((mode) => (
+                    {(['ward', 'bloc', 'voter'] as MapMode[]).map((mode) => (
                       <button
                         key={mode}
                         type="button"
@@ -515,6 +535,9 @@ function App() {
                         {mode === 'ward' ? 'Wards' : mode === 'bloc' ? 'Blocs' : mode === 'voter' ? 'Clusters' : 'Redistrict'}
                       </button>
                     ))}
+                    <button type="button" className="map-focus-btn" onClick={() => setMapFocus((focused) => !focused)}>
+                      {mapFocus ? 'Details focus' : 'Map focus'}
+                    </button>
                   </div>
                 </div>
 
@@ -559,7 +582,7 @@ function App() {
                   selectedTileId={selectedTileId}
                   blocColours={blocColours}
                   tilePreferenceById={tilePreferenceById}
-                  onSelectConstituency={setSelectedConstituencyId}
+                  onSelectConstituency={focusWard}
                   onSelectBloc={setSelectedBlocId}
                   onSelectTile={focusTile}
                   redistrictTargetWardId={mapMode === 'redistrict' ? redistrictTargetWardId : undefined}
@@ -569,40 +592,91 @@ function App() {
               </section>
 
               <div className="right-column">
-                <section className="panel campaign-panel-wrap">
-                  <div className="panel-kicker">Campaign</div>
-                  <CampaignActionsPanel
-                    world={world}
-                    selectedWardId={selectedConstituencyId}
-                    onAction={handleAction}
-                    onTogglePermanent={handleTogglePermanent}
-                    onAcceptNpcProposal={() => {
-                      if (!world?.pendingNpcProposal) return
-                      const p = world.pendingNpcProposal
-                      setWorld({ ...world, pendingNpcProposal: undefined, alliancePacts: [...world.alliancePacts, { ...p }] })
-                    }}
-                    onRejectNpcProposal={() => {
-                      if (!world?.pendingNpcProposal) return
-                      const p = world.pendingNpcProposal
-                      const npcId = p.partyAId === world.playerPartyId ? p.partyBId : p.partyAId
-                      const repKey = [world.playerPartyId, npcId].sort().join('_')
-                      setWorld({
-                        ...world,
-                        pendingNpcProposal: undefined,
-                        allianceReputation: { ...world.allianceReputation, [repKey]: (world.allianceReputation[repKey] ?? 0) + 0.15 },
-                      })
-                    }}
-                  />
-                </section>
-
-                <ConstituencyInspector
-                  world={world}
-                  constituency={selectedConstituency}
-                  mapMode={mapMode}
-                  selectedBlocId={selectedBlocId}
-                  selectedTile={selectedTile as PopulationTile | undefined}
-                  selectedTileEstimate={selectedTileEstimate}
+                <WorkspaceTabs
+                  activeTab={activeWorkspaceTab}
+                  onChange={setActiveWorkspaceTab}
+                  tabs={[
+                    { id: 'campaign', label: 'Actions' },
+                    { id: 'ward', label: 'Ward' },
+                    ...(world.politicianMode ? [{ id: 'political' as const, label: 'Political life' }] : []),
+                    ...(world.politicianMode?.politician.isIncumbent ? [{ id: 'council' as const, label: 'Council', badge: world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? '!' : undefined }] : []),
+                    ...(world.politicianMode && ['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) ? [{ id: 'party' as const, label: 'Party strategy' }] : []),
+                  ]}
                 />
+                <div className="workspace-panel">
+                  {activeWorkspaceTab === 'campaign' && (
+                    <section className="panel campaign-panel-wrap">
+                      <div className="panel-kicker">Your actions</div>
+                      <PoliticianActionsPanel world={world} onAction={handlePoliticianAction} onToggleAuto={(type) => {
+                        if (!world.politicianMode) return
+                        const pm = world.politicianMode
+                        const autoCampaigns = pm.autoCampaigns.includes(type) ? pm.autoCampaigns.filter((item) => item !== type) : [...pm.autoCampaigns, type]
+                        setWorld({ ...world, politicianMode: { ...pm, autoCampaigns } })
+                      }} lastResult={lastPolResult} />
+                    </section>
+                  )}
+                  {activeWorkspaceTab === 'ward' && (
+                    <>
+                      <CurrentPollingPanel world={world} constituency={selectedConstituency} />
+                      <ConstituencyInspector world={world} constituency={selectedConstituency} mapMode={mapMode} selectedBlocId={selectedBlocId} selectedTile={selectedTile as PopulationTile | undefined} selectedTileEstimate={selectedTileEstimate} />
+                    </>
+                  )}
+                  {activeWorkspaceTab === 'political' && world.politicianMode && (
+                    <>
+                      <section className="panel personal-position-summary">
+                        <div className="panel-kicker">Your personal position</div>
+                        <div className="personal-position-values">
+                          <span>Reform <strong>{world.politicianMode.politician.personalValues.change}</strong></span>
+                          <span>Business <strong>{world.politicianMode.politician.personalValues.growth}</strong></span>
+                          <span>Services <strong>{world.politicianMode.politician.personalValues.services}</strong></span>
+                        </div>
+                        <small>Independent of the party platform · next change week {world.politicianMode.politician.personalPolicyNextWeek}</small>
+                      </section>
+                      <section className="panel"><div className="panel-kicker">Career</div><CareerTracker world={world} onPromote={() => setWorld(promoteCareer(world))} /></section>
+                      <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
+                      <section className="panel"><div className="panel-kicker">{world.politicianMode.politician.isIncumbent ? 'Council colleagues' : 'Political contacts'}</div><RelationshipsPanel world={world} onRelationshipAction={handleRelationshipAction} lastResult={lastPolResult} /></section>
+                    </>
+                  )}
+                  {activeWorkspaceTab === 'party' && world.politicianMode && ['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) && (
+                    <section className="panel campaign-panel-wrap">
+                      <div className="panel-kicker">Party strategy</div>
+                      <CampaignActionsPanel
+                        world={world}
+                        selectedWardId={selectedConstituencyId}
+                        onAction={handleAction}
+                        onTogglePermanent={handleTogglePermanent}
+                        onAcceptNpcProposal={() => {
+                          if (!world.pendingNpcProposal) return
+                          setWorld({ ...world, pendingNpcProposal: undefined, alliancePacts: [...world.alliancePacts, world.pendingNpcProposal] })
+                        }}
+                        onRejectNpcProposal={() => {
+                          if (!world.pendingNpcProposal) return
+                          const proposal = world.pendingNpcProposal
+                          const npcId = proposal.partyAId === world.playerPartyId ? proposal.partyBId : proposal.partyAId
+                          const repKey = [world.playerPartyId, npcId].sort().join('_')
+                          setWorld({ ...world, pendingNpcProposal: undefined, allianceReputation: { ...world.allianceReputation, [repKey]: (world.allianceReputation[repKey] ?? 0) + 0.15 } })
+                        }}
+                      />
+                    </section>
+                  )}
+                  {activeWorkspaceTab === 'council' && world.politicianMode?.politician.isIncumbent && (
+                    <>
+                      <section className="panel council-workspace-panel">
+                        <div className="panel-kicker">Council business</div>
+                        <h3>{world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? 'A council session is ready' : `Next session: week ${world.politicianMode.nextSessionWeek}`}</h3>
+                        <p>{world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? 'Review the motion, lobby colleagues, and cast your vote.' : 'Use this space to follow your legislative career and upcoming council business.'}</p>
+                        {world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
+                        {(!world.politicianMode.currentSession || world.politicianMode.currentSession.resolved) && !world.politicianMode.queuedMotion && world.politicianMode.politician.influence >= 8 && (
+                          <button type="button" className="ink-button secondary" onClick={() => setShowMotionComposer(true)}>Propose a Motion (8 influence)</button>
+                        )}
+                        {world.politicianMode.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{world.politicianMode.queuedMotion.headline}</strong></p>}
+                      </section>
+                      <section className="panel">
+                        <CouncilLegislationRegister motions={world.politicianMode.legislationHistory} />
+                      </section>
+                    </>
+                  )}
+                </div>
               </div>
             </>
           ) : (
@@ -634,7 +708,11 @@ function App() {
             setShowElectionNight(false)
             const w = world
             if (!w) return
-            if (w.isGoverning) {
+            if (w.politicianMode) {
+              const won = w.politicianMode.politician.isIncumbent
+              setPolElectionOutcome(won ? 'won' : 'lost')
+              setWorld({ ...w, electionNightActive: false })
+            } else if (w.isGoverning) {
               const decisions = generateGovernanceDecisions(2)
               setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false })
               setShowGovernance(true)
@@ -697,6 +775,80 @@ function App() {
           }}
           onClose={() => setShowGovDashboard(false)}
         />
+      )}
+
+      {showCouncilChamber && world?.politicianMode?.currentSession && (
+        <CouncilChamber
+          world={world}
+          onVote={(motionId, vote) => {
+            setWorld(castPlayerVote(world, motionId, vote))
+          }}
+          onResolve={() => {
+            if (world.politicianMode?.currentSession?.resolved) {
+              setShowCouncilChamber(false)
+            } else {
+              setWorld(resolveCouncilSession(world))
+            }
+          }}
+          onLobby={(councillorId, motionId, desiredVote) => {
+            const result = lobbyCouncillor(world, councillorId, motionId, desiredVote)
+            setWorld(result.world)
+            setLastPolResult({ action: { type: 'lobby_councillor', label: 'Lobby', description: result.message, apCost: 0 }, outcome: result.success ? 'success' : 'neutral', description: result.message })
+          }}
+          onProposeCustom={(input) => setWorld(createCustomMotion(world, input))}
+        />
+      )}
+
+      {showMotionComposer && world?.politicianMode && (
+        <div className="modal-backdrop">
+          <div className="modal motion-composer-modal" role="dialog" aria-modal="true" aria-label="Propose a motion">
+            <ProposalForm
+              submitLabel="Queue for Next Session (8 influence)"
+              onSubmit={(input) => {
+                setWorld(queueCustomMotion(world, input))
+                setShowMotionComposer(false)
+              }}
+              onCancel={() => setShowMotionComposer(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showWardSwitchModal && world?.politicianMode && (
+        <WardSwitchModal
+          world={world}
+          onSelect={handleWardSelection}
+          onClose={() => { setShowWardSwitchModal(false); setWardNominationDismissed(true) }}
+        />
+      )}
+
+      {polElectionOutcome && world?.politicianMode && (
+        <div className="modal-backdrop" onClick={() => setPolElectionOutcome(null)}>
+          <div className="modal pol-outcome-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h2>{polElectionOutcome === 'won' ? 'You Won Your Seat!' : 'You Lost Your Seat'}</h2>
+            {polElectionOutcome === 'won' ? (
+              <>
+                <p>Congratulations, Cllr. {world.politicianMode.politician.name}! You have been elected to represent <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong>.</p>
+                <p>Term {world.politicianMode.politician.termsServed} begins. The council chamber awaits.</p>
+                <button type="button" className="setup-btn-primary" onClick={() => setPolElectionOutcome(null)}>
+                  Take Your Seat
+                </button>
+              </>
+            ) : (
+              <>
+                <p>The voters of <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong> have chosen someone else. You remain active in local politics and can build towards the next election.</p>
+                <div className="pol-outcome-actions">
+                  <button type="button" className="setup-btn-primary" onClick={() => setPolElectionOutcome(null)}>
+                    Continue as Challenger
+                  </button>
+                  <button type="button" className="setup-btn-secondary" onClick={() => { setPolElectionOutcome(null); setShowWardSwitchModal(true) }}>
+                    Choose a Different Ward
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

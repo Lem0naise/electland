@@ -3,13 +3,27 @@ import { ideologySummary } from '../lib/sim'
 import type { PartyEdit, World } from '../types/sim'
 import { IdeologyWidget } from './IdeologyWidget'
 
+type SetupStep = 'landing' | 'town' | 'profile' | 'review'
+
+interface NewGameDraft {
+  selectedPartyId: string
+  playerName: string
+  partyEdits: Record<string, PartyEdit>
+}
+
+function initialEdits(world: World | null): Record<string, PartyEdit> {
+  return Object.fromEntries((world?.parties ?? []).map((party) => [
+    party.id,
+    { id: party.id, name: party.name, leader: party.leader, colour: party.colour, values: party.values },
+  ]))
+}
+
 export function SetupScreen({
   world,
   constituencyCount,
   onSetConstituencyCount,
   onGenerate,
   onStart,
-  onSavePartyEdit,
   onClose,
   hasSaveGame,
   onLoad,
@@ -18,401 +32,232 @@ export function SetupScreen({
 }: {
   world: World | null
   constituencyCount: number
-  onSetConstituencyCount: (n: number) => void
-  onGenerate: () => void
-  onStart: (seed?: number, playerPartyId?: string, edits?: PartyEdit[]) => void
-  onSavePartyEdit: (edit: PartyEdit) => void
+  onSetConstituencyCount: (count: number) => void
+  onGenerate: (partyEdits: PartyEdit[], playerPartyId?: string) => void
+  onStart: (seed?: number, playerPartyId?: string, edits?: PartyEdit[], playerName?: string) => void
   onClose?: () => void
   hasSaveGame?: boolean
   onLoad?: () => void
   onExport?: () => void
   onImport?: () => void
 }) {
-  const isFirstTime = world === null
-  const [selectedPartyId, setSelectedPartyId] = useState<string>(world?.playerPartyId ?? '')
-  const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
-  const [partyEdits, setPartyEdits] = useState<Record<string, PartyEdit>>(() => {
-    if (!world) return {}
-    return Object.fromEntries(world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }]))
-  })
-
-  const [prevSeed, setPrevSeed] = useState<number | undefined>(world?.seed)
-  if (world?.seed !== prevSeed) {
-    setPrevSeed(world?.seed)
-    if (!world) {
-      setPartyEdits({})
-      setSelectedPartyId('')
-    } else {
-      setPartyEdits(Object.fromEntries(
-        world.parties.map((p) => [p.id, { id: p.id, name: p.name, leader: p.leader, colour: p.colour }])
-      ))
-      setSelectedPartyId(world.playerPartyId)
-    }
-  }
-
+  const [step, setStep] = useState<SetupStep>('landing')
+  const [draft, setDraft] = useState<NewGameDraft>(() => ({
+    selectedPartyId: world?.playerPartyId ?? '',
+    playerName: '',
+    partyEdits: initialEdits(world),
+  }))
+  const [draftSeed, setDraftSeed] = useState<number | undefined>(world?.seed)
   const parties = world?.parties ?? []
-  const majorParties = parties.filter((p) => p.tier === 'major' || p.tier === 'custom')
-  const minorParties = parties.filter((p) => p.tier === 'minor')
+  const selectedParty = parties.find((party) => party.id === draft.selectedPartyId) ?? parties[0]
+  const selectedEdit = selectedParty ? draft.partyEdits[selectedParty.id] : undefined
+  const previewMatchesWardCount = world?.constituencies.length === constituencyCount
+  const canContinueFromTown = Boolean(world) && previewMatchesWardCount
 
-  function editFor(partyId: string): PartyEdit {
-    return partyEdits[partyId] ?? { id: partyId, name: '', leader: '', colour: '#888888' }
+  if (world?.seed !== draftSeed) {
+    setDraftSeed(world?.seed)
+    setDraft((current) => ({
+      ...current,
+      selectedPartyId: parties.some((party) => party.id === current.selectedPartyId)
+        ? current.selectedPartyId
+        : world?.playerPartyId ?? parties[0]?.id ?? '',
+      partyEdits: Object.fromEntries(parties.map((party) => [
+        party.id,
+        current.partyEdits[party.id] ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour, values: party.values },
+      ])),
+    }))
   }
 
-  function updateEdit(partyId: string, changes: Partial<PartyEdit>) {
-    setPartyEdits((prev) => ({ ...prev, [partyId]: { ...prev[partyId], ...changes } }))
+  const steps: Array<{ id: SetupStep; label: string }> = [
+    { id: 'landing', label: 'Welcome' },
+    { id: 'town', label: 'Town' },
+    { id: 'profile', label: 'Campaign' },
+    { id: 'review', label: 'Review' },
+  ]
+  const activeIndex = steps.findIndex((entry) => entry.id === step)
+
+  const updateDraft = (changes: Partial<NewGameDraft>) => setDraft((current) => ({ ...current, ...changes }))
+  const updateSelectedEdit = (changes: Partial<PartyEdit>) => {
+    if (!selectedParty) return
+    setDraft((current) => ({
+      ...current,
+      partyEdits: {
+        ...current.partyEdits,
+        [selectedParty.id]: { ...current.partyEdits[selectedParty.id], ...changes },
+      },
+    }))
   }
 
-  function saveEdit(partyId: string) {
-    const edit = partyEdits[partyId]
-    if (edit) onSavePartyEdit(edit)
+  const generatePreview = () => {
+    onGenerate(Object.values(draft.partyEdits), draft.selectedPartyId || undefined)
+    setStep('profile')
   }
 
-  function handleStart() {
-    const edits = Object.values(partyEdits)
-    onStart(world?.seed, selectedPartyId || world?.playerPartyId, edits)
-  }
-
-  function handleNewTown() {
-    onGenerate()
-  }
-
-  function applyUKNames() {
-    if (!world) return
-    const ukColourNames: Array<{ colour: string; name: string; values: { change: number; growth: number; services: number } }> = [
+  const applyUKNames = () => {
+    const presets = [
       { colour: '#0087DC', name: 'Local Conservatives', values: { change: -30, growth: 15, services: 25 } },
       { colour: '#E4003B', name: 'Labour', values: { change: 15, growth: 5, services: 35 } },
       { colour: '#FAA61A', name: 'Lib Dems', values: { change: 10, growth: 15, services: 20 } },
       { colour: '#02A95B', name: 'Green Party', values: { change: 40, growth: -35, services: 30 } },
       { colour: '#70147A', name: 'Reform UK', values: { change: -35, growth: 15, services: 15 } },
     ]
-
-    function hexDist(a: string, b: string) {
-      const pa = parseInt(a.replace('#', ''), 16)
-      const pb = parseInt(b.replace('#', ''), 16)
-      const dr = ((pa >> 16) & 255) - ((pb >> 16) & 255)
-      const dg = ((pa >> 8) & 255) - ((pb >> 8) & 255)
-      const db = (pa & 255) - (pb & 255)
-      return dr * dr + dg * dg + db * db
+    const distance = (a: string, b: string) => {
+      const left = parseInt(a.replace('#', ''), 16)
+      const right = parseInt(b.replace('#', ''), 16)
+      return ((left >> 16 & 255) - (right >> 16 & 255)) ** 2 + ((left >> 8 & 255) - (right >> 8 & 255)) ** 2 + ((left & 255) - (right & 255)) ** 2
     }
-
-    const nextEdits = { ...partyEdits }
-    for (const party of world.parties) {
-      let best: { name: string; values: { change: number; growth: number; services: number }; dist: number } | null = null
-      for (const uk of ukColourNames) {
-        const dist = hexDist(party.colour, uk.colour)
-        if (!best || dist < best.dist) {
-          best = { name: uk.name, values: uk.values, dist }
-        }
-      }
-      if (best && best.dist < 3600) {
-        nextEdits[party.id] = { ...editFor(party.id), name: best.name, values: best.values }
-      }
-    }
-    setPartyEdits(nextEdits)
-    for (const edit of Object.values(nextEdits)) {
-      onSavePartyEdit(edit)
-    }
+    setDraft((current) => ({
+      ...current,
+      partyEdits: Object.fromEntries(parties.map((party) => {
+        const currentEdit = current.partyEdits[party.id]
+        const preset = [...presets].sort((a, b) => distance(currentEdit.colour, a.colour) - distance(currentEdit.colour, b.colour))[0]
+        return [party.id, preset && distance(currentEdit.colour, preset.colour) < 3600
+          ? { ...currentEdit, name: preset.name, values: preset.values }
+          : currentEdit]
+      })),
+    }))
   }
 
-  const wardCounts = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  const startGame = () => {
+    if (!world || !selectedParty) return
+    if (!previewMatchesWardCount) {
+      setStep('town')
+      return
+    }
+    onStart(
+      world.seed,
+      selectedParty.id,
+      Object.values(draft.partyEdits),
+      draft.playerName.trim() || undefined,
+    )
+  }
+
+  const startNewGame = () => {
+    setDraft((current) => ({ ...current, playerName: '', partyEdits: initialEdits(world) }))
+    setStep('town')
+  }
 
   return (
-    <div className={`setup-screen${isFirstTime ? ' is-splash' : ' is-modal'}`}>
+    <div className={`setup-screen${world ? ' is-modal' : ' is-splash'}`}>
       <div className="setup-bg" />
-
-      <div className="setup-inner">
+      <div className="setup-inner setup-wizard">
         <div className="setup-masthead">
           <div className="setup-rule" />
           <h1 className="setup-title">Electland</h1>
-          <p className="setup-tagline">A tiny English town. A local election. Can you take the council?</p>
+          <p className="setup-tagline">Build a town, choose your political path, and begin your campaign.</p>
           <div className="setup-rule" />
         </div>
 
-        <div className="setup-body">
-          <div className="setup-config">
-            <div className="setup-section">
-              <div className="setup-section-label">Number of wards</div>
-              <div className="ward-count-buttons">
-                {wardCounts.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={`ward-count-btn${constituencyCount === n ? ' is-active' : ''}`}
-                    onClick={() => onSetConstituencyCount(n)}
-                  >
-                    {n}
-                  </button>
+        {step !== 'landing' && (
+          <nav className="setup-stepper" aria-label="New game progress">
+            {steps.slice(1).map((entry, index) => (
+              <span key={entry.id} className={`setup-step${entry.id === step ? ' is-active' : ''}${activeIndex > index + 1 ? ' is-complete' : ''}`} aria-current={entry.id === step ? 'step' : undefined}>
+                <b>{index + 1}</b>{entry.label}
+              </span>
+            ))}
+          </nav>
+        )}
+
+        <section className="setup-wizard-panel">
+          {step === 'landing' && (
+            <>
+              <div className="setup-section-label">Start your local political career</div>
+              <h2 className="setup-step-title">Welcome to Electland</h2>
+              <p className="setup-step-copy">Create a new town and campaign, or return to an existing game.</p>
+              <div className="setup-actions setup-actions-row">
+                <button type="button" className="setup-btn-primary" onClick={startNewGame}>New Game</button>
+                {world && onClose && <button type="button" className="setup-btn-secondary" onClick={onClose}>Return to Game</button>}
+                {hasSaveGame && onLoad && <button type="button" className="setup-btn-secondary" onClick={onLoad}>Load Saved Game</button>}
+                {onImport && <button type="button" className="setup-btn-secondary" onClick={onImport}>Import Save</button>}
+                {world && onExport && <button type="button" className="setup-btn-ghost" onClick={onExport}>Export Current Save</button>}
+              </div>
+            </>
+          )}
+
+          {step === 'town' && (
+            <>
+              <div className="setup-section-label">Step 1 · Town shape</div>
+              <h2 className="setup-step-title">Choose your council</h2>
+              <p className="setup-step-copy">Ward count determines the size and volatility of the council.</p>
+              <div className="ward-count-buttons setup-ward-counts">
+                {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((count) => (
+                  <button key={count} type="button" className={`ward-count-btn${constituencyCount === count ? ' is-active' : ''}`} onClick={() => onSetConstituencyCount(count)}>{count}</button>
                 ))}
               </div>
-              <p className="setup-hint">
-                {constituencyCount <= 4 ? 'Tiny council — each ward is a huge prize. Very swingy.' : constituencyCount <= 6 ? 'Big wards — fragmented vote, landslides possible.' : constituencyCount <= 9 ? 'Classic — balanced, with reasonable margins.' : constituencyCount <= 12 ? 'Lots of wards — harder to manage, but clearer strongholds.' : 'Busy council — many small wards, very tactical.'}
-              </p>
-            </div>
-
-            {world && (
-              <div className="setup-section">
-                <div className="setup-section-label">Current town</div>
-                <div className="setup-town-card">
-                  <strong>{world.townName}</strong>
-                  <span>{world.constituencies.length} wards · pop. {world.totalPopulation.toLocaleString('en-GB')} · week {world.week}</span>
-                </div>
+              <p className="setup-hint">{constituencyCount <= 6 ? 'Small and volatile: every ward matters.' : constituencyCount <= 10 ? 'Balanced council: enough room for marginals and strongholds.' : 'Large council: more tactical opportunities and local variation.'}</p>
+              {world && <div className="setup-town-card"><strong>{world.townName}</strong><span>{world.constituencies.length} wards · population {world.totalPopulation.toLocaleString('en-GB')}</span></div>}
+              {world && !previewMatchesWardCount && <p className="setup-hint">Generate the town again to preview this ward count before continuing.</p>}
+              <div className="setup-step-actions">
+                <button type="button" className="setup-btn-ghost" onClick={() => setStep('landing')}>Back</button>
+                <button type="button" className="setup-btn-primary" onClick={generatePreview}>Generate Town</button>
+                {canContinueFromTown && <button type="button" className="setup-btn-secondary" onClick={() => setStep('profile')}>Use Current Preview</button>}
               </div>
-            )}
+            </>
+          )}
 
-            <div className="setup-actions">
-              {hasSaveGame && onLoad && (
-                <button className="setup-btn-secondary load-save-btn" type="button" onClick={onLoad}>
-                  {'\uD83D\uDCBE'} Load saved game
-                </button>
-              )}
-              {world && onExport && (
-                <button className="setup-btn-secondary" type="button" onClick={onExport}>
-                  {'\u2B07'} Export save to file
-                </button>
-              )}
-              {onImport && (
-                <button className="setup-btn-secondary" type="button" onClick={onImport}>
-                  {'\u2B06'} Import save from file
-                </button>
-              )}
-              <button className="setup-btn-secondary" type="button" onClick={handleNewTown}>
-                {world ? 'New Town' : 'Generate Town'}
-              </button>
-              {world && (
-                <button className="setup-btn-primary" type="button" onClick={handleStart}>
-                  Start Race
-                </button>
-              )}
-              {!isFirstTime && onClose && (
-                <button className="setup-btn-ghost" type="button" onClick={onClose}>
-                  Cancel — back to game
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="setup-parties">
-            <div className="setup-section-label">
-              {parties.length === 0 ? 'Generate a town to see the parties' : 'Choose your party — click to select, expand to edit'}
-            </div>
-
-            {parties.length > 0 && (
-              <>
-                <div className="setup-party-group">
-                  {majorParties.map((party) => {
-                    const edit = editFor(party.id)
-                    const isSelected = selectedPartyId === party.id || (!selectedPartyId && party.id === world?.playerPartyId)
-                    const isExpanded = expandedPartyId === party.id
-                    return (
-                      <div
-                        key={party.id}
-                        className={`setup-party-card${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}`}
-                      >
-                        <button
-                          type="button"
-                          className="setup-party-header"
-                          onClick={() => {
-                            setSelectedPartyId(party.id)
-                            setExpandedPartyId(isExpanded ? null : party.id)
-                          }}
-                        >
-                           <span className="setup-party-swatch" style={{ background: edit.colour }} />
-                          <div className="setup-party-info">
-                            <span className="setup-party-name">{edit.name}</span>
-                            <span className="setup-party-leader">{edit.leader}</span>
-                            <span className="setup-party-ideology">{ideologySummary(party.values)}</span>
-                          </div>
-                          <div className="setup-party-meta">
-                            <span className="setup-party-tier">Major</span>
-                            {isSelected && <span className="setup-party-playing">YOU</span>}
-                          </div>
-                          <span className="setup-party-expand">{isExpanded ? '\u25B2' : '\u25BC'}</span>
-                        </button>
-
-                        <div className="setup-party-ideology-bar">
-                          <IdeologyWidget values={party.values} colour={edit.colour} compact />
-                        </div>
-
-                        {isExpanded && (
-                          <div className="setup-party-edit">
-                            <label className="setup-edit-field">
-                              <span>Party name</span>
-                              <input
-                                value={edit.name}
-                                onChange={(e) => updateEdit(party.id, { name: e.target.value })}
-                                onBlur={() => saveEdit(party.id)}
-                                placeholder={party.name}
-                              />
-                            </label>
-                            <label className="setup-edit-field">
-                              <span>Leader</span>
-                              <input
-                                value={edit.leader}
-                                onChange={(e) => updateEdit(party.id, { leader: e.target.value })}
-                                onBlur={() => saveEdit(party.id)}
-                                placeholder={party.leader}
-                              />
-                            </label>
-                            <label className="setup-edit-field setup-edit-colour">
-                              <span>Colour</span>
-                              <input
-                                type="color"
-                                value={edit.colour}
-                                onChange={(e) => {
-                                  updateEdit(party.id, { colour: e.target.value })
-                                  onSavePartyEdit({ ...edit, colour: e.target.value })
-                                }}
-                              />
-                              <span className="colour-preview" style={{ background: edit.colour }} />
-                            </label>
-                            <div className="setup-edit-ideology">
-                              <span className="setup-edit-field-label">Ideology</span>
-                              {(['change', 'growth', 'services'] as const).map((axis) => {
-                                const val = edit.values?.[axis] ?? party.values[axis]
-                                const axisLabel = { change: 'Reform', growth: 'Business', services: 'Services' }[axis]
-                                return (
-                                  <label key={axis} className="setup-edit-field setup-edit-slider">
-                                    <span>{axisLabel}</span>
-                                    <input
-                                      type="range"
-                                      min={-100}
-                                      max={100}
-                                      value={val}
-                                      onChange={(e) => {
-                                        const v = Number(e.target.value)
-                                        const cur = edit.values ?? { ...party.values }
-                                        const next = { ...cur, [axis]: v }
-                                        updateEdit(party.id, { values: next })
-                                        onSavePartyEdit({ ...edit, values: next })
-                                      }}
-                                    />
-                                    <span className="slider-value">{val}</span>
-                                  </label>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {minorParties.length > 0 && (
-                  <div className="setup-minor-group">
-                    <div className="setup-minor-label">Minor parties</div>
-                    <div className="setup-party-group minor">
-                      {minorParties.map((party) => {
-                        const edit = editFor(party.id)
-                        const isSelected = selectedPartyId === party.id
-                        const isExpanded = expandedPartyId === party.id
-                        return (
-                          <div
-                            key={party.id}
-                            className={`setup-party-card is-minor${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}`}
-                          >
-                            <button
-                              type="button"
-                              className="setup-party-header"
-                              onClick={() => {
-                                setSelectedPartyId(party.id)
-                                setExpandedPartyId(isExpanded ? null : party.id)
-                              }}
-                            >
-                              <span className="setup-party-swatch" style={{ background: edit.colour }} />
-                              <div className="setup-party-info">
-                                <span className="setup-party-name">{edit.name}</span>
-                                <span className="setup-party-leader">{edit.leader}</span>
-                                <span className="setup-party-ideology">{ideologySummary(party.values)}</span>
-                              </div>
-                              <div className="setup-party-meta">
-                                <span className="setup-party-tier">Minor</span>
-                                {isSelected && <span className="setup-party-playing">YOU</span>}
-                              </div>
-                              <span className="setup-party-expand">{isExpanded ? '\u25B2' : '\u25BC'}</span>
-                            </button>
-                            <div className="setup-party-ideology-bar">
-                              <IdeologyWidget values={party.values} colour={edit.colour} compact />
-                            </div>
-                            {isExpanded && (
-                              <div className="setup-party-edit">
-                                <label className="setup-edit-field">
-                                  <span>Party name</span>
-                                  <input
-                                    value={edit.name}
-                                    onChange={(e) => updateEdit(party.id, { name: e.target.value })}
-                                    onBlur={() => saveEdit(party.id)}
-                                  />
-                                </label>
-                                <label className="setup-edit-field">
-                                  <span>Leader</span>
-                                  <input
-                                    value={edit.leader}
-                                    onChange={(e) => updateEdit(party.id, { leader: e.target.value })}
-                                    onBlur={() => saveEdit(party.id)}
-                                  />
-                                </label>
-                                <label className="setup-edit-field setup-edit-colour">
-                                  <span>Colour</span>
-                                  <input
-                                    type="color"
-                                    value={edit.colour}
-                                    onChange={(e) => {
-                                      updateEdit(party.id, { colour: e.target.value })
-                                      onSavePartyEdit({ ...edit, colour: e.target.value })
-                                    }}
-                                  />
-                                  <span className="colour-preview" style={{ background: edit.colour }} />
-                                </label>
-                                <div className="setup-edit-ideology">
-                                  <span className="setup-edit-field-label">Ideology</span>
-                                  {(['change', 'growth', 'services'] as const).map((axis) => {
-                                    const val = edit.values?.[axis] ?? party.values[axis]
-                                    const axisLabel = { change: 'Reform', growth: 'Business', services: 'Services' }[axis]
-                                    return (
-                                      <label key={axis} className="setup-edit-field setup-edit-slider">
-                                        <span>{axisLabel}</span>
-                                        <input
-                                          type="range"
-                                          min={-100}
-                                          max={100}
-                                          value={val}
-                                          onChange={(e) => {
-                                            const v = Number(e.target.value)
-                                            const cur = edit.values ?? { ...party.values }
-                                            const next = { ...cur, [axis]: v }
-                                            updateEdit(party.id, { values: next })
-                                            onSavePartyEdit({ ...edit, values: next })
-                                          }}
-                                        />
-                                        <span className="slider-value">{val}</span>
-                                      </label>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {world && (
-                  <button
-                    type="button"
-                    className="setup-uk-names-btn"
-                    onClick={applyUKNames}
-                    title="Rename parties to classic UK party names"
-                  >
-                    {'\uD83C\uDDEC\uD83C\uDDE7'} Use UK party names
+          {step === 'profile' && (
+            <>
+              <div className="setup-section-label">Step 2 · Your campaign</div>
+              <h2 className="setup-step-title">Build your political career</h2>
+              <label className="setup-edit-field setup-profile-field">
+                <span>Your name</span>
+                <input className="setup-politician-name-input" value={draft.playerName} onChange={(event) => updateDraft({ playerName: event.target.value })} placeholder={selectedParty?.leader ?? 'Enter your councillor name'} />
+                <small>You will choose where to stand later through the in-game nomination process.</small>
+              </label>
+              <div className="setup-section-label">Choose your party</div>
+              <div className="setup-party-choice-grid">
+                {parties.map((party) => {
+                  const edit = draft.partyEdits[party.id]
+                  return <button key={party.id} type="button" className={`setup-party-choice${party.id === selectedParty?.id ? ' is-active' : ''}`} onClick={() => updateDraft({ selectedPartyId: party.id })}>
+                    <span className="setup-party-swatch" style={{ background: edit?.colour ?? party.colour }} />
+                    <span><strong>{edit?.name ?? party.name}</strong><small>{ideologySummary(edit?.values ?? party.values)}</small></span>
                   </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+                })}
+              </div>
+              {selectedParty && selectedEdit && (
+                <div className="setup-party-edit setup-selected-party-edit">
+                  <label className="setup-edit-field"><span>Party name</span><input value={selectedEdit.name} onChange={(event) => updateSelectedEdit({ name: event.target.value })} /></label>
+                  <label className="setup-edit-field"><span>Leader</span><input value={selectedEdit.leader} onChange={(event) => updateSelectedEdit({ leader: event.target.value })} /></label>
+                  <label className="setup-edit-field setup-edit-colour"><span>Colour</span><input type="color" value={selectedEdit.colour} onChange={(event) => updateSelectedEdit({ colour: event.target.value })} /></label>
+                  <div className="setup-edit-ideology">
+                    <span className="setup-edit-field-label">Ideology</span>
+                    {(['change', 'growth', 'services'] as const).map((axis) => (
+                      <label key={axis} className="setup-edit-field setup-edit-slider">
+                        <span>{axis === 'change' ? 'Reform' : axis === 'growth' ? 'Business' : 'Services'}</span>
+                        <input type="range" min={-100} max={100} value={selectedEdit.values?.[axis] ?? selectedParty.values[axis]} onChange={(event) => updateSelectedEdit({ values: { ...(selectedEdit.values ?? selectedParty.values), [axis]: Number(event.target.value) } })} />
+                        <span className="slider-value">{selectedEdit.values?.[axis] ?? selectedParty.values[axis]}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <IdeologyWidget values={selectedEdit.values ?? selectedParty.values} colour={selectedEdit.colour} />
+                </div>
+              )}
+              <button type="button" className="setup-uk-names-btn" onClick={applyUKNames}>Use UK party names</button>
+              <div className="setup-step-actions">
+                <button type="button" className="setup-btn-ghost" onClick={() => setStep('town')}>Back</button>
+                <button type="button" className="setup-btn-primary" disabled={!selectedParty} onClick={() => setStep('review')}>Review Campaign</button>
+              </div>
+            </>
+          )}
+
+          {step === 'review' && world && selectedParty && selectedEdit && (
+            <>
+              <div className="setup-section-label">Step 3 · Ready to begin</div>
+              <h2 className="setup-step-title">Review your campaign</h2>
+              <div className="setup-review-card">
+                <strong>{world.townName} Town Council</strong>
+                <span>{world.constituencies.length} wards · Local political career</span>
+                <span><i style={{ background: selectedEdit.colour }} /> {selectedEdit.name}</span>
+                <span>Candidate: {draft.playerName.trim() || selectedEdit.leader}</span>
+              </div>
+              <p className="setup-step-copy">Party and candidate choices can be changed later only where the game allows; start this campaign with the details above.</p>
+              <div className="setup-step-actions">
+                <button type="button" className="setup-btn-ghost" onClick={() => setStep('profile')}>Back</button>
+                <button type="button" className="setup-btn-primary" disabled={!previewMatchesWardCount} onClick={startGame}>Start Campaign</button>
+              </div>
+            </>
+          )}
+        </section>
       </div>
     </div>
   )

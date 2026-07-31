@@ -1,4 +1,4 @@
-import { getDefaultBudget } from './sim'
+import { getDefaultBudget, initializePoliticianMode } from './sim'
 import type { PartyPerformance, World } from '../types/sim'
 
 const SAVE_KEY = 'electland_save'
@@ -19,10 +19,31 @@ export interface SaveResult {
 
 function normalizeSave(data: SaveData): SaveData {
   const w = data.world
+  if (w.gameMode !== 'single-politician') w.gameMode = 'single-politician'
+  if (!w.politicianMode) w.politicianMode = initializePoliticianMode(w)
+  if (w.politicianMode) {
+    if (!w.politicianMode.autoCampaigns) w.politicianMode.autoCampaigns = []
+    if (!w.politicianMode.legislationHistory) w.politicianMode.legislationHistory = []
+    if (typeof w.politicianMode.politician.wardId !== 'string') w.politicianMode.politician.wardId = ''
+    const party = w.parties.find((entry) => entry.id === w.politicianMode!.politician.partyId)
+    if (!w.politicianMode.politician.personalValues) {
+      w.politicianMode.politician.personalValues = party ? { ...party.values } : { change: 0, growth: 0, services: 0 }
+    }
+    if (typeof w.politicianMode.politician.personalPolicyNextWeek !== 'number') {
+      w.politicianMode.politician.personalPolicyNextWeek = w.week
+    }
+  }
   if (!w.alliancePacts) w.alliancePacts = []
   if (!w.councilHistory) w.councilHistory = []
   if (!w.budget) w.budget = getDefaultBudget()
   if (!w.allianceReputation) w.allianceReputation = {}
+  w.constituencies = w.constituencies.map((constituency) => ({
+    ...constituency,
+    tacticalPressure: Object.fromEntries(w.parties.map((party) => [
+      party.id,
+      constituency.tacticalPressure?.[party.id] ?? 1,
+    ])),
+  }))
   if (!w.voteHistory) w.voteHistory = []
   if (!w.newsFeed) w.newsFeed = []
   if (!w.activeCampaigns) w.activeCampaigns = []

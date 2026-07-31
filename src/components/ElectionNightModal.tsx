@@ -50,6 +50,7 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             const margin = r.results[0] && r.results[1] ? r.results[0].voteShare - r.results[1].voteShare : 0
             const marginVotes = r.results[0] && r.results[1] ? Math.round(r.results[0].votes - r.results[1].votes) : 0
             const isClose = margin < 3 || marginVotes <= 100
+            const isPlayerWard = world.politicianMode?.politician.wardId === r.wardId
             return (
               <div
                 key={r.wardId}
@@ -60,10 +61,12 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
                   isLoss ? 'is-loss' : '',
                   isFlip ? 'is-flip' : '',
                   isClose ? 'is-close' : '',
+                  isPlayerWard ? 'is-your-ward' : '',
                 ].filter(Boolean).join(' ')}
               >
                 <div className="result-card-ward">
                   {r.wardName}
+                  {isPlayerWard && <span className="your-seat-label"> (YOUR SEAT)</span>}
                 </div>
                 {r.winner && (
                   <div className="result-card-winner" style={{ borderLeftColor: r.winner.partyColour }}>

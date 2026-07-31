@@ -86,10 +86,18 @@ export function ConstituencyInspector({
           <div className="ward-header-row">
             <h3>{selectedWard.name}</h3>
             {isBattleground && <span className="battleground-badge">BATTLEGROUND</span>}
+            {world.politicianMode?.politician.wardId === selectedWard.id && <span className="your-ward-badge">YOUR WARD</span>}
           </div>
           <p className="ward-mood">
             Pop. {formatPopulation(selectedWard.population)} · {(selectedWard.urbanity * 100).toFixed(0)}% urban
           </p>
+          {world.politicianMode?.politician.wardId === selectedWard.id && (
+            <div className="pol-ward-info-strip">
+              <span title="Your local personal rating affects party support in this ward; it is not projected vote share.">Personal rating: <strong>{world.politicianMode.politician.personalApproval >= 0 ? '+' : ''}{(world.politicianMode.politician.personalApproval * 100).toFixed(0)}</strong></span>
+              <span>Reputation: <strong>{world.politicianMode.politician.reputation}</strong></span>
+              <span>{world.politicianMode.politician.isIncumbent ? 'Incumbent' : 'Challenger'}</span>
+            </div>
+          )}
 
 
 
@@ -164,7 +172,8 @@ export function ConstituencyInspector({
           {/* Ideology + fit block */}
           {(() => {
             const playerParty = world.parties.find((p) => p.id === playerPartyId)
-            const fit = playerParty ? wardFitSentence(playerParty.values, selectedWard.values) : null
+            const playerValues = world.politicianMode?.politician.personalValues ?? playerParty?.values
+            const fit = playerValues ? wardFitSentence(playerValues, selectedWard.values) : null
 
             return (
               <div className={`ward-fit-block ward-fit-${fit?.quality ?? 'neutral'}`}>
@@ -172,7 +181,7 @@ export function ConstituencyInspector({
                 <div className="ward-fit-axes">
                   {IDEOLOGY_AXES.map((ax) => {
                     const wardVal = selectedWard.values[ax.key]
-                    const partyVal = playerParty?.values[ax.key] ?? 0
+                    const partyVal = playerValues?.[ax.key] ?? 0
                     const diff = Math.abs(wardVal - partyVal)
                     const wardPos = ((wardVal + 100) / 200) * 100
                     const partyPos = ((partyVal + 100) / 200) * 100
@@ -216,8 +225,8 @@ export function ConstituencyInspector({
                 {/* Legend */}
                 <div className="ward-fit-legend">
                   <span className="wfl-ward">◆ Ward voters</span>
-                  {playerParty && (
-                    <span className="wfl-party" style={{ color: playerParty.colour }}>● {playerParty.name}</span>
+                  {playerValues && playerParty && (
+                    <span className="wfl-party" style={{ color: playerParty.colour }}>● {world.politicianMode ? 'Your position' : playerParty.name}</span>
                   )}
                 </div>
                 {/* Overall verdict */}

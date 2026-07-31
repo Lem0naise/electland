@@ -141,7 +141,7 @@ export function CampaignActionsPanel({ world, selectedWardId, onAction, onToggle
                 `${labels[type] ?? type} (${info.count * info.apCost}AP)`
               ).join(' + ')
             })()}
-            {' '}— draining {Math.min(3, totalPermanentDrain)}/5 AP weekly
+            {' '}— draining {Math.min(3, totalPermanentDrain)}/{world.maxActionPoints} AP weekly
           </span>
           <button
             type="button"

@@ -33,6 +33,11 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
 
   const filled = world.nationalResults.reduce((s, r) => s + r.seatsWon, 0)
   const empty = total - filled
+  const leading = world.nationalResults[0]
+  const hasMajority = (leading?.seatsWon ?? 0) >= majority
+
+  const isPoliticianMode = Boolean(world.politicianMode)
+  const pol = world.politicianMode?.politician
 
   return (
     <div className="seat-bar-wrap">
@@ -46,18 +51,25 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
         </div>
 
         <div className="seat-bar-info">
-          {govLabel && (
+          {isPoliticianMode && pol && (
+            <span className="seat-bar-pol-status">
+              {pol.isIncumbent ? 'Seated' : 'Campaigning'} · {pol.careerTier.replace('-', ' ')}
+              {pol.isIncumbent && ` · ${pol.influence} influence`}
+            </span>
+          )}
+          {!isPoliticianMode && govLabel && (
             <span className="seat-bar-gov-label">
               <span className="seat-bar-gov-dot" />
               {govLabel}
             </span>
           )}
           <span className="seat-bar-meta">
-            {majority} for majority · Week {world.week}
-            {world.weeksUntilElection > 0 && ` · ${world.weeksUntilElection}wk to election`}
+            {hasMajority
+              ? `${leading?.partyName ?? 'Leading party'} holds ${leading?.seatsWon ?? 0}/${total} seats`
+              : `Hung council · ${majority} seats for a majority`}
           </span>
           <div className="seat-bar-actions">
-            {isGoverning && (
+            {!isPoliticianMode && isGoverning && (
               <button type="button" className="seat-bar-action-btn is-gov" onClick={onOpenDashboard}>
                 {'\uD83C\uDFDB'} Govern
               </button>

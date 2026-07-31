@@ -56,6 +56,7 @@ export function MapFigure({
   onDragRedistrictSeeds,
 }: MapFigureProps) {
   const [zoom, setZoom] = useState(1)
+  const [showControls, setShowControls] = useState(false)
   const [dragWardId, setDragWardId] = useState<string | null>(null)
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -99,27 +100,34 @@ export function MapFigure({
       <figcaption>{world.townName}. {caption}</figcaption>
 
       <div className="map-toolbar">
-        <label>
-          <span>Zoom</span>
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.1}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-          />
-          <strong>{zoom.toFixed(1)}x</strong>
-        </label>
-        <span className="map-selection-note">
-          {mapMode === 'ward'
-            ? selectedSeat?.name ?? 'Click a ward'
-            : mapMode === 'bloc'
-              ? 'Click a square to inspect a bloc'
-              : selectedTile
-                ? `${selectedTile.id}`
-                : 'Click a dot to inspect'}
-        </span>
+        <button type="button" className="map-toolbar-toggle" onClick={() => setShowControls((shown) => !shown)}>
+          {showControls ? 'Hide map controls' : 'Map controls'}
+        </button>
+        {showControls && (
+          <>
+            <label>
+              <span>Zoom</span>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.1}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+              />
+              <strong>{zoom.toFixed(1)}x</strong>
+            </label>
+            <span className="map-selection-note">
+              {mapMode === 'ward'
+                ? selectedSeat?.name ?? 'Click a ward'
+                : mapMode === 'bloc'
+                  ? 'Click a square to inspect a bloc'
+                  : selectedTile
+                    ? `${selectedTile.id}`
+                    : 'Click a dot to inspect'}
+            </span>
+          </>
+        )}
       </div>
 
       <svg
@@ -206,6 +214,20 @@ export function MapFigure({
                     />
                   )
                 })}
+
+              {world.politicianMode && (() => {
+                const playerWard = world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)
+                return playerWard ? (
+                  <path
+                    d={playerWard.cellPath}
+                    className="politician-ward-highlight"
+                    fill="none"
+                    stroke={world.parties.find((p) => p.id === world.playerPartyId)?.colour ?? '#f8f0dd'}
+                    strokeWidth={2.5}
+                    strokeDasharray="6 3"
+                  />
+                ) : null
+              })()}
             </>
           )}
 
@@ -215,7 +237,7 @@ export function MapFigure({
                 <path
                   key={seat.id}
                   d={seat.cellPath}
-                  className={`constituency-outline${seat.id === selectedConstituencyId ? ' is-selected' : ''}`}
+                  className={`constituency-outline${seat.id === selectedConstituencyId ? ' is-selected' : ''}${world.politicianMode?.politician.wardId === seat.id ? ' is-player-ward' : ''}`}
                 />
               ))}
 

@@ -170,6 +170,7 @@ export interface Constituency {
   margin: number
   candidates: WardCandidate[]
   currentWinner?: WardCandidate
+  tacticalPressure?: Record<string, number>
   // History of leading party + margin each week
   history: Array<{ week: number; leadingPartyId: string; margin: number; results: ConstituencyResult[] }>
 }
@@ -323,6 +324,7 @@ export interface AlliancePact {
 }
 
 export interface World {
+  gameMode: GameMode
   seed: number
   week: number
   townName: string
@@ -367,6 +369,7 @@ export interface World {
   minorityGovernment: boolean
   budget: Budget
   councilHistory: CouncilDecisionRecord[]
+  politicianMode?: PoliticianModeState
 }
 
 export interface CustomPartyDraft {
@@ -376,11 +379,17 @@ export interface CustomPartyDraft {
   values: PoliticalValues
 }
 
+export type GameMode = 'party-leader' | 'single-politician'
+
 export interface WorldOptions {
   seed: number
   constituencyCount: number
   customParties: CustomPartyDraft[]
+  partyEdits?: PartyEdit[]
   playerPartyId?: string
+  gameMode?: GameMode
+  playerWardId?: string
+  playerName?: string
 }
 
 export type MapMode = 'ward' | 'bloc' | 'voter' | 'redistrict'
@@ -412,4 +421,152 @@ export interface CouncillorTenure {
   firstElectedWeek: number
   lastElectedWeek: number
   history: CouncillorTenureHistory[]
+}
+
+// ─── Single-Politician Mode Types ────────────────────────────────────────────
+
+export type CareerTier = 'backbencher' | 'committee-chair' | 'deputy-leader' | 'party-leader' | 'mayor'
+
+export type PoliticianActionType =
+  | 'door_knock'
+  | 'hold_surgery'
+  | 'leaflet_drop'
+  | 'local_media'
+  | 'call_party_support'
+  | 'attend_event'
+  | 'smear_opponent'
+  | 'shift_personal_policy'
+  | 'propose_motion'
+  | 'second_motion'
+  | 'lobby_councillor'
+  | 'rebel_vote'
+
+export interface PoliticianTrait {
+  id: string
+  label: string
+  effect: string
+  modifier?: Partial<{
+    approvalGain: number
+    reputationGain: number
+    influenceGain: number
+    rebellionCostReduction: number
+  }>
+}
+
+export interface CareerEvent {
+  week: number
+  description: string
+  tier: CareerTier
+}
+
+export interface Relationship {
+  targetId: string
+  targetName: string
+  partyId: string
+  partyColour: string
+  wardId: string
+  type: 'ally' | 'rival' | 'mentor' | 'neutral'
+  strength: number
+  history: string[]
+}
+
+export interface PoliticianState {
+  id: string
+  name: string
+  wardId: string
+  partyId: string
+  isIncumbent: boolean
+  personalApproval: number
+  personalValues: PoliticalValues
+  personalPolicyNextWeek: number
+  reputation: number
+  relationships: Relationship[]
+  traits: PoliticianTrait[]
+  careerHistory: CareerEvent[]
+  personalFunds: number
+  influence: number
+  careerTier: CareerTier
+  partyLoyalty: number
+  motionsProposed: number
+  motionsPassed: number
+  termsServed: number
+  rebellions: number
+}
+
+export type MotionCategory = 'planning' | 'budget' | 'services' | 'environment' | 'governance'
+
+export interface CouncilMotionVote {
+  councillorId: string
+  councillorName: string
+  partyId: string
+  vote: 'aye' | 'nay' | 'abstain'
+}
+
+export interface CouncilMotion {
+  id: string
+  proposerId: string
+  proposerName: string
+  headline: string
+  description: string
+  category: MotionCategory
+  ideologyLean: Partial<PoliticalValues>
+  blocImpact: Record<string, number>
+  status: 'proposed' | 'debating' | 'voting' | 'passed' | 'failed'
+  votes: CouncilMotionVote[]
+  partyWhipDirection: Record<string, 'aye' | 'nay' | 'free'>
+  playerVote?: 'aye' | 'nay' | 'abstain'
+  whipIssuerId?: string
+  whipIssuerName?: string
+}
+
+export interface CouncilSession {
+  week: number
+  motions: CouncilMotion[]
+  resolved: boolean
+}
+
+export interface Councillor {
+  id: string
+  name: string
+  partyId: string
+  partyColour: string
+  wardId: string
+  wardName: string
+  personalValues: PoliticalValues
+  rebellionTendency: number
+  influence: number
+}
+
+export type ActionCategory = 'grassroots' | 'communications' | 'political'
+
+export interface PoliticianActionMeta {
+  type: PoliticianActionType
+  label: string
+  description: string
+  apCost: number
+  category: ActionCategory
+  expectedEffect: string
+  riskDescription?: string
+  traitBonus?: string
+  policyAxis?: PoliticalValueKey
+  policyDirection?: 1 | -1
+}
+
+export interface CustomMotionInput {
+  headline: string
+  description: string
+  category: MotionCategory
+  ideologyLean: PoliticalValues
+}
+
+export interface PoliticianModeState {
+  politician: PoliticianState
+  councillors: Councillor[]
+  currentSession?: CouncilSession
+  sessionHistory: Array<{ week: number; motionsPassed: number; motionsFailed: number }>
+  nextSessionWeek: number
+  councilSessionInterval: number
+  autoCampaigns: PoliticianActionType[]
+  queuedMotion?: CustomMotionInput
+  legislationHistory: CouncilMotion[]
 }
