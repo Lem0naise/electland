@@ -1784,6 +1784,60 @@ function softmax(scores: number[]) {
   return values.map((value) => value / total)
 }
 
+export const TACTICAL_GAP_FLOOR = 5
+export const TACTICAL_GAP_SCALE = 15
+export const TACTICAL_LOSS_RATE = 0.15
+export const TACTICAL_RACE_MARGIN_MAX = 10
+export const TACTICAL_DISPLAY_INTENSITY_MIN = 0.2
+
+export function tacticalGapIntensity(secondPlaceShare: number, partyShare: number): number {
+  return clamp((secondPlaceShare - partyShare - TACTICAL_GAP_FLOOR) / TACTICAL_GAP_SCALE, 0, 1)
+}
+
+export function tacticalSqueezeLoss(partyShare: number, secondPlaceShare: number, pressure: number): number {
+  return partyShare * TACTICAL_LOSS_RATE * tacticalGapIntensity(secondPlaceShare, partyShare) * pressure
+}
+
+export type TacticalVotingSummary = {
+  race: string[]
+  squeezed: string[]
+  breakingThrough: string[]
+  active: boolean
+}
+
+export function summariseTacticalVoting(constituency: Constituency): TacticalVotingSummary {
+  const results = constituency.results
+  if (results.length < 3) {
+    return { race: [], squeezed: [], breakingThrough: [], active: false }
+  }
+
+  const secondShare = results[1]?.voteShare ?? 0
+  const squeezed: string[] = []
+  const breakingThrough: string[] = []
+
+  for (const result of results.slice(2)) {
+    if (result.voteShare <= 0) continue
+    const pressure = constituency.tacticalPressure?.[result.partyId] ?? 1
+    if (pressure <= 0.05) continue
+
+    const intensity = tacticalGapIntensity(secondShare, result.voteShare)
+    const closeToSecond = secondShare - result.voteShare <= TACTICAL_GAP_FLOOR
+
+    if (intensity >= TACTICAL_DISPLAY_INTENSITY_MIN && pressure >= 0.5) {
+      squeezed.push(result.partyName)
+    } else if (pressure < 0.5 && (intensity > 0 || closeToSecond)) {
+      breakingThrough.push(result.partyName)
+    }
+  }
+
+  const active = squeezed.length > 0 || breakingThrough.length > 0
+  const race = active && constituency.margin <= TACTICAL_RACE_MARGIN_MAX
+    ? results.slice(0, 2).map((result) => result.partyName)
+    : []
+
+  return { race, squeezed, breakingThrough, active }
+}
+
 function applyTacticalSqueeze(rankings: TilePartyPreference[], constituency?: Constituency): TilePartyPreference[] {
   if (rankings.length <= 2) return rankings
 
@@ -1793,10 +1847,8 @@ function applyTacticalSqueeze(rankings: TilePartyPreference[], constituency?: Co
 
   for (let index = 2; index < sorted.length; index += 1) {
     const party = sorted[index]
-    const gapFromSecond = secondPlaceSupport - party.support
-    const gapIntensity = clamp((gapFromSecond - 5) / 15, 0, 1)
     const pressure = constituency?.tacticalPressure?.[party.partyId] ?? 1
-    const loss = party.support * 0.15 * gapIntensity * pressure
+    const loss = tacticalSqueezeLoss(party.support, secondPlaceSupport, pressure)
     sorted[index] = { ...party, support: party.support - loss }
     squeezedSupport += loss
   }
@@ -2001,7 +2053,7 @@ function updateTacticalPressure(world: World): World {
 
     rawResults.slice(2).forEach((result) => {
       const currentPressure = pressure[result.partyId] ?? 1
-      const isCompetitive = leaderShare - result.voteShare <= 5
+      const isCompetitive = leaderShare - result.voteShare <= TACTICAL_GAP_FLOOR
       pressure[result.partyId] = clamp(currentPressure + (isCompetitive ? -0.15 : 0.05), 0, 1)
     })
 
@@ -2477,8 +2529,8 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
 
 // ─── Apply player campaign action ────────────────────────────────────────────
 export function applyCampaignAction(world: World, action: CampaignAction): { world: World; result: ActionResult } {
-  if (world.playerActionPoints < action.apCost) {
-    return { world, result: { action, outcome: 'neutral', description: `You need ${action.apCost} AP for ${action.label}.` } }
+  if (world.playerActionPoints < 1) {
+    return { world, result: { action, outcome: 'neutral', description: 'You’ve already acted this week.' } }
   }
   const rng = createRng(world.seed + world.week * 999 + world.actionsThisWeek.length * 7)
   const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
@@ -2812,7 +2864,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
     ...world,
     parties: updatedParties,
     tiles: updatedTiles,
-    playerActionPoints: world.playerActionPoints - action.apCost,
+    playerActionPoints: 0,
     weeklyEvent: action.type === 'respond_event' && world.weeklyEvent
       ? { ...world.weeklyEvent, resolved: true, chosenIndex: action.eventChoiceIndex }
       : world.weeklyEvent,
@@ -2924,8 +2976,8 @@ export function generateWorld(options: WorldOptions): World {
     currentMayorLeader: incumbent?.leader ?? establishedParties[0]?.leader ?? parties[0]?.leader ?? '',
     electionCycleWeeks,
     weeksUntilElection,
-    playerActionPoints: 5,
-    maxActionPoints: 5,
+    playerActionPoints: 1,
+    maxActionPoints: 1,
     activeCampaigns: [] as ActiveCampaign[],
     actionsThisWeek: [] as ActionResult[],
     weeklyEvent: pickWeeklyEvent(rng),
@@ -2973,8 +3025,13 @@ export function generateWorld(options: WorldOptions): World {
   {
     finalWorld.politicianMode = initializePoliticianMode(finalWorld, options.playerWardId ?? '', options.playerName)
     if (finalWorld.politicianMode.politician.traits.some((t) => t.id === 'fundraiser')) {
-      finalWorld.maxActionPoints = 6
-      finalWorld.playerActionPoints = 6
+      finalWorld.politicianMode = {
+        ...finalWorld.politicianMode,
+        politician: {
+          ...finalWorld.politicianMode.politician,
+          personalFunds: finalWorld.politicianMode.politician.personalFunds + 1,
+        },
+      }
     }
     const polName = finalWorld.politicianMode.politician.name
     const polNameParts = polName.split(' ')
@@ -3027,7 +3084,7 @@ export function simulateWeek(world: World): World {
     history: [
       ...seat.history,
       { week: world.week, leadingPartyId: seat.leadingPartyId, margin: seat.margin, results: seat.results },
-    ].slice(-24), // Keep last 24 weeks
+    ].slice(-world.electionCycleWeeks),
   }))
 
   const provisional = {
@@ -3038,8 +3095,7 @@ export function simulateWeek(world: World): World {
     parties: partiesEvolved,
     constituencies: constituenciesWithHistory,
     weeksUntilElection: world.weeksUntilElection > 0 ? world.weeksUntilElection - 1 : world.electionCycleWeeks,
-    // Reset player AP for new week, then subtract permanent campaign drains (capped at 3 AP/week)
-    playerActionPoints: Math.max(0, world.maxActionPoints - Math.min(3, world.activeCampaigns.reduce((sum, c) => sum + c.apCostPerTurn, 0))),
+    playerActionPoints: world.maxActionPoints,
     actionsThisWeek: [] as ActionResult[],
     // New weekly event
     weeklyEvent: pickWeeklyEvent(rng),
@@ -3047,25 +3103,8 @@ export function simulateWeek(world: World): World {
     voteHistory: [...world.voteHistory, historyEntry].slice(-52),
   }
 
-  // Apply permanent campaign boosts (ward boosts carry-forward through evolveParties decay, so re-apply each week)
-  const provisionalWithCampaigns = (() => {
-    if (world.activeCampaigns.length === 0) return provisional as World
-    let partiesWithBoosts = [...provisional.parties]
-    for (const campaign of world.activeCampaigns) {
-      if (!campaign.wardId) continue
-      const boostAmount = campaign.type === 'canvass' ? 0.06
-        : campaign.type === 'ads' ? 0.08
-        : campaign.type === 'fix_potholes' ? 0.05
-        : campaign.type === 'improve_bins' ? 0.04
-        : 0.05
-      partiesWithBoosts = partiesWithBoosts.map((p) =>
-        p.id === world.playerPartyId
-          ? { ...p, wardBoosts: { ...p.wardBoosts, [campaign.wardId!]: clamp((p.wardBoosts[campaign.wardId!] ?? 0) + boostAmount, 0, 0.55) } }
-          : p,
-      )
-    }
-    return { ...provisional, parties: partiesWithBoosts } as World
-  })()
+  // Permanent party campaigns deprecated — keep field empty
+  const provisionalWithCampaigns = { ...provisional, activeCampaigns: [] as ActiveCampaign[] } as World
 
   // Run AI campaigns
   const aiResults = runAICampaigns(provisionalWithCampaigns, rng)
@@ -3306,8 +3345,8 @@ export function simulateWeek(world: World): World {
   }
 
   let politicianMode = world.politicianMode
-  let autoApDrain = 0
   const politicianNews: string[] = []
+  let pendingActionToast: string | undefined
   if (politicianMode) {
     const pol = politicianMode.politician
     const approvalDecay = pol.personalApproval * 0.03
@@ -3316,29 +3355,29 @@ export function simulateWeek(world: World): World {
       ...r,
       strength: r.strength > 0 ? r.strength - relationshipDecay : r.strength < 0 ? r.strength + relationshipDecay : 0,
     }))
+    const nextPol = { ...pol, personalApproval: pol.personalApproval - approvalDecay, relationships: decayedRelationships }
     politicianMode = {
       ...politicianMode,
-      politician: { ...pol, personalApproval: pol.personalApproval - approvalDecay, relationships: decayedRelationships },
+      autoCampaigns: politicianMode.autoCampaigns.slice(0, 1),
+      politician: nextPol,
     }
-    if (politicianMode.autoCampaigns.length > 0) {
+    // Weekly auto runs at week end only if the player did not already use their action
+    const weeklyType = politicianMode.autoCampaigns[0]
+    if (weeklyType && world.playerActionPoints >= 1) {
       let autoPol = politicianMode.politician
       let autoParties = merged.parties
-      const autoRng = createRng(world.seed + (world.week + 1) * 9991)
-      for (const actionType of politicianMode.autoCampaigns) {
-        if (actionType === 'hold_surgery' && !autoPol.isIncumbent) continue
-        const cost = actionType === 'attend_event' ? 0 : actionType === 'local_media' || actionType === 'call_party_support' || actionType === 'smear_opponent' ? 2 : 1
-        if (autoApDrain + cost > merged.playerActionPoints) break
-        autoApDrain += cost
+      const autoRng = createRng(world.seed + world.week * 9991)
+      if (!(weeklyType === 'hold_surgery' && !autoPol.isIncumbent)) {
         let approvalGain = 0
         let repGain = 0
         let infGain = 0
-        switch (actionType) {
+        switch (weeklyType) {
           case 'door_knock': approvalGain = 0.05 + autoRng() * 0.04; break
           case 'hold_surgery': approvalGain = 0.04 + autoRng() * 0.03; repGain = 2; break
           case 'leaflet_drop': repGain = 4 + Math.floor(autoRng() * 3); approvalGain = 0.02; break
           case 'local_media': if (autoRng() < 0.2) { approvalGain = -0.04; repGain = -3 } else { approvalGain = 0.06; repGain = 5 } break
           case 'call_party_support': {
-            if (autoPol.partyLoyalty >= 30) {
+            if (autoPol.partyLoyalty >= 30 && autoPol.wardId) {
               const wardBoostAmount = (0.08 + autoRng() * 0.04) * (autoPol.partyLoyalty / 100)
               autoParties = autoParties.map((party) => party.id === world.playerPartyId
                 ? { ...party, wardBoosts: { ...party.wardBoosts, [autoPol.wardId]: clamp((party.wardBoosts[autoPol.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
@@ -3349,6 +3388,7 @@ export function simulateWeek(world: World): World {
           }
           case 'smear_opponent': if (autoRng() < 0.3) { approvalGain = -0.06 } else { approvalGain = 0.04 } break
           case 'attend_event': infGain = 1; break
+          case 'shift_personal_policy': break
           default: approvalGain = 0.02; infGain = 1; break
         }
         autoPol = {
@@ -3357,9 +3397,12 @@ export function simulateWeek(world: World): World {
           reputation: clamp(autoPol.reputation + repGain, 0, 100),
           influence: clamp(autoPol.influence + infGain, 0, 100),
         }
+        politicianMode = { ...politicianMode, politician: autoPol }
+        merged.parties = autoParties
+        const toast = `Weekly action completed: ${weeklyType.replace(/_/g, ' ')}.`
+        politicianNews.push(toast)
+        pendingActionToast = toast
       }
-      politicianMode = { ...politicianMode, politician: autoPol }
-      merged.parties = autoParties
     }
   }
   if (politicianMode && electionHappening) {
@@ -3429,7 +3472,10 @@ export function simulateWeek(world: World): World {
     stats,
     politicianMode,
     newsFeed: politicianNews.length > 0 ? [`Week ${merged.week}: ${politicianNews[0]}`, ...merged.newsFeed].slice(0, 30) : merged.newsFeed,
-    playerActionPoints: Math.max(0, merged.playerActionPoints - autoApDrain),
+    playerActionPoints: world.maxActionPoints,
+    maxActionPoints: 1,
+    activeCampaigns: [],
+    pendingActionToast,
   }
 }
 
@@ -4267,7 +4313,7 @@ const TRAIT_POOL: PoliticianTrait[] = [
   { id: 'peoples-champion', label: "People's Champion", effect: '+30% surgery approval gains', modifier: { approvalGain: 0.3 } },
   { id: 'maverick', label: 'Maverick', effect: 'Rebellion loyalty cost reduced by 4', modifier: { rebellionCostReduction: 4 } },
   { id: 'networker', label: 'Networker', effect: 'Relationships gain +2 strength per session', modifier: { influenceGain: 0.15 } },
-  { id: 'fundraiser', label: 'Fundraiser', effect: '+1 AP per week maximum', modifier: {} },
+  { id: 'fundraiser', label: 'Fundraiser', effect: '+1 personal funds at campaign start', modifier: {} },
   { id: 'community-organiser', label: 'Community Organiser', effect: 'Better chance of building relationships when reaching out', modifier: {} },
 ]
 
@@ -4488,16 +4534,16 @@ export function getPoliticianActions(world: World): PoliticianActionMeta[] {
   const actions: PoliticianActionMeta[] = [
     { type: 'door_knock', label: 'Door-knock streets', description: 'Knock on doors to build personal support.', apCost: 1, category: 'grassroots', expectedEffect: '+5–9% approval', traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined },
     { type: 'leaflet_drop', label: 'Leaflet drop', description: 'Distribute leaflets for name recognition.', apCost: 1, category: 'communications', expectedEffect: '+4–7 reputation, +2% approval' },
-    { type: 'local_media', label: 'Local media', description: 'Appear on local radio or newspaper.', apCost: 2, category: 'communications', expectedEffect: '+6–10% approval, +5–9 rep', riskDescription: hasMediaSavvy ? '10% gaffe risk' : '20% gaffe risk', traitBonus: hasMediaSavvy ? 'Media Savvy: halved risk' : undefined },
-    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward.', apCost: 2, category: 'political', expectedEffect: 'Ward boost + loyalty' },
-    { type: 'smear_opponent', label: 'Smear opponent', description: 'Attack the leading rival candidate.', apCost: 2, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
+    { type: 'local_media', label: 'Local media', description: 'Appear on local radio or newspaper.', apCost: 1, category: 'communications', expectedEffect: '+6–10% approval, +5–9 rep', riskDescription: hasMediaSavvy ? '10% gaffe risk' : '20% gaffe risk', traitBonus: hasMediaSavvy ? 'Media Savvy: halved risk' : undefined },
+    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward.', apCost: 1, category: 'political', expectedEffect: 'Ward boost + loyalty' },
+    { type: 'smear_opponent', label: 'Smear opponent', description: 'Attack the leading rival candidate.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
     { type: 'shift_personal_policy', label: 'Set personal position', description: 'Move your own public position without changing the party platform.', apCost: 1, category: 'political', expectedEffect: 'Personal ward fit shifts', riskDescription: world.week < pol.personalPolicyNextWeek ? `Available again in week ${pol.personalPolicyNextWeek}` : 'May reduce party loyalty if you diverge' },
   ]
   if (pol.isIncumbent) {
     actions.splice(1, 0, { type: 'hold_surgery', label: 'Hold surgery', description: 'Meet constituents face-to-face as their councillor.', apCost: 1, category: 'grassroots', expectedEffect: '+4–7% approval, +2 rep', traitBonus: hasChampion ? "People's Champion: +30%" : undefined })
   }
   if (!usedAttendEvent) {
-    actions.push({ type: 'attend_event', label: 'Attend local event', description: 'Show up at a community event and build local connections.', apCost: 0, category: 'grassroots', expectedEffect: '+1 influence' })
+    actions.push({ type: 'attend_event', label: 'Attend local event', description: 'Show up at a community event and build local connections.', apCost: 1, category: 'grassroots', expectedEffect: '+1 influence' })
   }
   return actions
 }
@@ -4520,8 +4566,8 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
   const rng = createRng(world.seed + world.week * 777 + world.actionsThisWeek.length * 13)
   const pm = world.politicianMode
   const pol = pm.politician
-  if (world.playerActionPoints < action.apCost) {
-    return { world, result: { action, outcome: 'neutral', description: `You need ${action.apCost} AP for ${action.label}.` } }
+  if (world.playerActionPoints < 1) {
+    return { world, result: { action, outcome: 'neutral', description: 'You’ve already acted this week.' } }
   }
   if (action.type === 'hold_surgery' && !pol.isIncumbent) {
     return { world, result: { action, outcome: 'neutral', description: 'Only a serving councillor can hold a constituency surgery.' } }
@@ -4589,7 +4635,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       return {
         world: {
           ...updatedWorld,
-          playerActionPoints: world.playerActionPoints - action.apCost,
+          playerActionPoints: 0,
           actionsThisWeek: [...world.actionsThisWeek, { action: { type: 'canvass', label: action.label, description: action.description, apCost: action.apCost, wardId: pol.wardId }, outcome, description, wardName: world.constituencies.find((c) => c.id === pol.wardId)?.name }],
           politicianMode: { ...pm, politician: newPol },
         },
@@ -4639,7 +4685,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       return {
         world: {
           ...world,
-          playerActionPoints: world.playerActionPoints - action.apCost,
+          playerActionPoints: 0,
           actionsThisWeek: [...world.actionsThisWeek, { action: { type: 'canvass', label: action.label, description: action.description, apCost: action.apCost, wardId: pol.wardId }, outcome, description, wardName: world.constituencies.find((c) => c.id === pol.wardId)?.name }],
           politicianMode: { ...pm, politician: newPol },
           newsFeed: [`Week ${world.week}: ${description}`, ...world.newsFeed].slice(0, 30),
@@ -4665,7 +4711,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
   return {
     world: {
       ...world,
-      playerActionPoints: world.playerActionPoints - action.apCost,
+      playerActionPoints: 0,
       actionsThisWeek: [...world.actionsThisWeek, { action: { type: 'canvass', label: action.label, description: action.description, apCost: action.apCost, wardId: pol.wardId }, outcome, description, wardName }],
       politicianMode: { ...pm, politician: newPol },
     },
@@ -5421,9 +5467,33 @@ export function formMinorityGovernment(world: World): World {
 export function formNpcOpposition(world: World): World {
   const largest = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)[0]
   const majority = world.stats.councilMajority
-  if (!largest || largest.partyId === world.playerPartyId) {
+  if (!largest) {
     return { ...world, needsCoalition: false, isGoverning: false, minorityGovernment: false, coalitionPartnerId: undefined }
   }
+
+  if (largest.partyId === world.playerPartyId) {
+    const partner = [...world.nationalResults]
+      .filter((result) => result.partyId !== world.playerPartyId)
+      .map((result) => {
+        const party = world.parties.find((entry) => entry.id === result.partyId)
+        const lead = world.parties.find((entry) => entry.id === world.playerPartyId)
+        const compat = party && lead ? coalitionCompatibility(lead.values, party.values) : 0
+        return { result, compat }
+      })
+      .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)[0]
+    const canCoalition = partner && largest.seatsWon + partner.result.seatsWon >= majority && partner.compat >= 50
+    if (canCoalition) {
+      return {
+        ...formCoalitionGovernment(world, partner.result.partyId),
+        newsFeed: [`Week ${world.week}: Party leadership forms a coalition with ${partner.result.partyName}. You are in government.`, ...world.newsFeed].slice(0, 30),
+      }
+    }
+    return {
+      ...formMinorityGovernment(world),
+      newsFeed: [`Week ${world.week}: Party leadership forms a minority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
+    }
+  }
+
   const partner = [...world.nationalResults]
     .filter((result) => result.partyId !== largest.partyId && result.partyId !== world.playerPartyId)
     .map((result) => {
@@ -5442,8 +5512,13 @@ export function formNpcOpposition(world: World): World {
     coalitionPartnerId: undefined,
     currentMayorParty: largest.partyName,
     currentMayorLeader: largest.leader,
-    newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${canCoalition ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}.`, ...world.newsFeed].slice(0, 30),
+    newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${canCoalition ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
   }
+}
+
+export function playerCanNegotiateCoalition(world: World): boolean {
+  const tier = world.politicianMode?.politician.careerTier
+  return tier === 'party-leader' || tier === 'mayor'
 }
 
 export function applyRelationshipAction(
@@ -5456,8 +5531,8 @@ export function applyRelationshipAction(
   if (!pm || !relationship) {
     return { world, result: { action: { type: 'lobby_councillor', label: 'Relationship action', description: '', apCost: 0 }, outcome: 'neutral', description: 'That political contact is no longer available.' } }
   }
-  if (action === 'reach_out' && world.playerActionPoints < 1) {
-    return { world, result: { action: { type: 'lobby_councillor', label: 'Reach out', description: '', apCost: 1 }, outcome: 'neutral', description: 'You need 1 AP to reach out this week.' } }
+  if (world.playerActionPoints < 1) {
+    return { world, result: { action: { type: 'lobby_councillor', label: action === 'reach_out' ? 'Reach out' : 'Antagonise', description: '', apCost: 1 }, outcome: 'neutral', description: 'You’ve already acted this week.' } }
   }
 
   const rng = createRng(world.seed + world.week * 809 + councillorId.length + (action === 'reach_out' ? 1 : 2))
@@ -5479,11 +5554,11 @@ export function applyRelationshipAction(
   return {
     world: {
       ...world,
-      playerActionPoints: world.playerActionPoints - (action === 'reach_out' ? 1 : 0),
+      playerActionPoints: 0,
       politicianMode: { ...pm, politician: { ...pm.politician, relationships } },
     },
     result: {
-      action: { type: 'lobby_councillor', label: action === 'reach_out' ? 'Reach out' : 'Antagonise', description: '', apCost: action === 'reach_out' ? 1 : 0 },
+      action: { type: 'lobby_councillor', label: action === 'reach_out' ? 'Reach out' : 'Antagonise', description: '', apCost: 1 },
       outcome: action === 'reach_out' && !successful ? 'neutral' : 'success',
       description,
     },

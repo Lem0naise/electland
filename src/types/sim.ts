@@ -387,6 +387,8 @@ export interface World {
   budget: Budget
   councilHistory: CouncilDecisionRecord[]
   politicianMode?: PoliticianModeState
+  /** One-shot toast after weekly auto; consumed by UI then cleared. */
+  pendingActionToast?: string
 }
 
 export interface CustomPartyDraft {

@@ -23,6 +23,7 @@ function normalizeSave(data: SaveData): SaveData {
   if (!w.politicianMode) w.politicianMode = initializePoliticianMode(w)
   if (w.politicianMode) {
     if (!w.politicianMode.autoCampaigns) w.politicianMode.autoCampaigns = []
+    else w.politicianMode.autoCampaigns = w.politicianMode.autoCampaigns.slice(0, 1)
     if (!w.politicianMode.legislationHistory) w.politicianMode.legislationHistory = []
     if (typeof w.politicianMode.politician.wardId !== 'string') w.politicianMode.politician.wardId = ''
     if (typeof w.politicianMode.councilSessionInterval !== 'number' || w.politicianMode.councilSessionInterval < 8) {
@@ -70,7 +71,11 @@ function normalizeSave(data: SaveData): SaveData {
   }))
   if (!w.voteHistory) w.voteHistory = []
   if (!w.newsFeed) w.newsFeed = []
+  if (w.pendingActionToast) w.pendingActionToast = undefined
   if (!w.activeCampaigns) w.activeCampaigns = []
+  else w.activeCampaigns = []
+  w.maxActionPoints = 1
+  w.playerActionPoints = Math.min(1, Math.max(0, w.playerActionPoints ?? 1))
   if (!w.actionsThisWeek) w.actionsThisWeek = []
   if (!w.electionNightResults) w.electionNightResults = []
   if (!w.electionNightPreviousSeats) w.electionNightPreviousSeats = {}

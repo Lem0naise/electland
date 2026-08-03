@@ -11,7 +11,7 @@ import { GovernmentDashboard } from './components/GovernmentDashboard'
 import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
-import { CampaignActionsPanel } from './components/CampaignActionsPanel'
+import { PactsPanel } from './components/PactsPanel'
 import { PoliticianActionsPanel } from './components/PoliticianActionsPanel'
 import { CouncilChamber, ProposalForm } from './components/CouncilChamber'
 import { RelationshipsPanel } from './components/RelationshipsPanel'
@@ -48,6 +48,7 @@ import {
   generateWorld,
   governingStatusLabel,
   MOTION_PROPOSAL_INFLUENCE_COST,
+  playerCanNegotiateCoalition,
   playerPartyIsGoverning,
   recalculateWardAggregates,
   redistributeSnapshot,
@@ -61,7 +62,6 @@ import {
 } from './lib/sim'
 import type {
   ActionResult,
-  ActiveCampaign,
   CampaignAction,
   MapMode,
   PartyEdit,
@@ -75,6 +75,22 @@ const blocPalette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d
 
 function playerPartySeats(world: World) {
   return world.nationalResults.find((r) => r.partyId === world.playerPartyId)?.seatsWon ?? 0
+}
+
+function newsToast(description: string, outcome: ActionResult['outcome'] = 'neutral'): ActionResult {
+  return {
+    action: { type: 'canvass', label: '', description: '', apCost: 0 },
+    outcome,
+    description: description.replace(/^Week \d+:\s*/, ''),
+  }
+}
+
+function polToFlash(result: PoliticianActionResult): ActionResult {
+  return {
+    action: { type: 'canvass', label: result.action.label, description: result.action.description, apCost: result.action.apCost },
+    outcome: result.outcome,
+    description: result.description,
+  }
 }
 
 function App() {
@@ -236,18 +252,27 @@ function App() {
       setShowCouncilChamber(true)
       setActiveWorkspaceTab('council')
     }
-    setWorld(nextWorld)
-    const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
-      (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
-    )
-    if (newPactLines.length > 0) {
-      const desc = newPactLines[0].replace(/^Week \d+: /, '')
-      const isBreak = newPactLines[0].includes('breaks')
+    const toast = nextWorld.pendingActionToast
+    setWorld({ ...nextWorld, pendingActionToast: undefined })
+    if (toast) {
       setLastActionResult({
-        action: { type: isBreak ? 'break_alliance' : 'propose_alliance', label: '', description: '', apCost: 0 },
-        outcome: isBreak ? 'neutral' as const : 'success' as const,
-        description: desc,
+        action: { type: 'canvass', label: '', description: '', apCost: 0 },
+        outcome: 'success',
+        description: toast,
       })
+    } else {
+      const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
+        (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
+      )
+      if (newPactLines.length > 0) {
+        const desc = newPactLines[0].replace(/^Week \d+: /, '')
+        const isBreak = newPactLines[0].includes('breaks')
+        setLastActionResult({
+          action: { type: isBreak ? 'break_alliance' : 'propose_alliance', label: '', description: '', apCost: 0 },
+          outcome: isBreak ? 'neutral' as const : 'success' as const,
+          description: desc,
+        })
+      }
     }
   }, [world])
 
@@ -299,6 +324,7 @@ function App() {
     const { world: nextWorld, result } = applyPoliticianAction(world, action)
     setWorld(nextWorld)
     setLastPolResult(result)
+    setLastActionResult(polToFlash(result))
   }
 
   const handleAction = (action: CampaignAction) => {
@@ -313,31 +339,47 @@ function App() {
     const result = applyRelationshipAction(world, councillorId, action)
     setWorld(result.world)
     setLastPolResult(result.result)
-  }
-
-  const handleTogglePermanent = (campaign: ActiveCampaign) => {
-    if (!world) return
-    const existing = world.activeCampaigns.find((entry) => entry.id === campaign.id || (entry.wardId === campaign.wardId && entry.type === campaign.type))
-    if (existing) {
-      setWorld({ ...world, activeCampaigns: world.activeCampaigns.filter((entry) => entry !== existing) })
-      return
-    }
-    setWorld({ ...world, activeCampaigns: [...world.activeCampaigns, campaign] })
+    setLastActionResult(polToFlash(result.result))
   }
 
   const handleWardSelection = (wardId: string) => {
     if (!world) return
     const result = requestWardSwitch(world, wardId)
     setWorld(result.world)
-    setLastPolResult({
+    const polResult: PoliticianActionResult = {
       action: { type: 'call_party_support', label: 'Ward nomination', description: result.reason, apCost: 0 },
       outcome: result.approved ? 'success' : 'neutral',
       description: result.reason,
-    })
+    }
+    setLastPolResult(polResult)
+    setLastActionResult(polToFlash(polResult))
     if (result.approved) {
       setSelectedConstituencyId(wardId)
       setShowWardSwitchModal(false)
       setWardNominationDismissed(false)
+    }
+  }
+
+  const resolveHungCouncil = (w: World) => {
+    if (!w.needsCoalition) return w
+    if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w)) {
+      const next = formNpcOpposition(w)
+      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', next.isGoverning ? 'success' : 'neutral'))
+      return next
+    }
+    setShowCoalitionModal(true)
+    return w
+  }
+
+  const afterPersonalElection = (w: World) => {
+    if (w.needsCoalition) {
+      setWorld(resolveHungCouncil(w))
+      return
+    }
+    if (!w.isGoverning && w.nationalResults.some((r) => r.seatsWon >= w.stats.councilMajority && r.partyId !== w.playerPartyId)) {
+      const next = formNpcOpposition(w)
+      setWorld(next)
+      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Another party governs.', 'neutral'))
     }
   }
 
@@ -370,6 +412,7 @@ function App() {
     )
     const stillPending = nextDecisions.filter((d) => !d.resolved)
     if (stillPending.length === 0) setShowGovernance(false)
+    setLastActionResult(newsToast(newsFeedLine, 'success'))
   }
 
   const focusTile = (tileId: string) => {
@@ -447,11 +490,8 @@ function App() {
   }
 
   const electionIn = world?.weeksUntilElection ?? 0
-  const scheduledAutoAp = world?.politicianMode?.autoCampaigns.reduce((total, type) => {
-    if (type === 'attend_event') return total
-    if (type === 'hold_surgery' && !world.politicianMode?.politician.isIncumbent) return total
-    return total + (type === 'local_media' || type === 'call_party_support' || type === 'smear_opponent' ? 2 : 1)
-  }, 0) ?? 0
+  const hasWeeklyAuto = Boolean(world?.politicianMode?.autoCampaigns[0])
+  const actionAvailable = (world?.playerActionPoints ?? 0) >= 1
 
   return (
     <div className="newspaper-shell">
@@ -497,18 +537,12 @@ function App() {
               <span className="countdown-number">{electionIn === 0 ? 'NOW' : electionIn}</span>
               <span className="countdown-label">{electionIn === 0 ? 'Election' : 'weeks to election'}</span>
             </div>
-            <div className="topbar-ap-block" aria-label={`${world.playerActionPoints} action points remaining`}>
+            <div className="topbar-ap-block" aria-label={actionAvailable ? 'Weekly action available' : 'Weekly action used'}>
               <span className="ap-label-small">This week</span>
-              <div className="ap-pips-small">
-                {Array.from({ length: world.maxActionPoints }).map((_, i) => (
-                  <span
-                    key={i}
-                    className={`ap-pip-small${i < world.playerActionPoints ? ' filled' : ''}${i >= world.playerActionPoints && i < world.playerActionPoints + scheduledAutoAp ? ' scheduled' : ''}`}
-                    title={i < world.playerActionPoints ? 'Available this week' : i < world.playerActionPoints + scheduledAutoAp ? 'Scheduled for weekly actions next week' : 'Spent this week'}
-                  />
-                ))}
-              </div>
-              <span className="ap-count-small">{world.playerActionPoints}/{world.maxActionPoints}{scheduledAutoAp > 0 ? ` · ${scheduledAutoAp} weekly` : ''}</span>
+              <span className={`action-week-status${actionAvailable ? ' is-available' : ' is-used'}`}>
+                {actionAvailable ? 'Action available' : 'Action used'}
+              </span>
+              {hasWeeklyAuto && <span className="ap-count-small">Weekly auto set</span>}
             </div>
             <div className="topbar-actions">
               <details className="command-overflow">
@@ -615,7 +649,6 @@ function App() {
                     { id: 'ward', label: 'Ward' },
                     ...(world.politicianMode ? [{ id: 'political' as const, label: 'Political life' }] : []),
                     ...(world.politicianMode?.politician.isIncumbent ? [{ id: 'council' as const, label: 'Council', badge: world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? '!' : undefined }] : []),
-                    ...(world.politicianMode && ['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) ? [{ id: 'party' as const, label: 'Party strategy' }] : []),
                   ]}
                 />
                 <div className="workspace-panel">
@@ -625,7 +658,7 @@ function App() {
                       <PoliticianActionsPanel world={world} onAction={handlePoliticianAction} onToggleAuto={(type) => {
                         if (!world.politicianMode) return
                         const pm = world.politicianMode
-                        const autoCampaigns = pm.autoCampaigns.includes(type) ? pm.autoCampaigns.filter((item) => item !== type) : [...pm.autoCampaigns, type]
+                        const autoCampaigns = pm.autoCampaigns[0] === type ? [] : [type]
                         setWorld({ ...world, politicianMode: { ...pm, autoCampaigns } })
                       }} lastResult={lastPolResult} />
                     </section>
@@ -647,32 +680,36 @@ function App() {
                         </div>
                         <small>Independent of the party platform · next change week {world.politicianMode.politician.personalPolicyNextWeek}</small>
                       </section>
-                      <section className="panel"><div className="panel-kicker">Career</div><CareerTracker world={world} onPromote={() => setWorld(promoteCareer(world))} /></section>
+                      <section className="panel"><div className="panel-kicker">Career</div><CareerTracker world={world} onPromote={() => {
+                        const next = promoteCareer(world)
+                        setWorld(next)
+                        setLastActionResult(newsToast(next.newsFeed[0] ?? 'Promotion accepted.', 'success'))
+                      }} /></section>
                       <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
                       <section className="panel"><div className="panel-kicker">{world.politicianMode.politician.isIncumbent ? 'Council colleagues' : 'Political contacts'}</div><RelationshipsPanel world={world} onRelationshipAction={handleRelationshipAction} lastResult={lastPolResult} /></section>
+                      {['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) && (
+                        <section className="panel">
+                          <div className="panel-kicker">Electoral pacts</div>
+                          <PactsPanel
+                            world={world}
+                            onAction={handleAction}
+                            onAcceptNpcProposal={() => {
+                              if (!world.pendingNpcProposal) return
+                              setWorld({ ...world, pendingNpcProposal: undefined, alliancePacts: [...world.alliancePacts, world.pendingNpcProposal] })
+                              setLastActionResult(newsToast('You accepted the proposed electoral pact.', 'success'))
+                            }}
+                            onRejectNpcProposal={() => {
+                              if (!world.pendingNpcProposal) return
+                              const proposal = world.pendingNpcProposal
+                              const npcId = proposal.partyAId === world.playerPartyId ? proposal.partyBId : proposal.partyAId
+                              const repKey = [world.playerPartyId, npcId].sort().join('_')
+                              setWorld({ ...world, pendingNpcProposal: undefined, allianceReputation: { ...world.allianceReputation, [repKey]: (world.allianceReputation[repKey] ?? 0) + 0.15 } })
+                              setLastActionResult(newsToast('You rejected the proposed electoral pact.', 'neutral'))
+                            }}
+                          />
+                        </section>
+                      )}
                     </>
-                  )}
-                  {activeWorkspaceTab === 'party' && world.politicianMode && ['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) && (
-                    <section className="panel campaign-panel-wrap">
-                      <div className="panel-kicker">Party strategy</div>
-                      <CampaignActionsPanel
-                        world={world}
-                        selectedWardId={selectedConstituencyId}
-                        onAction={handleAction}
-                        onTogglePermanent={handleTogglePermanent}
-                        onAcceptNpcProposal={() => {
-                          if (!world.pendingNpcProposal) return
-                          setWorld({ ...world, pendingNpcProposal: undefined, alliancePacts: [...world.alliancePacts, world.pendingNpcProposal] })
-                        }}
-                        onRejectNpcProposal={() => {
-                          if (!world.pendingNpcProposal) return
-                          const proposal = world.pendingNpcProposal
-                          const npcId = proposal.partyAId === world.playerPartyId ? proposal.partyBId : proposal.partyAId
-                          const repKey = [world.playerPartyId, npcId].sort().join('_')
-                          setWorld({ ...world, pendingNpcProposal: undefined, allianceReputation: { ...world.allianceReputation, [repKey]: (world.allianceReputation[repKey] ?? 0) + 0.15 } })
-                        }}
-                      />
-                    </section>
                   )}
                   {activeWorkspaceTab === 'council' && world.politicianMode?.politician.isIncumbent && (() => {
                     const pm = world.politicianMode!
@@ -784,12 +821,8 @@ function App() {
               setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false })
               setShowGovernance(true)
             } else if (w.needsCoalition) {
-              if (playerPartySeats(w) === 0) {
-                setWorld({ ...formNpcOpposition(w), electionNightActive: false })
-              } else {
-                setShowCoalitionModal(true)
-                setWorld({ ...w, electionNightActive: false })
-              }
+              const resolved = resolveHungCouncil(w)
+              setWorld({ ...resolved, electionNightActive: false })
             } else {
               setWorld({ ...w, electionNightActive: false })
             }
@@ -801,17 +834,32 @@ function App() {
         <CoalitionModal
           world={world}
           onFormCoalition={(partnerId, decisions) => {
-            setWorld((prev) => prev ? { ...formCoalitionGovernment(prev, partnerId), governanceDecisions: decisions } : prev)
+            setWorld((prev) => {
+              if (!prev) return prev
+              const next = { ...formCoalitionGovernment(prev, partnerId), governanceDecisions: decisions }
+              setLastActionResult(newsToast(next.newsFeed[0] ?? 'Coalition formed.', 'success'))
+              return next
+            })
             setShowCoalitionModal(false)
             setShowGovernance(true)
           }}
           onFormMinority={(decisions) => {
-            setWorld((prev) => prev ? { ...formMinorityGovernment(prev), governanceDecisions: decisions } : prev)
+            setWorld((prev) => {
+              if (!prev) return prev
+              const next = { ...formMinorityGovernment(prev), governanceDecisions: decisions }
+              setLastActionResult(newsToast(next.newsFeed[0] ?? 'Minority government formed.', 'success'))
+              return next
+            })
             setShowCoalitionModal(false)
             setShowGovernance(true)
           }}
           onOpposition={() => {
-            setWorld((prev) => prev ? formNpcOpposition(prev) : prev)
+            setWorld((prev) => {
+              if (!prev) return prev
+              const next = formNpcOpposition(prev)
+              setLastActionResult(newsToast(next.newsFeed[0] ?? 'You go into opposition.', 'neutral'))
+              return next
+            })
             setShowCoalitionModal(false)
           }}
         />
@@ -889,6 +937,7 @@ function App() {
             const result = lobbyCouncillor(world, councillorId, motionId, desiredVote)
             setWorld(result.world)
             setLastPolResult({ action: { type: 'lobby_councillor', label: 'Lobby', description: result.message, apCost: 0 }, outcome: result.success ? 'success' : 'neutral', description: result.message })
+            setLastActionResult(newsToast(result.message, result.success ? 'success' : 'neutral'))
           }}
           onProposeCustom={(input) => setWorld(createCustomMotion(world, input))}
         />
@@ -956,12 +1005,7 @@ function App() {
                 <p>Term {world.politicianMode.politician.termsServed} begins. The council chamber awaits.</p>
                 <button type="button" className="setup-btn-primary" onClick={() => {
                   setPolElectionOutcome(null)
-                  if (world.needsCoalition) {
-                    if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
-                    else setShowCoalitionModal(true)
-                  } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
-                    setWorld(formNpcOpposition(world))
-                  }
+                  afterPersonalElection(world)
                 }}>
                   Take Your Seat
                 </button>
@@ -972,24 +1016,14 @@ function App() {
                 <div className="pol-outcome-actions">
                   <button type="button" className="setup-btn-primary" onClick={() => {
                     setPolElectionOutcome(null)
-                    if (world.needsCoalition) {
-                      if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
-                      else setShowCoalitionModal(true)
-                    } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
-                      setWorld(formNpcOpposition(world))
-                    }
+                    afterPersonalElection(world)
                   }}>
                     Continue as Challenger
                   </button>
                   <button type="button" className="setup-btn-secondary" onClick={() => {
                     setPolElectionOutcome(null)
                     setShowWardSwitchModal(true)
-                    if (world.needsCoalition) {
-                      if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
-                      else setShowCoalitionModal(true)
-                    } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
-                      setWorld(formNpcOpposition(world))
-                    }
+                    afterPersonalElection(world)
                   }}>
                     Choose a Different Ward
                   </button>

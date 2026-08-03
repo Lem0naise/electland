@@ -54,8 +54,8 @@ export function RelationshipsPanel({ world, onRelationshipAction, lastResult }: 
               </button>
               {isExpanded && (
                 <div className="rel-actions">
-                  <button type="button" disabled={world.playerActionPoints < 1} onClick={() => onRelationshipAction(rel.targetId, 'reach_out')}>Reach out · 1 AP</button>
-                  <button type="button" className="rel-antagonise" onClick={() => onRelationshipAction(rel.targetId, 'antagonise')}>Antagonise</button>
+                  <button type="button" disabled={world.playerActionPoints < 1} onClick={() => onRelationshipAction(rel.targetId, 'reach_out')}>Reach out</button>
+                  <button type="button" className="rel-antagonise" disabled={world.playerActionPoints < 1} onClick={() => onRelationshipAction(rel.targetId, 'antagonise')}>Antagonise</button>
                 </div>
               )}
             </div>

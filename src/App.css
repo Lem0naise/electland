@@ -859,8 +859,119 @@ button, input, select, textarea { font: inherit; }
 .topbar-ap-block {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+.action-week-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid var(--ink-faint);
+  border-radius: 3px;
+}
+.action-week-status.is-available {
+  color: var(--safe);
+  border-color: var(--safe);
+  background: rgba(26, 92, 42, 0.06);
+}
+.action-week-status.is-used {
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+
+.ward-candidate-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0;
+}
+.ward-cand-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: center;
+  min-height: 34px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.ward-cand-row.is-winner { background: rgba(255,255,255,0.55); }
+.ward-cand-row.is-player { background: rgba(122,96,48,0.07); }
+.ward-cand-row.is-player.is-winner { background: rgba(122,96,48,0.12); }
+.ward-cand-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 10px;
+  border-right: 1px solid var(--ink-faint);
+  min-width: 0;
+}
+.ward-cand-initials {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255,255,255,0.3);
+}
+.ward-cand-names { min-width: 0; }
+.ward-cand-name-row { display: flex; align-items: center; gap: 5px; }
+.ward-cand-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.ward-cand-party {
+  display: block;
+  font-size: 0.64rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.ward-cand-bar-col {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px 5px 8px;
+  min-width: 0;
+}
+.ward-cand-bar-track {
+  height: 22px;
+  background: rgba(0,0,0,0.07);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.ward-cand-bar-fill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: 5px;
+  transition: width 350ms ease;
+}
+.ward-cand-pct {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.pacts-panel { display: flex; flex-direction: column; gap: 12px; }
+.pacts-intro { font-size: 0.78rem; color: var(--ink-soft); margin: 0; }
+.pacts-pending { padding: 10px; border: 1px solid var(--accent-gold); background: rgba(184, 134, 11, 0.08); border-radius: 4px; }
+.pacts-pending-actions { display: flex; gap: 8px; margin-top: 8px; }
+.pacts-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--ink-faint); }
+.pacts-ally-pick { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; }
+.pacts-suggestion { font-size: 0.72rem; color: var(--ink-soft); }
 .ap-label-small {
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -2861,6 +2972,13 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   .fwp-cand-bar-col { padding: 3px 7px 3px 5px; }
   .fwp-cand-bar-track { height: 18px; }
   .fwp-cand-pct { font-size: 0.7rem; }
+  .ward-cand-row { min-height: 28px; }
+  .ward-cand-initials { width: 20px; height: 20px; font-size: 0.54rem; }
+  .ward-cand-name { font-size: 0.68rem; }
+  .ward-cand-party { font-size: 0.56rem; }
+  .ward-cand-bar-col { padding: 3px 7px 3px 5px; }
+  .ward-cand-bar-track { height: 18px; }
+  .ward-cand-pct { font-size: 0.7rem; }
   .fwp-status { padding: 3px 7px; font-size: 0.64rem; }
   .campaign-no-ward { font-size: 0.68rem; padding: 6px 0; }
 
@@ -3957,6 +4075,32 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 /* ─── Standalone current polling ─────────────────────────────────────────── */
 .current-polling-panel h3 { margin: 1px 0 0; font-size: 1rem; }
 .polling-panel-header { display: flex; justify-content: space-between; align-items: start; gap: 8px; margin-bottom: 9px; }
+.polling-panel-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.polling-history-btn {
+  appearance: none;
+  border: 1px dashed rgba(44, 31, 14, 0.28);
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.polling-history-btn:hover:not(:disabled) {
+  border-color: rgba(44, 31, 14, 0.5);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+}
+.polling-history-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ward-history-modal { max-width: 720px; width: min(92vw, 720px); }
+.ward-history-footer { font-size: 0.72rem; color: var(--ink-soft); margin: 10px 0 12px; }
+.party-share-line-chart { width: 100%; position: relative; }
 .current-polling-list { display: grid; gap: 6px; }
 .current-polling-row { display: grid; grid-template-columns: 16px 25px minmax(100px, 1fr) minmax(50px, 1.1fr) 42px; align-items: center; gap: 6px; font-size: 0.7rem; padding: 4px; }
 .current-polling-row.is-player { background: rgba(184, 134, 11, 0.1); outline: 1px solid rgba(184, 134, 11, 0.35); }
@@ -3970,7 +4114,10 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .current-polling-bar > div { height: 100%; }
 .current-polling-share { text-align: right; }
 .current-polling-summary { margin: 8px 0 0; color: var(--ink-soft); font-size: 0.68rem; }
-.current-polling-tactical { margin: 5px 0 0; padding-top: 5px; border-top: 1px dotted var(--ink-faint); color: var(--ink-soft); font-size: 0.64rem; }
+.current-polling-tactical { margin: 5px 0 0; padding-top: 5px; border-top: 1px dotted var(--ink-faint); color: var(--ink-soft); font-size: 0.64rem; display: flex; flex-direction: column; gap: 2px; }
+.current-polling-tactical-label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.58rem; color: var(--ink-mid); }
+.current-polling-tactical p { margin: 0; }
+.current-polling-tactical strong { color: var(--ink); font-weight: 700; }
 .rel-party-name { display: block; color: var(--ink-soft); font-size: 0.62rem; margin-top: 1px; }
 
 @media (max-width: 600px) {

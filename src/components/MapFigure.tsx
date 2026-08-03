@@ -417,7 +417,6 @@ export function MapFigure({
           if (seat.population < world.totalPopulation / world.constituencies.length / 2.5) return null
           const isBattleground = battlegroundIds.has(seat.id)
           const isPlayer = seat.leadingPartyId === playerPartyId
-          const hasAutoCampaign = world.activeCampaigns.some((c) => c.wardId === seat.id)
           return (
             <text
               key={`${seat.id}-label`}
@@ -433,7 +432,7 @@ export function MapFigure({
                 fontWeight: isBattleground || isPlayer ? '900' : '700',
               }}
             >
-              {hasAutoCampaign ? '\u27F3 ' : ''}{seat.name.split(' ')[0]}
+              {seat.name.split(' ')[0]}
             </text>
           )
         })}

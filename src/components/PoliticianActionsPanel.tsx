@@ -16,14 +16,9 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
   if (!pm) return null
 
   const groups = getPoliticianActionsByCategory(world)
-  const ap = world.playerActionPoints
+  const actionAvailable = world.playerActionPoints >= 1
   const pol = pm.politician
-  const autos = pm.autoCampaigns
-  const autoCost = autos.reduce((total, type) => {
-    if (type === 'attend_event') return total
-    if (type === 'hold_surgery' && !pol.isIncumbent) return total
-    return total + (type === 'local_media' || type === 'call_party_support' || type === 'smear_opponent' ? 2 : 1)
-  }, 0)
+  const weekly = pm.autoCampaigns[0]
 
   const categoryAccent: Record<string, string> = {
     grassroots: 'cat-grassroots',
@@ -63,8 +58,13 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
       )}
 
       <div className="pol-ap-display">
-        <strong>{ap} AP</strong> available now · {world.maxActionPoints} AP each week
-        {autos.length > 0 && <span className="pol-auto-indicator">{autos.length} weekly action{autos.length > 1 ? 's' : ''} will use {autoCost} AP at the start of next week</span>}
+        <strong>{actionAvailable ? 'Action available' : 'Action used'}</strong> this week
+        {weekly && (
+          <span className="pol-auto-indicator">
+            Weekly auto: {weekly.replace(/_/g, ' ')}
+            {actionAvailable ? ' (runs if you skip acting before advancing)' : ' (skipped — you already acted)'}
+          </span>
+        )}
       </div>
 
       {groups.map((group) => (
@@ -72,8 +72,8 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
           <div className="pol-group-header">{group.label}</div>
           <div className="pol-group-actions">
             {group.actions.map((action) => {
-              const canAfford = ap >= action.apCost
-              const isAuto = autos.includes(action.type)
+              const canAfford = actionAvailable
+              const isAuto = weekly === action.type
               const isPolicyAction = action.type === 'shift_personal_policy'
               const canSetPolicy = canAfford && world.week >= pol.personalPolicyNextWeek
               return (
@@ -95,10 +95,10 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
                       }}
                     >
                       <span className="pol-action-name">{action.label}</span>
-                      <span className="pol-action-cost">{action.apCost === 0 ? 'Free' : `${action.apCost} AP`}</span>
+                      <span className="pol-action-cost">Uses weekly action</span>
                     </button>
                     {!isPolicyAction && (
-                      <label className="pol-auto-toggle" title="Run automatically at the start of each week" onClick={(event) => event.stopPropagation()}>
+                      <label className="pol-auto-toggle" title="Run automatically at week end if you have not acted" onClick={(event) => event.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isAuto}
@@ -150,12 +150,17 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
             )}
             {lastResult.reputationDelta != null && lastResult.reputationDelta !== 0 && (
               <span className={lastResult.reputationDelta > 0 ? 'delta-pos' : 'delta-neg'}>
-                Reputation {lastResult.reputationDelta > 0 ? '+' : ''}{lastResult.reputationDelta}
+                Rep {lastResult.reputationDelta > 0 ? '+' : ''}{lastResult.reputationDelta}
               </span>
             )}
             {lastResult.influenceDelta != null && lastResult.influenceDelta !== 0 && (
               <span className={lastResult.influenceDelta > 0 ? 'delta-pos' : 'delta-neg'}>
                 Influence {lastResult.influenceDelta > 0 ? '+' : ''}{lastResult.influenceDelta}
+              </span>
+            )}
+            {lastResult.loyaltyDelta != null && lastResult.loyaltyDelta !== 0 && (
+              <span className={lastResult.loyaltyDelta > 0 ? 'delta-pos' : 'delta-neg'}>
+                Loyalty {lastResult.loyaltyDelta > 0 ? '+' : ''}{lastResult.loyaltyDelta}
               </span>
             )}
           </div>

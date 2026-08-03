@@ -1,0 +1,45 @@
+import { useEffect } from 'react'
+import { PartyShareLineChart } from './charts/PartyShareLineChart'
+import { wardHistoryDatasets } from '../lib/campaignHistory'
+import type { Constituency, World } from '../types/sim'
+
+export function WardPollingHistoryModal({
+  world,
+  constituency,
+  onClose,
+}: {
+  world: World
+  constituency: Constituency
+  onClose: () => void
+}) {
+  const { labels, datasets, history } = wardHistoryDatasets(world, constituency)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal ward-history-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ward-history-title">
+        <div className="modal-header">
+          <span className="modal-kicker">Ward polling</span>
+          <h2 id="ward-history-title">{constituency.name} — polling this campaign</h2>
+          <p className="modal-sub">Vote share by week since the last election. Highlighted lines are your party and the sitting incumbent where known.</p>
+        </div>
+        {history.length < 2 ? (
+          <p className="history-empty">Advance a few weeks after the last election to see trends.</p>
+        ) : (
+          <PartyShareLineChart labels={labels} datasets={datasets} height={300} />
+        )}
+        <p className="ward-history-footer">
+          {constituency.leadingPartyName} leads by {constituency.margin.toFixed(1)} points now.
+        </p>
+        <button type="button" className="ink-button secondary" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  )
+}
