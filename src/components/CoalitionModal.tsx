@@ -26,6 +26,30 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
   const largestResult = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)[0]
   const largestParty = world.parties.find((p) => p.id === largestResult.partyId)
   const playerIsLargest = largestResult.partyId === world.playerPartyId
+  const [attemptId, setAttemptId] = useState<string | null>(null)
+  const [attemptResult, setAttemptResult] = useState<{ accepted: boolean; message: string } | null>(null)
+
+  if (playerSeats === 0) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal coalition-modal" role="dialog" aria-modal="true">
+          <div className="modal-header">
+            <span className="modal-kicker">Government Formation</span>
+            <h2>No seats on the council</h2>
+            <p className="modal-sub">You hold no seats, so other parties will form the administration.</p>
+          </div>
+          <div className="coalition-list">
+            <div className="coalition-fate">
+              <p>Continue in opposition while the largest parties negotiate government.</p>
+              <button className="coalition-row-btn" type="button" onClick={onOpposition}>
+                Continue as opposition
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const options: CoalitionOption[] = []
 
@@ -87,11 +111,8 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
   const fateText = playerIsLargest
     ? `As the largest party, you lead negotiations.`
     : bestNonPlayer
-      ? `If you don't form a government, ${bestNonPlayer.name} would have ${bestNonPlayer.combined} seats (${bestNonPlayer.compat}% match).`
-      : `If you don't form a government, ${largestParty?.name ?? 'the largest party'} would likely govern as a minority.`
-
-  const [attemptId, setAttemptId] = useState<string | null>(null)
-  const [attemptResult, setAttemptResult] = useState<{ accepted: boolean; message: string } | null>(null)
+    ? `If you don't form a government, ${bestNonPlayer.name} would have ${bestNonPlayer.combined} seats (${bestNonPlayer.compat}% match).`
+    : `If you don't form a government, ${largestParty?.name ?? 'the largest party'} would likely govern as a minority.`
 
   function tryForm(option: CoalitionOption) {
     if (option.isMinority) {

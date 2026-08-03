@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { loadCouncillorTenure } from '../lib/sim'
+import { loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
 import { VoteHistoryChart } from './VoteHistoryChart'
 import type { World } from '../types/sim'
 
@@ -446,6 +446,12 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                   <strong>{selectedParty.name}</strong>
                   <span className="stats-party-detail-leader">{selectedParty.leader}</span>
                 </div>
+                <p className="stats-party-archetype">
+                  {partyArchetypeLabel(selectedParty.archetype, selectedParty.issueFocus)}
+                  {' · '}
+                  {selectedParty.footing}
+                </p>
+                {selectedParty.slogan && <p className="stats-party-slogan">{selectedParty.slogan}</p>}
 
                 <div className="stats-party-metrics">
                   <div className="stats-party-metric">

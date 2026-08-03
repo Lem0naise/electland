@@ -57,7 +57,7 @@ export interface GeographicCurrent {
   tags: string[]
   intensity: number
   popularityEffect?: {
-    target: 'major' | 'minor' | 'all'
+    target: 'established' | 'challenger' | 'fringe' | 'all' | 'major' | 'minor'
     amount: number
   }
 }
@@ -98,6 +98,19 @@ export interface WardCandidate {
   initials: string
 }
 
+export type PartyArchetype =
+  | 'municipal'
+  | 'workers'
+  | 'business'
+  | 'green'
+  | 'independence'
+  | 'coastal'
+  | 'ratepayers'
+  | 'single_issue'
+  | 'faith_community'
+
+export type PartyFooting = 'established' | 'challenger' | 'fringe'
+
 export interface PartyDefinition {
   id: string
   name: string
@@ -105,7 +118,11 @@ export interface PartyDefinition {
   colour: string
   values: PoliticalValues
   origin: 'generated' | 'custom'
+  /** @deprecated Prefer footing; kept for save compatibility */
   tier: 'major' | 'minor' | 'custom'
+  footing: PartyFooting
+  archetype: PartyArchetype
+  issueFocus?: string
   strategyTags: string[]
   seedBlocId?: string
   organization: number
@@ -493,7 +510,10 @@ export interface PoliticianState {
   rebellions: number
 }
 
-export type MotionCategory = 'planning' | 'budget' | 'services' | 'environment' | 'governance'
+export type MotionCategory = 'planning' | 'budget' | 'services' | 'environment' | 'governance' | 'transport' | 'housing' | 'safety' | 'economy'
+export type MotionKind = 'ordinary' | 'repeal' | 'budget'
+export type MotionContestedness = 'broad' | 'contested' | 'divisive'
+export type MotionStatus = 'proposed' | 'debating' | 'voting' | 'passed' | 'failed' | 'repealed'
 
 export interface CouncilMotionVote {
   councillorId: string
@@ -509,20 +529,27 @@ export interface CouncilMotion {
   headline: string
   description: string
   category: MotionCategory
+  kind: MotionKind
   ideologyLean: Partial<PoliticalValues>
   blocImpact: Record<string, number>
-  status: 'proposed' | 'debating' | 'voting' | 'passed' | 'failed'
+  costSignal: number
+  contestedness: MotionContestedness
+  status: MotionStatus
   votes: CouncilMotionVote[]
   partyWhipDirection: Record<string, 'aye' | 'nay' | 'free'>
   playerVote?: 'aye' | 'nay' | 'abstain'
   whipIssuerId?: string
   whipIssuerName?: string
+  targetMotionId?: string
+  repealedById?: string
+  budgetProposal?: Budget
 }
 
 export interface CouncilSession {
   week: number
   motions: CouncilMotion[]
   resolved: boolean
+  budgetSession?: boolean
 }
 
 export interface Councillor {
@@ -557,6 +584,10 @@ export interface CustomMotionInput {
   description: string
   category: MotionCategory
   ideologyLean: PoliticalValues
+  kind?: MotionKind
+  targetMotionId?: string
+  costSignal?: number
+  budgetProposal?: Budget
 }
 
 export interface PoliticianModeState {
@@ -566,6 +597,9 @@ export interface PoliticianModeState {
   sessionHistory: Array<{ week: number; motionsPassed: number; motionsFailed: number }>
   nextSessionWeek: number
   councilSessionInterval: number
+  nextBudgetWeek: number
+  proposedBudget?: Budget
+  budgetHistory: Array<{ week: number; passed: boolean }>
   autoCampaigns: PoliticianActionType[]
   queuedMotion?: CustomMotionInput
   legislationHistory: CouncilMotion[]

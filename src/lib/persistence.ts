@@ -1,4 +1,4 @@
-import { getDefaultBudget, initializePoliticianMode } from './sim'
+import { getDefaultBudget, initializePoliticianMode, normalizeBudget, normalizePartyIdentity, roundPoliticalValues } from './sim'
 import type { PartyPerformance, World } from '../types/sim'
 
 const SAVE_KEY = 'electland_save'
@@ -25,9 +25,29 @@ function normalizeSave(data: SaveData): SaveData {
     if (!w.politicianMode.autoCampaigns) w.politicianMode.autoCampaigns = []
     if (!w.politicianMode.legislationHistory) w.politicianMode.legislationHistory = []
     if (typeof w.politicianMode.politician.wardId !== 'string') w.politicianMode.politician.wardId = ''
+    if (typeof w.politicianMode.councilSessionInterval !== 'number' || w.politicianMode.councilSessionInterval < 8) {
+      w.politicianMode.councilSessionInterval = 8
+    }
+    if (typeof w.politicianMode.nextBudgetWeek !== 'number') {
+      w.politicianMode.nextBudgetWeek = w.week + w.electionCycleWeeks
+    }
+    if (!Array.isArray(w.politicianMode.budgetHistory)) w.politicianMode.budgetHistory = []
+    w.politicianMode.legislationHistory = w.politicianMode.legislationHistory.map((motion) => ({
+      ...motion,
+      kind: motion.kind ?? (motion.category === 'budget' ? 'budget' : 'ordinary'),
+      costSignal: typeof motion.costSignal === 'number' ? motion.costSignal : 0.4,
+      contestedness: motion.contestedness ?? 'contested',
+      status: motion.status === 'repealed' ? 'repealed' : motion.status,
+    }))
     const party = w.parties.find((entry) => entry.id === w.politicianMode!.politician.partyId)
     if (!w.politicianMode.politician.personalValues) {
-      w.politicianMode.politician.personalValues = party ? { ...party.values } : { change: 0, growth: 0, services: 0 }
+      w.politicianMode.politician.personalValues = party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 }
+    } else {
+      w.politicianMode.politician.personalValues = {
+        change: Math.round(w.politicianMode.politician.personalValues.change),
+        growth: Math.round(w.politicianMode.politician.personalValues.growth),
+        services: Math.round(w.politicianMode.politician.personalValues.services),
+      }
     }
     if (typeof w.politicianMode.politician.personalPolicyNextWeek !== 'number') {
       w.politicianMode.politician.personalPolicyNextWeek = w.week
@@ -36,6 +56,10 @@ function normalizeSave(data: SaveData): SaveData {
   if (!w.alliancePacts) w.alliancePacts = []
   if (!w.councilHistory) w.councilHistory = []
   if (!w.budget) w.budget = getDefaultBudget()
+  else w.budget = normalizeBudget(w.budget)
+  if (w.politicianMode?.proposedBudget) {
+    w.politicianMode.proposedBudget = normalizeBudget(w.politicianMode.proposedBudget)
+  }
   if (!w.allianceReputation) w.allianceReputation = {}
   w.constituencies = w.constituencies.map((constituency) => ({
     ...constituency,
@@ -52,6 +76,7 @@ function normalizeSave(data: SaveData): SaveData {
   if (!w.electionNightPreviousSeats) w.electionNightPreviousSeats = {}
   if (w.electionsHeld == null) w.electionsHeld = 0
   if (!w.governanceDecisions) w.governanceDecisions = []
+  w.parties = w.parties.map((party) => normalizePartyIdentity(party))
   return data
 }
 

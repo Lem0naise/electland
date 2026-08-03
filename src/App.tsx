@@ -23,12 +23,14 @@ import { WorkspaceTabs, type WorkspaceTab } from './components/WorkspaceTabs'
 import { CouncilLegislationRegister } from './components/CouncilLegislationRegister'
 import { SeatBar } from './components/SeatBar'
 import { SetupScreen } from './components/SetupScreen'
+import { formatAxis } from './lib/format'
 import { saveGame, loadGame, hasSave, exportSaveGame, importSaveGame } from './lib/persistence'
 import {
   applyCampaignAction,
   applyRelationshipAction,
   applyPartyEdits,
   applyPoliticianAction,
+  budgetIdeologyLean,
   calculateResults,
   castPlayerVote,
   dominantBlocId,
@@ -36,10 +38,17 @@ import {
   promoteCareer,
   createCustomMotion,
   queueCustomMotion,
+  queueRepealMotion,
   estimateTilePreference,
+  formCoalitionGovernment,
+  formMinorityGovernment,
+  formNpcOpposition,
   generateCouncilSession,
   generateGovernanceDecisions,
   generateWorld,
+  governingStatusLabel,
+  MOTION_PROPOSAL_INFLUENCE_COST,
+  playerPartyIsGoverning,
   recalculateWardAggregates,
   redistributeSnapshot,
   regenerateCellPaths,
@@ -64,6 +73,10 @@ import type {
 
 const blocPalette = ['#d94841', '#00798c', '#edae49', '#3d405b', '#81b29a', '#8d5524', '#c56b37']
 
+function playerPartySeats(world: World) {
+  return world.nationalResults.find((r) => r.partyId === world.playerPartyId)?.seatsWon ?? 0
+}
+
 function App() {
   const [constituencyCount, setConstituencyCount] = useState(10)
   const [world, setWorld] = useState<World | null>(null)
@@ -84,6 +97,8 @@ function App() {
   const [polElectionOutcome, setPolElectionOutcome] = useState<'won' | 'lost' | null>(null)
   const [showCouncilChamber, setShowCouncilChamber] = useState(false)
   const [showMotionComposer, setShowMotionComposer] = useState(false)
+  const [repealTargetId, setRepealTargetId] = useState<string | null>(null)
+  const [budgetEditorMode, setBudgetEditorMode] = useState<'propose' | 'amend' | null>(null)
   const [showWardSwitchModal, setShowWardSwitchModal] = useState(false)
   const [wardNominationDismissed, setWardNominationDismissed] = useState(false)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('campaign')
@@ -626,9 +641,9 @@ function App() {
                       <section className="panel personal-position-summary">
                         <div className="panel-kicker">Your personal position</div>
                         <div className="personal-position-values">
-                          <span>Reform <strong>{world.politicianMode.politician.personalValues.change}</strong></span>
-                          <span>Business <strong>{world.politicianMode.politician.personalValues.growth}</strong></span>
-                          <span>Services <strong>{world.politicianMode.politician.personalValues.services}</strong></span>
+                          <span>Reform <strong>{formatAxis(world.politicianMode.politician.personalValues.change)}</strong></span>
+                          <span>Business <strong>{formatAxis(world.politicianMode.politician.personalValues.growth)}</strong></span>
+                          <span>Services <strong>{formatAxis(world.politicianMode.politician.personalValues.services)}</strong></span>
                         </div>
                         <small>Independent of the party platform · next change week {world.politicianMode.politician.personalPolicyNextWeek}</small>
                       </section>
@@ -659,23 +674,75 @@ function App() {
                       />
                     </section>
                   )}
-                  {activeWorkspaceTab === 'council' && world.politicianMode?.politician.isIncumbent && (
-                    <>
-                      <section className="panel council-workspace-panel">
-                        <div className="panel-kicker">Council business</div>
-                        <h3>{world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? 'A council session is ready' : `Next session: week ${world.politicianMode.nextSessionWeek}`}</h3>
-                        <p>{world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? 'Review the motion, lobby colleagues, and cast your vote.' : 'Use this space to follow your legislative career and upcoming council business.'}</p>
-                        {world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
-                        {(!world.politicianMode.currentSession || world.politicianMode.currentSession.resolved) && !world.politicianMode.queuedMotion && world.politicianMode.politician.influence >= 8 && (
-                          <button type="button" className="ink-button secondary" onClick={() => setShowMotionComposer(true)}>Propose a Motion (8 influence)</button>
-                        )}
-                        {world.politicianMode.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{world.politicianMode.queuedMotion.headline}</strong></p>}
-                      </section>
-                      <section className="panel">
-                        <CouncilLegislationRegister motions={world.politicianMode.legislationHistory} />
-                      </section>
-                    </>
-                  )}
+                  {activeWorkspaceTab === 'council' && world.politicianMode?.politician.isIncumbent && (() => {
+                    const pm = world.politicianMode!
+                    const sessionLive = pm.currentSession && !pm.currentSession.resolved
+                    const weeksToOrdinary = Math.max(0, pm.nextSessionWeek - world.week)
+                    const weeksToBudget = Math.max(0, pm.nextBudgetWeek - world.week)
+                    const budgetSoon = weeksToBudget <= 4 || (sessionLive && pm.currentSession?.budgetSession)
+                    const governing = playerPartyIsGoverning(world)
+                    return (
+                      <>
+                        <section className="panel council-workspace-panel">
+                          <div className="panel-kicker">Council business</div>
+                          <p className="council-gov-status">{governingStatusLabel(world)}</p>
+                          <h3>
+                            {sessionLive
+                              ? (pm.currentSession?.budgetSession ? 'Budget session is ready' : 'A council session is ready')
+                              : weeksToOrdinary <= weeksToBudget
+                                ? `Next ordinary session: week ${pm.nextSessionWeek}`
+                                : `Next budget session: week ${pm.nextBudgetWeek}`}
+                          </h3>
+                          <p>
+                            {sessionLive
+                              ? (pm.currentSession?.budgetSession
+                                ? 'Review the budget proposal, lobby colleagues, and cast your vote.'
+                                : 'Review the motion, lobby colleagues, and cast your vote.')
+                              : `Next ordinary: ${weeksToOrdinary} week${weeksToOrdinary === 1 ? '' : 's'} · next budget: ${weeksToBudget} week${weeksToBudget === 1 ? '' : 's'}.`}
+                          </p>
+                          <p className="council-influence-note">Influence: {pm.politician.influence} · proposing costs {MOTION_PROPOSAL_INFLUENCE_COST}</p>
+                          {sessionLive && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
+                          {governing && budgetSoon && (
+                            <button
+                              type="button"
+                              className="ink-button"
+                              onClick={() => { setBudgetEditorMode('propose'); setShowBudgetModal(true) }}
+                            >
+                              {pm.proposedBudget ? 'Revise government budget draft' : 'Prepare government budget draft'}
+                            </button>
+                          )}
+                          {!governing && budgetSoon && (
+                            <button
+                              type="button"
+                              className="ink-button secondary"
+                              onClick={() => { setBudgetEditorMode('amend'); setShowBudgetModal(true) }}
+                            >
+                              Propose budget amendment (10 influence)
+                            </button>
+                          )}
+                          {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (
+                            <button type="button" className="ink-button secondary" onClick={() => { setRepealTargetId(null); setShowMotionComposer(true) }}>
+                              Propose a Motion ({MOTION_PROPOSAL_INFLUENCE_COST} influence)
+                            </button>
+                          )}
+                          {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence < MOTION_PROPOSAL_INFLUENCE_COST && (
+                            <p className="council-influence-note">Need {MOTION_PROPOSAL_INFLUENCE_COST} influence to queue a motion (you have {pm.politician.influence}).</p>
+                          )}
+                          {pm.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{pm.queuedMotion.headline}</strong> · remaining influence {pm.politician.influence}</p>}
+                        </section>
+                        <section className="panel">
+                          <CouncilLegislationRegister
+                            motions={pm.legislationHistory}
+                            canRepeal={!pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (!pm.currentSession || pm.currentSession.resolved)}
+                            onRepeal={(motionId) => {
+                              setRepealTargetId(motionId)
+                              setShowMotionComposer(true)
+                            }}
+                          />
+                        </section>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </>
@@ -717,8 +784,12 @@ function App() {
               setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false })
               setShowGovernance(true)
             } else if (w.needsCoalition) {
-              setShowCoalitionModal(true)
-              setWorld({ ...w, electionNightActive: false })
+              if (playerPartySeats(w) === 0) {
+                setWorld({ ...formNpcOpposition(w), electionNightActive: false })
+              } else {
+                setShowCoalitionModal(true)
+                setWorld({ ...w, electionNightActive: false })
+              }
             } else {
               setWorld({ ...w, electionNightActive: false })
             }
@@ -730,17 +801,17 @@ function App() {
         <CoalitionModal
           world={world}
           onFormCoalition={(partnerId, decisions) => {
-            setWorld((prev) => prev ? { ...prev, coalitionPartnerId: partnerId, governanceDecisions: decisions, needsCoalition: false } : prev)
+            setWorld((prev) => prev ? { ...formCoalitionGovernment(prev, partnerId), governanceDecisions: decisions } : prev)
             setShowCoalitionModal(false)
             setShowGovernance(true)
           }}
           onFormMinority={(decisions) => {
-            setWorld((prev) => prev ? { ...prev, minorityGovernment: true, governanceDecisions: decisions, needsCoalition: false } : prev)
+            setWorld((prev) => prev ? { ...formMinorityGovernment(prev), governanceDecisions: decisions } : prev)
             setShowCoalitionModal(false)
             setShowGovernance(true)
           }}
           onOpposition={() => {
-            setWorld((prev) => prev ? { ...prev, needsCoalition: false } : prev)
+            setWorld((prev) => prev ? formNpcOpposition(prev) : prev)
             setShowCoalitionModal(false)
           }}
         />
@@ -757,12 +828,35 @@ function App() {
 
       {showBudgetModal && world?.budget && (
         <BudgetModal
-          budget={world.budget}
+          budget={world.politicianMode?.proposedBudget ?? world.budget}
+          saveLabel={budgetEditorMode === 'amend' ? 'Queue Budget Amendment' : budgetEditorMode === 'propose' ? 'Table Government Draft' : 'Approve Budget'}
           onSave={(b) => {
-            setWorld((prev) => prev ? { ...prev, budget: b } : prev)
+            setWorld((prev) => {
+              if (!prev) return prev
+              if (prev.politicianMode && budgetEditorMode === 'amend') {
+                return queueCustomMotion(prev, {
+                  headline: 'Opposition budget amendment',
+                  description: 'An alternative balanced allocation tabled by the opposition.',
+                  category: 'budget',
+                  ideologyLean: budgetIdeologyLean(b),
+                  kind: 'budget',
+                  costSignal: 0.55,
+                  budgetProposal: b,
+                })
+              }
+              if (prev.politicianMode && playerPartyIsGoverning(prev) && (budgetEditorMode === 'propose' || budgetEditorMode === null)) {
+                return {
+                  ...prev,
+                  politicianMode: { ...prev.politicianMode, proposedBudget: b },
+                  newsFeed: [`Week ${prev.week}: Government tables its budget draft.`, ...prev.newsFeed].slice(0, 30),
+                }
+              }
+              return { ...prev, budget: b }
+            })
+            setBudgetEditorMode(null)
             setShowBudgetModal(false)
           }}
-          onClose={() => setShowBudgetModal(false)}
+          onClose={() => { setBudgetEditorMode(null); setShowBudgetModal(false) }}
         />
       )}
 
@@ -771,6 +865,7 @@ function App() {
           world={world}
           onOpenBudget={() => {
             setShowGovDashboard(false)
+            setBudgetEditorMode(world.politicianMode && playerPartyIsGoverning(world) ? 'propose' : null)
             setShowBudgetModal(true)
           }}
           onClose={() => setShowGovDashboard(false)}
@@ -799,20 +894,49 @@ function App() {
         />
       )}
 
-      {showMotionComposer && world?.politicianMode && (
-        <div className="modal-backdrop">
-          <div className="modal motion-composer-modal" role="dialog" aria-modal="true" aria-label="Propose a motion">
-            <ProposalForm
-              submitLabel="Queue for Next Session (8 influence)"
-              onSubmit={(input) => {
-                setWorld(queueCustomMotion(world, input))
-                setShowMotionComposer(false)
-              }}
-              onCancel={() => setShowMotionComposer(false)}
-            />
+      {showMotionComposer && world?.politicianMode && (() => {
+        const target = repealTargetId
+          ? world.politicianMode.legislationHistory.find((motion) => motion.id === repealTargetId)
+          : undefined
+        const initial = target
+          ? {
+              headline: `Repeal: ${target.headline}`,
+              description: '',
+              category: target.category,
+              ideologyLean: {
+                change: -(target.ideologyLean.change ?? 0),
+                growth: -(target.ideologyLean.growth ?? 0),
+                services: -(target.ideologyLean.services ?? 0),
+              },
+              kind: 'repeal' as const,
+              targetMotionId: target.id,
+              costSignal: Math.min(1, (target.costSignal ?? 0.5) + 0.2),
+            }
+          : undefined
+        return (
+          <div className="modal-backdrop">
+            <div className="modal motion-composer-modal" role="dialog" aria-modal="true" aria-label={target ? 'Propose a repeal' : 'Propose a motion'}>
+              <ProposalForm
+                world={world}
+                initial={initial}
+                submitLabel={target
+                  ? `Queue Repeal (−${MOTION_PROPOSAL_INFLUENCE_COST} influence)`
+                  : `Queue for Next Session (−${MOTION_PROPOSAL_INFLUENCE_COST} influence)`}
+                onSubmit={(input) => {
+                  if (target) {
+                    setWorld(queueRepealMotion(world, target.id, input.description))
+                  } else {
+                    setWorld(queueCustomMotion(world, input))
+                  }
+                  setRepealTargetId(null)
+                  setShowMotionComposer(false)
+                }}
+                onCancel={() => { setRepealTargetId(null); setShowMotionComposer(false) }}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {showWardSwitchModal && world?.politicianMode && (
         <WardSwitchModal
@@ -823,14 +947,22 @@ function App() {
       )}
 
       {polElectionOutcome && world?.politicianMode && (
-        <div className="modal-backdrop" onClick={() => setPolElectionOutcome(null)}>
-          <div className="modal pol-outcome-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop">
+          <div className="modal pol-outcome-modal" role="dialog" aria-modal="true">
             <h2>{polElectionOutcome === 'won' ? 'You Won Your Seat!' : 'You Lost Your Seat'}</h2>
             {polElectionOutcome === 'won' ? (
               <>
                 <p>Congratulations, Cllr. {world.politicianMode.politician.name}! You have been elected to represent <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong>.</p>
                 <p>Term {world.politicianMode.politician.termsServed} begins. The council chamber awaits.</p>
-                <button type="button" className="setup-btn-primary" onClick={() => setPolElectionOutcome(null)}>
+                <button type="button" className="setup-btn-primary" onClick={() => {
+                  setPolElectionOutcome(null)
+                  if (world.needsCoalition) {
+                    if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
+                    else setShowCoalitionModal(true)
+                  } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
+                    setWorld(formNpcOpposition(world))
+                  }
+                }}>
                   Take Your Seat
                 </button>
               </>
@@ -838,10 +970,27 @@ function App() {
               <>
                 <p>The voters of <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong> have chosen someone else. You remain active in local politics and can build towards the next election.</p>
                 <div className="pol-outcome-actions">
-                  <button type="button" className="setup-btn-primary" onClick={() => setPolElectionOutcome(null)}>
+                  <button type="button" className="setup-btn-primary" onClick={() => {
+                    setPolElectionOutcome(null)
+                    if (world.needsCoalition) {
+                      if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
+                      else setShowCoalitionModal(true)
+                    } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
+                      setWorld(formNpcOpposition(world))
+                    }
+                  }}>
                     Continue as Challenger
                   </button>
-                  <button type="button" className="setup-btn-secondary" onClick={() => { setPolElectionOutcome(null); setShowWardSwitchModal(true) }}>
+                  <button type="button" className="setup-btn-secondary" onClick={() => {
+                    setPolElectionOutcome(null)
+                    setShowWardSwitchModal(true)
+                    if (world.needsCoalition) {
+                      if (playerPartySeats(world) === 0) setWorld(formNpcOpposition(world))
+                      else setShowCoalitionModal(true)
+                    } else if (!world.isGoverning && world.nationalResults.some((r) => r.seatsWon >= world.stats.councilMajority && r.partyId !== world.playerPartyId)) {
+                      setWorld(formNpcOpposition(world))
+                    }
+                  }}>
                     Choose a Different Ward
                   </button>
                 </div>

@@ -1,7 +1,12 @@
 import type { CouncilMotion } from '../types/sim'
 
-export function CouncilLegislationRegister({ motions }: { motions: CouncilMotion[] }) {
-  const passed = motions.filter((motion) => motion.status === 'passed').reverse()
+export function CouncilLegislationRegister({ motions, canRepeal, onRepeal }: {
+  motions: CouncilMotion[]
+  canRepeal?: boolean
+  onRepeal?: (motionId: string) => void
+}) {
+  const active = motions.filter((motion) => motion.status === 'passed').reverse()
+  const repealed = motions.filter((motion) => motion.status === 'repealed').reverse()
   const archive = [...motions].reverse()
 
   const tally = (motion: CouncilMotion) => {
@@ -13,17 +18,37 @@ export function CouncilLegislationRegister({ motions }: { motions: CouncilMotion
   return (
     <div className="council-legislation-register">
       <div className="panel-kicker">Active legislation</div>
-      {passed.length > 0 ? (
+      {active.length > 0 ? (
         <div className="active-legislation-list">
-          {passed.map((motion) => (
+          {active.map((motion) => (
             <div key={motion.id} className="active-legislation-row">
               <span className="active-legislation-category">{motion.category}</span>
               <strong>{motion.headline}</strong>
               <small>Passed {tally(motion)}</small>
+              {canRepeal && onRepeal && motion.kind !== 'budget' && (
+                <button type="button" className="legislation-repeal-btn" onClick={() => onRepeal(motion.id)}>
+                  Repeal
+                </button>
+              )}
             </div>
           ))}
         </div>
       ) : <p className="council-register-empty">No motions have passed yet.</p>}
+
+      {repealed.length > 0 && (
+        <details className="council-vote-archive">
+          <summary>Repealed · {repealed.length}</summary>
+          <div>
+            {repealed.map((motion) => (
+              <div key={motion.id} className="council-archive-row repealed">
+                <span>Repealed</span>
+                <strong>{motion.headline}</strong>
+                <small>{tally(motion)} · proposed by {motion.proposerName}</small>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {archive.length > 0 && (
         <details className="council-vote-archive">
@@ -31,7 +56,7 @@ export function CouncilLegislationRegister({ motions }: { motions: CouncilMotion
           <div>
             {archive.map((motion) => (
               <div key={motion.id} className={`council-archive-row ${motion.status}`}>
-                <span>{motion.status === 'passed' ? 'Passed' : 'Failed'}</span>
+                <span>{motion.status === 'passed' ? 'Passed' : motion.status === 'repealed' ? 'Repealed' : 'Failed'}</span>
                 <strong>{motion.headline}</strong>
                 <small>{tally(motion)} · proposed by {motion.proposerName}</small>
               </div>

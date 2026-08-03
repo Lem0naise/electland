@@ -106,11 +106,11 @@ export function GovernmentDashboard({ world, onOpenBudget, onClose }: {
               </div>
               <div className="gd-stat">
                 <span className="gd-stat-label">Base popularity</span>
-                <span className="gd-stat-value">{(playerParty?.baseUtility ?? 0).toFixed(2)}</span>
+                <span className="gd-stat-value">{(playerParty?.baseUtility ?? 0).toFixed(1)}</span>
               </div>
               <div className="gd-stat">
                 <span className="gd-stat-label">Momentum</span>
-                <span className="gd-stat-value">{(playerParty?.momentum ?? 0).toFixed(2)}</span>
+                <span className="gd-stat-value">{(playerParty?.momentum ?? 0).toFixed(1)}</span>
               </div>
               <div className="gd-stat">
                 <span className="gd-stat-label">Weeks to election</span>

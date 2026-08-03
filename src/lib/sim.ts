@@ -18,7 +18,9 @@ import {
   type GovernanceDecision,
   type Landmass,
   type PartyDefinition,
+  type PartyArchetype,
   type PartyEdit,
+  type PartyFooting,
   type PartyPerformance,
   type PoliticalValueKey,
   type PoliticalValues,
@@ -69,7 +71,7 @@ const issueCurrents: Array<{
   description: string
   tags: string[]
   effect: Partial<PoliticalValues>
-  popularityEffect: { target: 'major' | 'minor' | 'all'; amount: number }
+  popularityEffect: { target: 'established' | 'challenger' | 'fringe' | 'all'; amount: number }
 }> = [
   {
     id: 'pothole-panic',
@@ -85,7 +87,7 @@ const issueCurrents: Array<{
     description: 'A town festival rewards upbeat civic parties.',
     tags: ['market', 'center', 'oldtown'],
     effect: { growth: 10 },
-    popularityEffect: { target: 'major', amount: 0.08 },
+    popularityEffect: { target: 'established', amount: 0.08 },
   },
   {
     id: 'park-campaign',
@@ -93,7 +95,7 @@ const issueCurrents: Array<{
     description: 'Residents push for greener public space.',
     tags: ['river', 'pond', 'green'],
     effect: { change: 10, services: 8 },
-    popularityEffect: { target: 'minor', amount: 0.07 },
+    popularityEffect: { target: 'challenger', amount: 0.07 },
   },
   {
     id: 'budget-row',
@@ -109,7 +111,7 @@ const issueCurrents: Array<{
     description: 'Young residents want bolder, newer ideas.',
     tags: ['school', 'south', 'metro'],
     effect: { change: 14 },
-    popularityEffect: { target: 'minor', amount: 0.09 },
+    popularityEffect: { target: 'fringe', amount: 0.09 },
   },
   {
     id: 'parking-war',
@@ -125,7 +127,7 @@ const issueCurrents: Array<{
     description: 'Heavy rain threatens low-lying streets.',
     tags: ['river', 'pond', 'north'],
     effect: { services: 14, change: 6 },
-    popularityEffect: { target: 'minor', amount: 0.06 },
+    popularityEffect: { target: 'challenger', amount: 0.06 },
   },
   {
     id: 'school-places',
@@ -141,7 +143,7 @@ const issueCurrents: Array<{
     description: 'Reduced weekend buses leave peripheral wards isolated.',
     tags: ['rural', 'suburban', 'industrial'],
     effect: { services: -12, growth: -5 },
-    popularityEffect: { target: 'major', amount: -0.06 },
+    popularityEffect: { target: 'established', amount: -0.06 },
   },
   {
     id: 'high-street-ghost-town',
@@ -157,7 +159,7 @@ const issueCurrents: Array<{
     description: 'A spike in late-night vandalism has older residents worried.',
     tags: ['park', 'center', 'south'],
     effect: { services: 5, change: -10 },
-    popularityEffect: { target: 'minor', amount: -0.04 },
+    popularityEffect: { target: 'fringe', amount: -0.04 },
   },
   {
     id: 'heritage-status',
@@ -165,7 +167,7 @@ const issueCurrents: Array<{
     description: 'A campaign to protect historic buildings restricts new developments.',
     tags: ['oldtown', 'hill', 'center'],
     effect: { growth: -8, change: -12 },
-    popularityEffect: { target: 'major', amount: 0.05 },
+    popularityEffect: { target: 'established', amount: 0.05 },
   },
   {
     id: 'air-quality-alert',
@@ -173,7 +175,7 @@ const issueCurrents: Array<{
     description: 'Smog from the industrial estate is triggering health complaints.',
     tags: ['industrial', 'school', 'east'],
     effect: { services: 8, change: 10 },
-    popularityEffect: { target: 'minor', amount: 0.04 },
+    popularityEffect: { target: 'challenger', amount: 0.04 },
   },
   {
     id: 'tech-hub-rumors',
@@ -181,7 +183,7 @@ const issueCurrents: Array<{
     description: 'Excitement builds over a tech firm eyeing an old warehouse.',
     tags: ['metro', 'industrial', 'south'],
     effect: { growth: 15, change: 12 },
-    popularityEffect: { target: 'minor', amount: 0.07 },
+    popularityEffect: { target: 'fringe', amount: 0.07 },
   },
 ]
 
@@ -492,20 +494,22 @@ const governanceDecisionPool: Array<Omit<GovernanceDecision, 'resolved' | 'chose
   },
 ]
 // ─── Visual Identity ────────────────────────────────────────────────────────
-// Expanded to include classic UK political colours (Blue, Red, Yellow/Orange, Green) 
-// plus some distinct minor party colours (Purple, Teal, Magenta, Brown)
 const colourPalette = [
-  '#0087DC', // Tory Blue
-  '#E4003B', // Labour Red
-  '#FAA61A', // Lib Dem Orange
-  '#02A95B', // Green
-  '#70147A', // UKIP/Fringe Purple
-  '#12B6CF', // Teal (Independents)
-  '#D94841', // Brick Red
-  '#EDAE49', // Mustard
-  '#3D405B', // Navy
-  '#8D5524'  // Mud/Earthy
+  '#2F6B8A', '#C45C26', '#3F7D4E', '#6B4C9A', '#B33A3A',
+  '#1F8A7A', '#8B5E3C', '#D4A017', '#3D405B', '#9B2D5C',
 ]
+
+const ARCHETYPE_COLOURS: Record<PartyArchetype, string[]> = {
+  municipal: ['#2F6B8A', '#3D405B', '#4A6FA5'],
+  workers: ['#B33A3A', '#8C2F39', '#C45C26'],
+  business: ['#1F6B8A', '#2A7F9E', '#D4A017'],
+  green: ['#3F7D4E', '#2E8B57', '#1F8A7A'],
+  independence: ['#6B4C9A', '#12B6CF', '#5C4B8A'],
+  coastal: ['#1F8A7A', '#2F6B8A', '#0E7C86'],
+  ratepayers: ['#8B5E3C', '#6B5335', '#A67C52'],
+  single_issue: ['#C45C26', '#9B2D5C', '#D4A017'],
+  faith_community: ['#6B4C9A', '#5C4033', '#4A6FA5'],
+}
 // ─── Character Names ────────────────────────────────────────────────────────
 // Shifted from purely whimsical to classic UK local demographics (lots of boomers and eccentric youths)
 
@@ -861,6 +865,10 @@ function mapValues(values: PoliticalValues, iteratee: (key: PoliticalValueKey, v
     next[key] = iteratee(key, values[key])
   }
   return next
+}
+
+export function roundPoliticalValues(values: PoliticalValues): PoliticalValues {
+  return mapValues(values, (_key, value) => Math.round(value))
 }
 
 function addValues(base: PoliticalValues, delta: Partial<PoliticalValues>, factor = 1) {
@@ -1396,242 +1404,286 @@ export function applyPartyEdits(world: World, edits: PartyEdit[]): World {
   return { ...recalculated, stats: buildStats(recalculated) }
 }
 
-// ─── Party naming ────────────────────────────────────────────────────────────
-//
-// Derives a short, plausible party name from the party's political values.
-// Major parties: 1–2 words, feel like real parties ("Conservatives", "Labour",
-//   "Reform Party", "The Greens", "Progress Alliance").
-// Minor parties: local/single-issue flavour ("Brindleford Residents",
-//   "Save Our Streets", "Market Quarter Alliance", "Independent Voices").
-//
-// Political axes:
-//   change:   negative = conservative/traditionalist, positive = reformist/progressive
-//   growth:   positive = pro-business/enterprise, negative = anti-growth/careful
-//   services: positive = high public services / welfare, negative = low-tax minimal
+// ─── Party archetypes & generation ──────────────────────────────────────────
 
-// Maps a party's values to a core ideology word or phrase
-function ideologyWordFromValues(rng: () => number, values: PoliticalValues): string {
-  const { change, growth, services } = values
-
-  // Conservative/traditionalist: low change, any growth, low-to-mid services
-  if (change < -15 && services < 30) {
-    if (growth > 15) return pickOne(rng, ['Conservative', 'Unionist', 'Traditional', 'Moderate'])
-    return pickOne(rng, ['Conservative', 'Traditional', 'Heritage', 'Unionist'])
+export function partyArchetypeLabel(archetype: PartyArchetype, issueFocus?: string): string {
+  switch (archetype) {
+    case 'municipal': return 'Civic municipal'
+    case 'workers': return 'Workers and services'
+    case 'business': return 'Business and growth'
+    case 'green': return 'Green and environment'
+    case 'independence': return 'Local independence'
+    case 'coastal': return 'Harbour and mainland'
+    case 'ratepayers': return 'Ratepayers'
+    case 'single_issue': return issueFocus ? `Single-issue · ${issueFocus.replace(/_/g, ' ')}` : 'Single-issue'
+    case 'faith_community': return 'Community values'
+    default: return 'Local slate'
   }
-
-  // Pro-business / enterprise: pro-growth, moderate change, low services
-  if (growth > 25 && change > -20 && services < 30) {
-    return pickOne(rng, ['Enterprise', 'Progress', 'Reform', 'Prosperity', 'Business'])
-  }
-
-  // Labour / working class: high services, pro-worker
-  if (services > 30 && change >= -10 && growth < 30) {
-    return pickOne(rng, ['Labour', 'Workers', 'Community', 'Solidarity', 'People\'s'])
-  }
-
-  // Progressive / reform: high change, moderate services
-  if (change > 25 && services >= 10) {
-    return pickOne(rng, ['Progressive', 'Forward', 'Reform', 'New Democrats', 'Radical'])
-  }
-
-  // Green / environment: high change, low growth
-  if (change > 20 && growth < 0) {
-    return pickOne(rng, ['Green', 'Ecology', 'Sustainable', 'Environment'])
-  }
-
-  // Liberal / centrist: moderate on all axes
-  if (Math.abs(change) < 20 && Math.abs(growth) < 20 && Math.abs(services) < 20) {
-    return pickOne(rng, ['Liberal', 'Democratic', 'Civic', 'Alliance', 'Centre'])
-  }
-
-  // Default fallback
-  return pickOne(rng, ['Independent', 'Local', 'Residents', 'Community'])
 }
 
-// Build a short, punchy major party name
-function majorPartyName(rng: () => number, values: PoliticalValues): string {
-  const ideologyWord = ideologyWordFromValues(rng, values)
-  const r = rng()
-
-  if (r < 0.30) {
-    // Pluralised noun: "Conservatives", "Greens", "Progressives"
-    const plurals: Record<string, string> = {
-      Conservative: 'Conservatives',
-      Labour: 'Labour',
-      Green: 'Greens',
-      Liberal: 'Liberals',
-      Progressive: 'Progressives',
-      Reform: 'Reform',
-      Enterprise: 'Enterprise',
-      Unionist: 'Unionists',
-      Traditional: 'Traditionalists',
-      Heritage: 'Heritage',
-      Workers: 'Workers',
-      Community: 'Community',
-      Solidarity: 'Solidarity',
-      Forward: 'Forward',
-      Democratic: 'Democrats',
-      Civic: 'Civic',
-      Alliance: 'Alliance',
-      Centre: 'Centrists',
-      'New Democrats': 'New Democrats',
-      Prosperity: 'Prosperity',
-      Ecology: 'Ecologists',
-      Sustainable: 'Sustainability',
-      Environment: 'Environmentalists',
-      Independent: 'Independents',
-      Local: 'Local',
-      Residents: 'Residents',
-      "People's": "People's Party",
-      Radical: 'Radicals',
-      Business: 'Business Party',
-      Moderate: 'Moderates',
-    }
-    return plurals[ideologyWord] ?? `${ideologyWord} Party`
-  }
-
-  if (r < 0.55) {
-    // "[Ideology] Party"
-    return `${ideologyWord} Party`
-  }
-
-  if (r < 0.75) {
-    // "[Ideology] Alliance" / "[Ideology] Democrats" etc
-    const suffixes = ['Alliance', 'Democrats', 'Union', 'Coalition']
-    return `${ideologyWord} ${pickOne(rng, suffixes)}`
-  }
-
-  // "The [Ideology] [Short Suffix]"
-  const shortSuffixes = ['Party', 'Group', 'Alliance']
-  return `The ${ideologyWord} ${pickOne(rng, shortSuffixes)}`
+export function footingFromLegacyTier(tier: 'major' | 'minor' | 'custom' | undefined): PartyFooting {
+  if (tier === 'major') return 'established'
+  if (tier === 'custom') return 'challenger'
+  return 'fringe'
 }
 
-// Build a local-flavoured minor party name
-function minorPartyName(rng: () => number, values: PoliticalValues, townName: string): string {
-  const r = rng()
-
-  if (r < 0.28) {
-    // Town-named: "Brindleford Independents", "Coppergate Residents"
-    const localSuffixes = ['Independents', 'Residents', 'Ratepayers', 'Community Group', 'First']
-    return `${townName} ${pickOne(rng, localSuffixes)}`
-  }
-
-  if (r < 0.52) {
-    // Single-issue feel: "Residents First", "Save Our Streets", "Local Voice"
-    const singleIssue = [
-      'Residents First',
-      'Local Voice',
-      'Save Our Streets',
-      'Residents United',
-      'Neighbours First',
-      'Our Town',
-      'Community First',
-      'Independent Residents',
-      'Ratepayers Alliance',
-      'Local Alliance',
-      'The Residents\' Party',
-      'Streets Ahead',
-    ]
-    return pickOne(rng, singleIssue)
-  }
-
-  if (r < 0.72) {
-    // Slightly ideological minor: pull a softer adjective from values
-    const { change, services } = values
-    const adj = change > 20
-      ? pickOne(rng, ['Forward', 'Progressive', 'Independent', 'Reform'])
-      : services > 25
-        ? pickOne(rng, ['Community', 'Local', 'Residents', 'Welfare'])
-        : pickOne(rng, ['Independent', 'Local', 'Residents', 'Neighbourhood'])
-    const minorSuffixes = ['Action', 'Voice', 'Forum', 'Network', 'Movement']
-    return `${adj} ${pickOne(rng, minorSuffixes)}`
-  }
-
-  // "[Town] [Issue]" style
-  const issueSuffixes = ['Greens', 'Independents', 'Residents Association', 'Alliance', 'Residents']
-  return `${townName} ${pickOne(rng, issueSuffixes)}`
+export function tierFromFooting(footing: PartyFooting, origin: 'generated' | 'custom' = 'generated'): 'major' | 'minor' | 'custom' {
+  if (origin === 'custom') return 'custom'
+  return footing === 'established' ? 'major' : 'minor'
 }
 
-// Derive an ideology-matched slogan
-function sloganFromValues(rng: () => number, values: PoliticalValues, tier: 'major' | 'minor' | 'custom'): string {
-  const { change, growth, services } = values
-
-  if (tier === 'minor') {
-    return pickOne(rng, [
-      'Your street, your voice.',
-      'Small party, real results.',
-      'Locals know best.',
-      'One ward at a time.',
-      'No party whips. Just common sense.',
-      'For the people who live here.',
-      'We actually turned up.',
-    ])
+export function normalizePartyIdentity(party: PartyDefinition): PartyDefinition {
+  const footing = party.footing ?? footingFromLegacyTier(party.tier)
+  const archetype = party.archetype ?? (footing === 'established' ? 'municipal' : 'independence')
+  return {
+    ...party,
+    footing,
+    archetype,
+    tier: party.tier ?? tierFromFooting(footing, party.origin),
   }
-
-  // Ideology-matched for majors
-  if (change < -15 && services < 30) {
-    return pickOne(rng, [
-      'Keep what works.',
-      'Steady hands for steady streets.',
-      'No grand experiments.',
-      'Tradition, community, common sense.',
-      'If it ain\'t broke, don\'t fix it.',
-    ])
-  }
-  if (growth > 25 && services < 30) {
-    return pickOne(rng, [
-      'Open for business.',
-      'Growth that works for all.',
-      'A town that earns its keep.',
-      'Enterprise, not excuses.',
-      'More jobs, lower rates.',
-    ])
-  }
-  if (services > 30 && change >= -10) {
-    return pickOne(rng, [
-      'Invest in every street.',
-      'Good services, fair town.',
-      'No one left behind.',
-      'The council that delivers.',
-      'Better services, full stop.',
-    ])
-  }
-  if (change > 25) {
-    return pickOne(rng, [
-      'Time for a change.',
-      'Bold ideas, real results.',
-      'The old way isn\'t working.',
-      'Let\'s do things differently.',
-      'This town deserves better.',
-    ])
-  }
-  if (change > 10 && growth < 0) {
-    return pickOne(rng, [
-      'People before profit.',
-      'Protect what we love.',
-      'Green streets, clean future.',
-      'Our parks, our promise.',
-    ])
-  }
-
-  // Centrist fallback
-  return pickOne(rng, [
-    'Getting things done.',
-    'Sensible. Local. Effective.',
-    'For every ward, every week.',
-    'A friendlier town hall.',
-    'Practical politics for real people.',
-  ])
 }
 
-function createGeneratedParties(rng: () => number, blocs: FictionalBloc[], townName: string) {
+function townLooksCoastal(townName: string) {
+  return /harbour|harbor|mouth|ness|port|pool|fleet|cliffe|quay|bay|sea|haven/i.test(townName)
+}
+
+function archetypeFromBloc(bloc: FictionalBloc): PartyArchetype {
+  const { change, growth, services } = bloc.center
+  if (change > 20 && growth < 5) return 'green'
+  if (services > 28 && growth < 25) return 'workers'
+  if (growth > 22) return 'business'
+  if (bloc.homeRole === 'oldtown' || bloc.id.includes('loyal')) return 'municipal'
+  return 'municipal'
+}
+
+const SINGLE_ISSUE_FOCUSES = ['housing', 'transport', 'heritage', 'anti_development', 'parks', 'bins'] as const
+
+type PartySlot = {
+  archetype: PartyArchetype
+  footing: PartyFooting
+  bloc: FictionalBloc
+  issueFocus?: string
+}
+
+function pickPartySlots(rng: () => number, blocs: FictionalBloc[], coastal: boolean): PartySlot[] {
   const sorted = [...blocs].sort((a, b) => b.weight - a.weight)
-  const majorBlocs = sorted.slice(0, Math.min(3, sorted.length))
-  const minorBlocs = sorted.slice(3)
-  const parties: PartyDefinition[] = []
-  const usedNames = new Set<string>()
+  const slots: PartySlot[] = []
+  const usedBlocs = new Set<string>()
 
-  // Generate a unique name, retrying up to 8 times if there's a collision
+  const takeBloc = (preferred?: FictionalBloc) => {
+    const candidate = preferred && !usedBlocs.has(preferred.id)
+      ? preferred
+      : sorted.find((bloc) => !usedBlocs.has(bloc.id)) ?? sorted[slots.length % sorted.length]
+    usedBlocs.add(candidate.id)
+    return candidate
+  }
+
+  const establishedCount = rng() < 0.45 ? 2 : 3
+  for (let i = 0; i < establishedCount; i += 1) {
+    const bloc = takeBloc(sorted[i])
+    slots.push({ archetype: archetypeFromBloc(bloc), footing: 'established', bloc })
+  }
+
+  if (coastal) {
+    slots.push({ archetype: 'coastal', footing: rng() < 0.55 ? 'challenger' : 'fringe', bloc: takeBloc(sorted.find((b) => b.homeRole === 'river') ?? sorted[sorted.length - 1]) })
+  } else {
+    slots.push({ archetype: rng() < 0.55 ? 'independence' : 'ratepayers', footing: 'challenger', bloc: takeBloc() })
+  }
+
+  while (slots.length < 5) {
+    const roll = rng()
+    const hasIndependence = slots.some((s) => s.archetype === 'independence')
+    const hasRatepayers = slots.some((s) => s.archetype === 'ratepayers')
+    if (roll < 0.34) {
+      slots.push({
+        archetype: 'single_issue',
+        footing: 'fringe',
+        bloc: takeBloc(),
+        issueFocus: pickOne(rng, [...SINGLE_ISSUE_FOCUSES]),
+      })
+    } else if (roll < 0.55) {
+      slots.push({ archetype: hasIndependence ? (hasRatepayers ? 'single_issue' : 'ratepayers') : 'independence', footing: hasIndependence ? 'fringe' : 'challenger', bloc: takeBloc(), issueFocus: hasIndependence && hasRatepayers ? pickOne(rng, [...SINGLE_ISSUE_FOCUSES]) : undefined })
+    } else if (roll < 0.72) {
+      slots.push({ archetype: hasRatepayers ? 'independence' : 'ratepayers', footing: 'fringe', bloc: takeBloc() })
+    } else if (roll < 0.86 && coastal && !slots.some((s) => s.archetype === 'coastal' && s.footing === 'fringe')) {
+      slots.push({ archetype: 'coastal', footing: 'fringe', bloc: takeBloc() })
+    } else if (roll < 0.93) {
+      slots.push({ archetype: 'faith_community', footing: 'fringe', bloc: takeBloc() })
+    } else {
+      const bloc = takeBloc()
+      slots.push({ archetype: archetypeFromBloc(bloc), footing: 'challenger', bloc })
+    }
+  }
+
+  return slots.slice(0, 5)
+}
+
+function colourForArchetype(rng: () => number, archetype: PartyArchetype, used: Set<string>) {
+  const pool = [...(ARCHETYPE_COLOURS[archetype] ?? colourPalette), ...colourPalette]
+  for (const colour of shuffle(pool, rng)) {
+    if (!used.has(colour)) {
+      used.add(colour)
+      return colour
+    }
+  }
+  const fallback = `#${Math.floor(rng() * 0xffffff).toString(16).padStart(6, '0')}`
+  used.add(fallback)
+  return fallback
+}
+
+function nameForArchetype(
+  rng: () => number,
+  archetype: PartyArchetype,
+  townName: string,
+  bloc: FictionalBloc,
+  issueFocus?: string,
+  allowTownPrefix = false,
+): string {
+  const shortTown = townName.replace(/^The\s+/i, '')
+  const pick = (generic: string[], withTown: string[]) =>
+    pickOne(rng, allowTownPrefix ? [...generic, ...withTown] : generic)
+  switch (archetype) {
+    case 'municipal':
+      return pick(
+        ['Civic Voice', 'Common Sense Alliance', 'Borough Alliance', 'Municipal Group', 'Town List'],
+        [`${shortTown} Civic Alliance`, `${shortTown} Alliance`],
+      )
+    case 'workers':
+      return pick(
+        ['Working Families', 'Community Labour', 'Solidarity Group', 'People\'s Alliance', `${bloc.label.split(' ')[0]} Labour`],
+        [`${shortTown} Labour`],
+      )
+    case 'business':
+      return pick(
+        ['Progress Alliance', 'Chamber Group', 'Enterprise Alliance', 'Traders\' Association', 'Prosperity Group'],
+        [`${shortTown} Progress`, `${shortTown} Traders`],
+      )
+    case 'green':
+      return pick(
+        ['Green Alliance', 'Ecology Group', 'Green Party', 'Environment Alliance', 'River Alliance'],
+        [`${shortTown} Greens`],
+      )
+    case 'independence':
+      return pick(
+        ['Independent Voice', 'Independents', 'Local Alliance', 'Parish Independents', 'Residents\' Group'],
+        [`${shortTown} First`, `${shortTown} Independents`],
+      )
+    case 'coastal':
+      return pick(
+        ['Harbour Alliance', 'Coastal Group', 'Mainland Alliance', 'Harbour Independents', 'Quayside Alliance'],
+        [`${shortTown} Harbour`],
+      )
+    case 'ratepayers':
+      return pick(
+        ['Ratepayers Alliance', 'Residents First', 'Ratepayers\' Association', 'Civic Conservatives', 'Residents\' Alliance'],
+        [`${shortTown} Ratepayers`],
+      )
+    case 'faith_community':
+      return pick(
+        ['Parish Voice', 'Community Values', 'Faith & Community', 'Neighbourhood Alliance'],
+        [`${shortTown} Community`],
+      )
+    case 'single_issue': {
+      const focusNames: Record<string, { generic: string[]; withTown: string[] }> = {
+        housing: { generic: ['Housing Alliance', 'Homes Alliance', 'Housing Group'], withTown: [`${shortTown} Homes`] },
+        transport: { generic: ['Transport Alliance', 'Buses Alliance', 'Transit Group'], withTown: [`${shortTown} Transport`] },
+        heritage: { generic: ['Heritage Alliance', 'High Street Group', 'Old Town Alliance'], withTown: [`${shortTown} Heritage`] },
+        anti_development: { generic: ['Residents\' Defence', 'Fields Alliance', 'Neighbourhood Watch Party'], withTown: [] },
+        parks: { generic: ['Parks Alliance', 'Green Space Group', 'Commons Alliance'], withTown: [`${shortTown} Parks`] },
+        bins: { generic: ['Clean Streets Group', 'Services Alliance', 'Residents\' Services'], withTown: [] },
+      }
+      const pool = focusNames[issueFocus ?? 'housing'] ?? { generic: ['Local Action', 'Residents\' Alliance'], withTown: [`${shortTown} Action`] }
+      return pick(pool.generic, pool.withTown)
+    }
+    default:
+      return pick(['Civic Alliance', 'Local Voice'], [`${shortTown} Alliance`])
+  }
+}
+
+function sloganForArchetype(rng: () => number, archetype: PartyArchetype, townName: string, issueFocus?: string): string {
+  switch (archetype) {
+    case 'municipal':
+      return pickOne(rng, ['Putting residents first.', 'A steadier council.', 'Local priorities, properly delivered.'])
+    case 'workers':
+      return pickOne(rng, ['A fairer town.', 'Stronger communities.', 'For working people.'])
+    case 'business':
+      return pickOne(rng, ['Building a better borough.', 'Ambition for our town.', 'Progress that pays.'])
+    case 'green':
+      return pickOne(rng, ['A greener future.', 'Protecting our place.', 'Cleaner, fairer, local.'])
+    case 'independence':
+      return pickOne(rng, [`For ${townName}.`, 'Local people, local say.', 'Independent of the parties.'])
+    case 'coastal':
+      return pickOne(rng, ['Our harbour, our future.', 'Standing up for the coast.', 'Local links, local voice.'])
+    case 'ratepayers':
+      return pickOne(rng, ['Value for residents.', 'Sensible stewardship.', 'A council that listens.'])
+    case 'faith_community':
+      return pickOne(rng, ['Community before politics.', 'Neighbour looking after neighbour.', 'Shared values, shared town.'])
+    case 'single_issue':
+      return pickOne(rng, [
+        issueFocus === 'housing' ? 'Homes for local people.' : 'Focused on what matters.',
+        'One clear priority.',
+        'Residents before rhetoric.',
+      ])
+    default:
+      return 'For every ward.'
+  }
+}
+
+function footingStats(footing: PartyFooting, blocWeight: number) {
+  if (footing === 'established') {
+    return {
+      organization: clamp(0.92 + blocWeight * 1.1, 0.9, 1.4),
+      baseUtility: 0.06,
+      aiActionPoints: 3,
+      jitter: 4,
+    }
+  }
+  if (footing === 'challenger') {
+    return {
+      organization: clamp(0.5 + blocWeight * 0.8, 0.4, 0.9),
+      baseUtility: -0.04,
+      aiActionPoints: 2,
+      jitter: 6,
+    }
+  }
+  return {
+    organization: clamp(0.3 + blocWeight * 0.65, 0.25, 0.7),
+    baseUtility: -0.12,
+    aiActionPoints: 2,
+    jitter: 8,
+  }
+}
+
+function strategyTagsForArchetype(archetype: PartyArchetype, values: PoliticalValues, issueFocus?: string): string[] {
+  const tags = new Set(strategyTagsForValues(values))
+  if (archetype === 'coastal' || archetype === 'independence') {
+    tags.add('edge')
+    tags.add('rural')
+  }
+  if (archetype === 'green') tags.add('river')
+  if (archetype === 'business') tags.add('market')
+  if (archetype === 'workers') tags.add('industrial')
+  if (archetype === 'single_issue' && issueFocus) {
+    const map: Record<string, string> = {
+      housing: 'suburban',
+      transport: 'industrial',
+      heritage: 'oldtown',
+      anti_development: 'hill',
+      parks: 'pond',
+      bins: 'suburban',
+    }
+    if (map[issueFocus]) tags.add(map[issueFocus])
+  }
+  return [...tags]
+}
+
+function createGeneratedParties(rng: () => number, blocs: FictionalBloc[], townName: string, coastal: boolean) {
+  const slots = pickPartySlots(rng, blocs, coastal)
+  const usedNames = new Set<string>()
+  const usedColours = new Set<string>()
+  const shortTown = townName.replace(/^The\s+/i, '')
+  let townNameBudget = rng() < 0.45 ? 1 : 0
+
   function uniqueName(gen: () => string): string {
     for (let i = 0; i < 8; i++) {
       const name = gen()
@@ -1640,65 +1692,50 @@ function createGeneratedParties(rng: () => number, blocs: FictionalBloc[], townN
         return name
       }
     }
-    // Fallback: append a number
-    const base = gen()
+    const base = `${gen()} ${Math.floor(rng() * 9) + 1}`
     usedNames.add(base)
     return base
   }
 
-  majorBlocs.forEach((bloc, index) => {
-    const values = addValues(bloc.center, {
-      change: gaussian(rng, 0, 4),
-      growth: gaussian(rng, 0, 4),
-      services: gaussian(rng, 0, 4),
-    })
-    parties.push({
-      id: `party-major-${index + 1}`,
-      name: uniqueName(() => majorPartyName(rng, values)),
+  return slots.map((slot, index) => {
+    const stats = footingStats(slot.footing, slot.bloc.weight)
+    const leanShift =
+      slot.archetype === 'coastal' ? { change: -4, growth: 6, services: 4 }
+        : slot.archetype === 'independence' ? { change: 4, growth: -2, services: 2 }
+          : slot.archetype === 'ratepayers' ? { change: -8, growth: 4, services: -10 }
+            : slot.archetype === 'single_issue' && slot.issueFocus === 'anti_development' ? { change: -6, growth: -12, services: 4 }
+              : slot.archetype === 'single_issue' && slot.issueFocus === 'housing' ? { change: 8, growth: 4, services: 10 }
+                : {}
+    const values = roundPoliticalValues(addValues(addValues(slot.bloc.center, {
+      change: gaussian(rng, 0, stats.jitter),
+      growth: gaussian(rng, 0, stats.jitter),
+      services: gaussian(rng, 0, stats.jitter),
+    }), leanShift))
+    const allowTownPrefix = townNameBudget > 0 && rng() < 0.55
+    const name = uniqueName(() => nameForArchetype(rng, slot.archetype, townName, slot.bloc, slot.issueFocus, allowTownPrefix))
+    if (name.includes(shortTown)) townNameBudget = 0
+    return {
+      id: `party-${slot.footing}-${index + 1}`,
+      name,
       leader: createLeaderName(rng),
-      colour: colourPalette[index % colourPalette.length],
+      colour: colourForArchetype(rng, slot.archetype, usedColours),
       values,
-      origin: 'generated',
-      tier: 'major',
-      strategyTags: strategyTagsForValues(values),
-      seedBlocId: bloc.id,
-      organization: clamp(0.92 + bloc.weight * 1.1, 0.9, 1.4),
-      baseUtility: 0.06,
+      origin: 'generated' as const,
+      footing: slot.footing,
+      archetype: slot.archetype,
+      issueFocus: slot.issueFocus,
+      tier: tierFromFooting(slot.footing),
+      strategyTags: strategyTagsForArchetype(slot.archetype, values, slot.issueFocus),
+      seedBlocId: slot.bloc.id,
+      organization: stats.organization,
+      baseUtility: stats.baseUtility,
       momentum: 0,
       focusSeatIds: [],
-      slogan: sloganFromValues(rng, values, 'major'),
-      aiActionPoints: 3,
+      slogan: sloganForArchetype(rng, slot.archetype, townName, slot.issueFocus),
+      aiActionPoints: stats.aiActionPoints,
       wardBoosts: {},
-    })
+    }
   })
-
-  minorBlocs.forEach((bloc, index) => {
-    const values = addValues(bloc.center, {
-      change: gaussian(rng, 0, 7),
-      growth: gaussian(rng, 0, 7),
-      services: gaussian(rng, 0, 7),
-    })
-    parties.push({
-      id: `party-minor-${index + 1}`,
-      name: uniqueName(() => minorPartyName(rng, values, townName)),
-      leader: createLeaderName(rng),
-      colour: colourPalette[(index + majorBlocs.length) % colourPalette.length],
-      values,
-      origin: 'generated',
-      tier: 'minor',
-      strategyTags: strategyTagsForValues(values),
-      seedBlocId: bloc.id,
-      organization: clamp(0.36 + bloc.weight * 0.7, 0.28, 0.72),
-      baseUtility: -0.12,
-      momentum: 0,
-      focusSeatIds: [],
-      slogan: sloganFromValues(rng, values, 'minor'),
-      aiActionPoints: 2,
-      wardBoosts: {},
-    })
-  })
-
-  return parties
 }
 
 function convertCustomParties(customParties: CustomPartyDraft[]) {
@@ -1707,8 +1744,10 @@ function convertCustomParties(customParties: CustomPartyDraft[]) {
     name: party.name,
     leader: party.leader,
     colour: party.colour,
-    values: cloneValues(party.values),
+    values: roundPoliticalValues(cloneValues(party.values)),
     origin: 'custom',
+    footing: 'challenger',
+    archetype: 'municipal',
     tier: 'custom',
     strategyTags: strategyTagsForValues(party.values),
     organization: 0.55,
@@ -1733,7 +1772,7 @@ function assignPartyFocus(parties: PartyDefinition[], constituencies: Constituen
           + (party.seedBlocId ? (b.blocMix[party.seedBlocId] ?? 0) * blocWeight : 0)
         return bScore - aScore
       })
-      .slice(0, party.tier === 'major' ? 4 : 2)
+      .slice(0, party.footing === 'established' ? 4 : party.footing === 'challenger' ? 3 : 2)
       .map((seat) => seat.id),
   }))
 }
@@ -1775,31 +1814,37 @@ function partyEventBonus(party: PartyDefinition, current: GeographicCurrent, til
   if (!current.tags.some((tag) => tileTags.includes(tag))) return 0
   if (!current.popularityEffect) return 0
   if (current.popularityEffect.target === 'all') return current.popularityEffect.amount
-  const tierMatch = current.popularityEffect.target === party.tier ||
-    (current.popularityEffect.target === 'minor' && party.tier === 'custom')
-  if (tierMatch) return current.popularityEffect.amount
-  return 0
+  const target = current.popularityEffect.target
+  const footing = party.footing ?? footingFromLegacyTier(party.tier)
+  const match =
+    (target === 'established' || target === 'major') && footing === 'established'
+    || (target === 'challenger' || target === 'minor') && (footing === 'challenger' || footing === 'fringe' || party.origin === 'custom')
+    || target === 'fringe' && (footing === 'fringe' || party.origin === 'custom')
+  if (!match) return 0
+  let amount = current.popularityEffect.amount
+  if (party.archetype === 'single_issue' && party.issueFocus && current.tags.some((tag) => party.strategyTags.includes(tag))) {
+    amount *= 1.25
+  }
+  return amount
 }
 
 function scorePartyForTile(world: World, seat: Constituency | undefined, tile: PopulationTile, party: PartyDefinition) {
-  // 1. Amplified wardFit: stronger bloc match → much stronger home-ward advantage
-  const wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * (party.tier === 'major' ? 1.8 : 0.9) : 0.15
+  const footing = party.footing ?? footingFromLegacyTier(party.tier)
+  const wardFitScale = footing === 'established' ? 1.8 : footing === 'challenger' ? 1.15 : 0.9
+  let wardFit = party.seedBlocId ? (tile.blocMix[party.seedBlocId] ?? 0) * wardFitScale : 0.15
+  if ((party.archetype === 'independence' || party.archetype === 'coastal') && (tile.tags.includes('edge') || tile.tags.includes('rural'))) {
+    wardFit += 0.12
+  }
+  if (party.archetype === 'coastal' && (tile.tags.includes('river') || tile.tags.includes('pond'))) {
+    wardFit += 0.06
+  }
   const focus = seat && party.focusSeatIds.includes(seat.id) ? 0.18 : 0
-  // 2. Organization has more range: clearly separates well-organised from weak parties
   const organization = Math.log(party.organization + 1) * 0.55
-  // 3. Tag bonus raised: home-turf tags meaningfully reinforce strength
   const tagBonus = party.strategyTags.reduce((sum, tag) => sum + (tile.tags.includes(tag) ? 0.20 : 0), 0)
-  // 4. Tighter issueFit: ideological distance hurts more — mismatched parties lose real ground
   const issueFit = -valueDistance(tile.values, party.values, tile.salience) / ISSUE_FIT_SCALE
   const eventBonus = world.currents.reduce((sum, current) => sum + partyEventBonus(party, current, tile.tags), 0)
-  // Campaign boost from canvassing/ads/rally
   const wardBoost = seat ? (party.wardBoosts[seat.id] ?? 0) : 0
   const tileBoost = (tile.campaignBoosts?.[party.id] ?? 0)
-  // 5. Incumbency bonus — two tiers:
-  //    a) Current poll leader in this ward: tiny name-recognition advantage (+0.04)
-  //    b) Elected incumbent (won the seat at the last actual election): moderate boost (+0.10)
-  //    These stack, so an elected incumbent who is also currently leading gets +0.14 total.
-  //    Kept intentionally modest so sustained campaigning can realistically unseat them.
   let incumbencyBonus = 0
   if (seat) {
     const isCurrentLeader = seat.leadingPartyId === party.id
@@ -2039,13 +2084,13 @@ function evolveParties(parties: PartyDefinition[], constituencies: Constituency[
       // Tiny random walk in baseUtility — barely perceptible week-to-week
       // Slow decay (0.95) keeps it near its natural long-run mean
       baseUtility: clamp(
-        party.baseUtility * 0.95 + gaussian(rng, 0, party.tier === 'major' ? 0.02 : 0.015),
+        party.baseUtility * 0.95 + gaussian(rng, 0, (party.footing ?? footingFromLegacyTier(party.tier)) === 'established' ? 0.02 : 0.015),
         -1.2, 1.2,
       ),
       // Momentum also much calmer — only noticeable after a rally or event response
       momentum: clamp(party.momentum * 0.65 + gaussian(rng, 0, 0.03), -0.7, 0.7),
       // Reset AI action points each week (players get theirs in App)
-      aiActionPoints: isPlayer ? party.aiActionPoints : (party.tier === 'major' ? 3 : 2),
+      aiActionPoints: isPlayer ? party.aiActionPoints : ((party.footing ?? footingFromLegacyTier(party.tier)) === 'established' ? 3 : 2),
       // Decay ward boosts more slowly — canvass effect lasts ~4 weeks
       wardBoosts: Object.fromEntries(
         Object.entries(party.wardBoosts).map(([k, v]) => [k, v * WARD_BOOST_DECAY]),
@@ -2823,11 +2868,11 @@ export function generateWorld(options: WorldOptions): World {
   const landmass = createLandmass(rng)
   const centers = createSettlementCenters(rng, landmass.points, townName)
   const blocs = generateBlocs(rng)
-
-  // Create parties first (before constituencies, since constituencies need candidates)
-  let parties = [...createGeneratedParties(rng, blocs, townName), ...convertCustomParties(options.customParties)]
-
   const tiles = createPopulationTiles(rng, landmass.points, centers, blocs)
+  const coastal = townLooksCoastal(townName) || (blocs.some((bloc) => bloc.homeRole === 'river') && rng() < 0.22)
+
+  let parties = [...createGeneratedParties(rng, blocs, townName, coastal), ...convertCustomParties(options.customParties)]
+
   const generatedConstituencies = createConstituencies(rng, tiles, options.constituencyCount, parties)
   const constituencies = generatedConstituencies.map((constituency) => ({
     ...constituency,
@@ -2835,11 +2880,10 @@ export function generateWorld(options: WorldOptions): World {
   }))
   parties = assignPartyFocus(parties, constituencies)
 
-  // Player is the LAST major party — starting behind as underdog
-  const majorParties = parties.filter((p) => p.tier === 'major')
+  const establishedParties = parties.filter((p) => p.footing === 'established')
   const defaultPlayerPartyId = options.playerPartyId && parties.some((p) => p.id === options.playerPartyId)
     ? options.playerPartyId
-    : majorParties[majorParties.length - 1]?.id ?? parties[0]?.id ?? ''
+    : establishedParties[establishedParties.length - 1]?.id ?? parties[0]?.id ?? ''
 
   parties = parties.map((p) => {
     if (p.id === defaultPlayerPartyId) {
@@ -2849,14 +2893,14 @@ export function generateWorld(options: WorldOptions): World {
   })
 
   const electionCycleWeeks = 24
-  // Start 8–20 weeks before the first election so you can campaign
   const weeksUntilElection = Math.floor(randomBetween(rng, 8, 20))
   const currents = shuffle(issueCurrents, rng).slice(0, 3).map<GeographicCurrent>((current) => ({
     ...current,
     intensity: randomBetween(rng, 0.7, 1.25),
   }))
 
-  const incumbent = pickOne(rng, majorParties.filter((p) => p.id !== defaultPlayerPartyId))
+  const incumbentPool = establishedParties.filter((p) => p.id !== defaultPlayerPartyId)
+  const incumbent = pickOne(rng, incumbentPool.length > 0 ? incumbentPool : parties.filter((p) => p.id !== defaultPlayerPartyId))
 
   const baseWorld = {
     gameMode: 'single-politician' as const,
@@ -2876,8 +2920,8 @@ export function generateWorld(options: WorldOptions): World {
     nationalResults: [] as PartyPerformance[],
     tiles,
     playerPartyId: defaultPlayerPartyId,
-    currentMayorParty: incumbent?.name ?? majorParties[0]?.name ?? '',
-    currentMayorLeader: incumbent?.leader ?? majorParties[0]?.leader ?? '',
+    currentMayorParty: incumbent?.name ?? establishedParties[0]?.name ?? parties[0]?.name ?? '',
+    currentMayorLeader: incumbent?.leader ?? establishedParties[0]?.leader ?? parties[0]?.leader ?? '',
     electionCycleWeeks,
     weeksUntilElection,
     playerActionPoints: 5,
@@ -3345,7 +3389,7 @@ export function simulateWeek(world: World): World {
           partyColour: winner.partyColour,
           wardId: c.id,
           wardName: c.name,
-          personalValues: party ? { ...party.values } : { change: 0, growth: 0, services: 0 },
+          personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
           rebellionTendency: existing?.rebellionTendency ?? rng() * 0.4,
           influence: existing?.influence ?? 10 + Math.floor(rng() * 30),
         }
@@ -3530,6 +3574,12 @@ export function ideologySummary(values: PoliticalValues): string {
     .map((ax) => axisStance(values[ax.key], ax))
     .filter(Boolean) as string[]
   return stances.length > 0 ? stances.join(' · ') : 'Centrist'
+}
+
+export function partyIdentitySummary(party: Pick<PartyDefinition, 'archetype' | 'issueFocus' | 'values' | 'slogan'>): string {
+  const archetype = partyArchetypeLabel(party.archetype, party.issueFocus)
+  const ideology = ideologySummary(party.values)
+  return `${archetype} · ${ideology}`
 }
 
 export function wardFitSentence(
@@ -4145,17 +4195,67 @@ export function updateCouncillorTenure(seed: number, week: number, results: Arra
 
 export function getDefaultBudget(): Budget {
   return {
-    totalBudget: 350,
+    totalBudget: 200,
     categories: [
-      { id: 'roads',      label: 'Roads & Potholes',     funding: 50, blocs: ['workshop_crews', 'market_regulars'] },
-      { id: 'buses',      label: 'Buses & Transport',     funding: 50, blocs: ['river_walkers', 'college_corner'] },
-      { id: 'parks',      label: 'Parks & Recreation',    funding: 50, blocs: ['river_walkers', 'pondside_peacemakers'] },
-      { id: 'libraries',  label: 'Libraries & Culture',   funding: 50, blocs: ['old_town_loyalists', 'college_corner'] },
-      { id: 'bins',       label: 'Bins & Recycling',      funding: 50, blocs: ['hill_street_households', 'market_regulars'] },
-      { id: 'safety',     label: 'Community Safety',      funding: 50, blocs: ['pondside_peacemakers', 'hill_street_households'] },
-      { id: 'youth',      label: 'Youth Services',        funding: 50, blocs: ['college_corner', 'workshop_crews'] },
+      { id: 'roads', label: 'Roads & transport', funding: 50, blocs: ['workshop_crews', 'market_regulars', 'river_walkers'] },
+      { id: 'parks', label: 'Parks & environment', funding: 50, blocs: ['river_walkers', 'pondside_peacemakers', 'college_corner'] },
+      { id: 'libraries', label: 'Libraries & culture', funding: 50, blocs: ['old_town_loyalists', 'college_corner', 'hill_street_households'] },
+      { id: 'safety', label: 'Safety & care', funding: 50, blocs: ['pondside_peacemakers', 'hill_street_households', 'workshop_crews'] },
     ],
   }
+}
+
+export function normalizeBudget(budget: Budget | undefined | null): Budget {
+  const defaults = getDefaultBudget()
+  if (!budget?.categories?.length) return defaults
+  const byId = Object.fromEntries(budget.categories.map((category) => [category.id, category]))
+  const summedFunding = (ids: string[], fallback: number) => {
+    const present = ids.map((id) => byId[id]).filter(Boolean)
+    if (present.length === 0) return fallback
+    return present.reduce((sum, category) => sum + category.funding, 0)
+  }
+  const categories = [
+    { id: 'roads', label: 'Roads & transport', funding: summedFunding(['roads', 'buses'], 50), blocs: defaults.categories[0].blocs },
+    { id: 'parks', label: 'Parks & environment', funding: summedFunding(['parks'], 50), blocs: defaults.categories[1].blocs },
+    { id: 'libraries', label: 'Libraries & culture', funding: summedFunding(['libraries', 'bins', 'youth'], 50), blocs: defaults.categories[2].blocs },
+    { id: 'safety', label: 'Safety & care', funding: summedFunding(['safety'], 50), blocs: defaults.categories[3].blocs },
+  ]
+  const total = categories.reduce((sum, category) => sum + category.funding, 0)
+  const target = defaults.totalBudget
+  if (total !== target && total > 0) {
+    const scale = target / total
+    let remaining = target
+    for (let i = 0; i < categories.length; i += 1) {
+      if (i === categories.length - 1) categories[i].funding = remaining
+      else {
+        categories[i].funding = Math.round(categories[i].funding * scale)
+        remaining -= categories[i].funding
+      }
+    }
+  }
+  return { totalBudget: target, categories }
+}
+
+export function budgetIdeologyLean(budget: Budget): PoliticalValues {
+  const avg = (ids: string[]) => {
+    const values = ids.map((id) => budget.categories.find((category) => category.id === id)?.funding).filter((value): value is number => typeof value === 'number')
+    if (values.length === 0) return 50
+    return values.reduce((sum, value) => sum + value, 0) / values.length
+  }
+  return {
+    change: Math.round(avg(['parks', 'libraries']) - 50),
+    growth: Math.round(avg(['roads']) - 50),
+    services: Math.round(avg(['libraries', 'safety', 'parks']) - 50),
+  }
+}
+
+function consecutiveBudgetFailures(history: Array<{ week: number; passed: boolean }>) {
+  let count = 0
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].passed) break
+    count += 1
+  }
+  return count
 }
 
 // ─── Single-Politician Mode ────────────────────────────────────────────
@@ -4185,7 +4285,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     partyId: world.playerPartyId,
     isIncumbent: false,
     personalApproval: 0,
-    personalValues: { ...playerParty.values },
+    personalValues: roundPoliticalValues(playerParty.values),
     personalPolicyNextWeek: world.week,
     reputation: 20,
     relationships: [],
@@ -4213,7 +4313,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
         partyColour: winnerCandidate.partyColour,
         wardId: c.id,
         wardName: c.name,
-        personalValues: party ? { ...party.values } : { change: 0, growth: 0, services: 0 },
+        personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
         rebellionTendency: rng() * 0.4,
         influence: 10 + Math.floor(rng() * 30),
       }
@@ -4235,8 +4335,10 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     councillors,
     currentSession: undefined,
     sessionHistory: [],
-    nextSessionWeek: world.week + 4,
-    councilSessionInterval: 4,
+    nextSessionWeek: world.week + 8,
+    councilSessionInterval: 8,
+    nextBudgetWeek: world.week + world.electionCycleWeeks,
+    budgetHistory: [],
     autoCampaigns: [],
     legislationHistory: [],
   }
@@ -4256,7 +4358,7 @@ function createCouncillorForWard(world: World, ward: Constituency, rng: () => nu
     partyColour: winner.partyColour,
     wardId: ward.id,
     wardName: ward.name,
-    personalValues: party ? { ...party.values } : { change: 0, growth: 0, services: 0 },
+    personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
     rebellionTendency: rng() * 0.4,
     influence: 10 + Math.floor(rng() * 30),
   }
@@ -4573,224 +4675,96 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
 
 // ─── Council Chamber System ─────────────────────────────────────────────────
 
-interface MotionTemplate {
-  pattern: string
-  descPattern: string
-  category: MotionCategory
-  baseLean: Partial<PoliticalValues>
-  baseBlocImpact: Record<string, number>
-}
+export const MOTION_PROPOSAL_INFLUENCE_COST = 8
+export const BUDGET_AMENDMENT_INFLUENCE_COST = 10
+
+type GeneratedMotion = Omit<CouncilMotion, 'id' | 'proposerId' | 'proposerName' | 'status' | 'votes' | 'partyWhipDirection' | 'playerVote' | 'whipIssuerId' | 'whipIssuerName'>
 
 const LOCATIONS = [
   'High Street', 'Market Square', 'the industrial estate', 'Riverside Path',
   'the school grounds', 'the old library site', 'Station Road', 'Church Lane',
   'the recreation ground', 'Oak Park', 'the town centre', 'Mill Lane',
-  'the allotments', 'Harbour Road', 'the canal towpath',
+  'the allotments', 'Harbour Road', 'the canal towpath', 'Victoria Gardens',
+  'the bus station forecourt', 'Queensway', 'the civic quarter',
 ]
 
-const SERVICES_SUBJECTS = [
-  'libraries', 'bin collections', 'park maintenance', 'youth services',
-  'road repairs', 'bus routes', 'street lighting', 'public toilets',
-  'swimming pools', 'community centres', 'meals on wheels', 'school crossings',
-  'recycling centres', 'social care', 'children\'s play areas',
+const POLICY_AREAS: Array<{ category: MotionCategory; interventions: string[]; subjects: string[]; mechanisms: string[]; beneficiaries: string[]; tradeOffs: string[] }> = [
+  {
+    category: 'planning',
+    interventions: ['approve', 'refuse', 'fast-track', 'call in', 'impose conditions on'],
+    subjects: ['a mixed-use housing scheme', 'warehouse expansion', 'town-centre flats', 'a care home', 'student housing', 'a drive-through', 'office conversion'],
+    mechanisms: ['through the planning committee', 'via a neighbourhood plan amendment', 'with a Section 106 package', 'under temporary permission'],
+    beneficiaries: ['first-time buyers', 'local traders', 'construction jobs', 'conservation groups'],
+    tradeOffs: ['higher traffic', 'loss of green space', 'pressure on school places', 'heritage objections'],
+  },
+  {
+    category: 'housing',
+    interventions: ['require', 'fund', 'pause', 'accelerate', 'cap rents on'],
+    subjects: ['social housing delivery', 'empty-home enforcement', 'temporary accommodation', 'shared-ownership stock', 'hostel provision'],
+    mechanisms: ['with a housing company partnership', 'through council borrowing', 'via registered providers', 'with landlord licensing'],
+    beneficiaries: ['waiting-list households', 'young renters', 'rough sleepers', 'key workers'],
+    tradeOffs: ['higher borrowing costs', 'landlord resistance', 'delayed private schemes', 'concentrated placements'],
+  },
+  {
+    category: 'transport',
+    interventions: ['introduce', 'expand', 'cut', 'reroute', 'subsidise'],
+    subjects: ['evening buses', 'controlled parking', 'cycle lanes', 'school streets', 'taxi ranks'],
+    mechanisms: ['through a traffic regulation order', 'with DfT grant match-funding', 'via a bus service improvement plan', 'in a 12-month trial'],
+    beneficiaries: ['commuters', 'shoppers', 'disabled passengers', 'cyclists'],
+    tradeOffs: ['business disruption', 'displacement parking', 'higher fares elsewhere', 'roadworks delays'],
+  },
+  {
+    category: 'services',
+    interventions: ['increase funding for', 'reduce hours at', 'outsource', 'restore', 'merge'],
+    subjects: ['libraries', 'youth clubs', 'bin collections', 'leisure centres', 'social care visits', 'community centres'],
+    mechanisms: ['from reserves', 'by reallocating the neighbourhood fund', 'with a private contractor', 'under a shared-service deal'],
+    beneficiaries: ['older residents', 'families', 'volunteers', 'shift workers'],
+    tradeOffs: ['staff reductions', 'longer wait times', 'uneven coverage', 'higher fees'],
+  },
+  {
+    category: 'environment',
+    interventions: ['ban', 'charge for', 'plant', 'protect', 'mandate'],
+    subjects: ['single-use plastics', 'idling vehicles', 'street trees', 'riverside habitats', 'solar panels on civic roofs'],
+    mechanisms: ['with a borough-wide by-law', 'through a clean-air zone', 'via a community grant scheme', 'with utility partnerships'],
+    beneficiaries: ['walkers', 'schools', 'wildlife groups', 'public-health advocates'],
+    tradeOffs: ['business compliance costs', 'delivery disruption', 'maintenance bills', 'rural access concerns'],
+  },
+  {
+    category: 'safety',
+    interventions: ['fund', 'deploy', 'consult on', 'restrict', 'review'],
+    subjects: ['CCTV coverage', 'warden patrols', 'night-time licensing', 'alley gating', 'ASB hotspot responses'],
+    mechanisms: ['with police partnership money', 'through the community safety fund', 'via a public space protection order', 'in a six-month pilot'],
+    beneficiaries: ['town-centre traders', 'night workers', 'residents near venues', 'young people'],
+    tradeOffs: ['civil liberties concerns', 'displacement of nuisance', 'overtime costs', 'licensing disputes'],
+  },
+  {
+    category: 'economy',
+    interventions: ['create', 'waive', 'invest in', 'market', 'support'],
+    subjects: ['a business rates relief scheme', 'market stall rents', 'high-street grants', 'skills apprenticeships', 'visitor events'],
+    mechanisms: ['from the growth fund', 'with Chamber of Commerce co-funding', 'through a BID levy', 'via a town deal package'],
+    beneficiaries: ['independent shops', 'start-ups', 'hospitality workers', 'town-centre landlords'],
+    tradeOffs: ['foregone tax income', 'subsidy dependency', 'uneven ward benefit', 'event disruption'],
+  },
+  {
+    category: 'budget',
+    interventions: ['raise', 'freeze', 'sell', 'ring-fence', 'borrow for'],
+    subjects: ['council tax', 'the former depot site', 'capital maintenance', 'the neighbourhood fund', 'digital transformation'],
+    mechanisms: ['in the medium-term financial plan', 'through asset disposal', 'with prudential borrowing', 'by cutting discretionary grants'],
+    beneficiaries: ['front-line services', 'council taxpayers', 'capital programmes', 'partner charities'],
+    tradeOffs: ['service reductions', 'higher household bills', 'one-off receipts', 'future debt servicing'],
+  },
+  {
+    category: 'governance',
+    interventions: ['reform', 'livestream', 'establish', 'audit', 'open'],
+    subjects: ['scrutiny committees', 'public question time', 'a citizens assembly', 'councillor allowances', 'procurement rules'],
+    mechanisms: ['via standing-order changes', 'with an independent review', 'through a transparency charter', 'under a new code of conduct'],
+    beneficiaries: ['engaged residents', 'opposition groups', 'whistleblowers', 'parish councils'],
+    tradeOffs: ['slower decisions', 'officer workload', 'political theatre', 'legal challenge risk'],
+  },
 ]
-
-const ENVIRONMENTAL_SUBJECTS = [
-  'single-use plastics', 'vehicle idling', 'private cars', 'diesel vehicles',
-  'disposable coffee cups', 'wood-burning stoves', 'garden bonfires',
-  'pesticide spraying', 'non-recyclable packaging', 'motorised scooters',
-]
-
-const PLANNING_SUBJECTS = [
-  'a 200-home housing estate', 'a retail park', 'a drive-through restaurant',
-  'student accommodation', 'a warehouse distribution centre', 'an office block',
-  'a care home', 'a mosque', 'affordable flats', 'a multi-storey car park',
-  'a wind turbine', 'solar panels on council roofs', 'an electric vehicle charging hub',
-]
-
-const BUDGET_SUBJECTS = [
-  'the old depot', 'the civic centre car park', 'unused council land',
-  'the former town hall annex', 'vacant retail units', 'the disused leisure centre',
-]
-
-const GOVERNANCE_SUBJECTS = [
-  'planning', 'licensing', 'scrutiny', 'finance', 'housing',
-  'environment', 'transport', 'health & wellbeing',
-]
-
-const MOTION_TEMPLATES: MotionTemplate[] = [
-  { pattern: 'Approve {subject} development on {location}', descPattern: 'Grant planning permission for {subject} on the site at {location}.', category: 'planning', baseLean: { growth: 20, change: 10 }, baseBlocImpact: { workshop_crews: 8, market_regulars: -6 } },
-  { pattern: 'Reject planning application for {subject}', descPattern: 'Refuse permission for {subject}, citing impact on local character.', category: 'planning', baseLean: { change: -15, growth: -10 }, baseBlocImpact: { old_town_loyalists: 10, workshop_crews: -5 } },
-  { pattern: 'Designate {location} as conservation area', descPattern: 'Protect {location} from future development with conservation status.', category: 'planning', baseLean: { change: -10, growth: -15 }, baseBlocImpact: { river_walkers: 10, workshop_crews: -8 } },
-  { pattern: 'Rezone {location} for mixed use', descPattern: 'Allow residential and commercial development at {location}.', category: 'planning', baseLean: { growth: 15, change: 5 }, baseBlocImpact: { market_regulars: 6, old_town_loyalists: -4 } },
-  { pattern: 'Compulsory purchase order on {location}', descPattern: 'Acquire {location} by compulsory purchase for community use.', category: 'planning', baseLean: { change: 20, services: 15 }, baseBlocImpact: { hill_street_households: 10, market_regulars: -8 } },
-  { pattern: 'Permit temporary use of {location} for markets', descPattern: 'Allow pop-up markets and stalls at {location} on weekends.', category: 'planning', baseLean: { growth: 10, change: 5 }, baseBlocImpact: { market_regulars: 12, old_town_loyalists: -3 } },
-  { pattern: 'Refuse conversion of {location} to flats', descPattern: 'Block plans to convert the building at {location} into residential units.', category: 'planning', baseLean: { change: -10, growth: -5 }, baseBlocImpact: { old_town_loyalists: 8, hill_street_households: -5 } },
-  { pattern: 'Build {subject} near {location}', descPattern: 'Approve new construction of {subject} adjacent to {location}.', category: 'planning', baseLean: { growth: 18, change: 8 }, baseBlocImpact: { workshop_crews: 10, river_walkers: -5 } },
-
-  { pattern: 'Increase funding for {subject}', descPattern: 'Raise the annual budget for {subject} by allocating additional council reserves.', category: 'services', baseLean: { services: 20 }, baseBlocImpact: { hill_street_households: 10, college_corner: 5 } },
-  { pattern: 'Cut hours at {subject}', descPattern: 'Reduce opening hours of {subject} to save money in the current budget.', category: 'services', baseLean: { services: -20, growth: 10 }, baseBlocImpact: { college_corner: -12, old_town_loyalists: -8 } },
-  { pattern: 'Outsource {subject} to private contractor', descPattern: 'Transfer delivery of {subject} to a private company to reduce costs.', category: 'services', baseLean: { services: -15, growth: 15 }, baseBlocImpact: { workshop_crews: -10, market_regulars: 5 } },
-  { pattern: 'Launch new {subject} scheme', descPattern: 'Introduce a new pilot programme expanding {subject} provision across the borough.', category: 'services', baseLean: { services: 18, change: 10 }, baseBlocImpact: { college_corner: 10, pondside_peacemakers: 6 } },
-  { pattern: 'Restore weekly {subject}', descPattern: 'Return {subject} to a weekly schedule after previous cuts.', category: 'services', baseLean: { services: 12 }, baseBlocImpact: { hill_street_households: 10, old_town_loyalists: 8 } },
-  { pattern: 'Commission emergency repairs to {subject}', descPattern: 'Allocate emergency funds for urgent maintenance of {subject} infrastructure.', category: 'services', baseLean: { services: 10 }, baseBlocImpact: { workshop_crews: 8, hill_street_households: 6 } },
-  { pattern: 'Close {subject} facility permanently', descPattern: 'Permanently shut down the {subject} facility to redirect resources elsewhere.', category: 'services', baseLean: { services: -25, growth: 5 }, baseBlocImpact: { college_corner: -15, pondside_peacemakers: -10 } },
-  { pattern: 'Extend {subject} to evening hours', descPattern: 'Keep {subject} open until 9pm on weeknights to improve access.', category: 'services', baseLean: { services: 15, change: 5 }, baseBlocImpact: { college_corner: 8, workshop_crews: 5 } },
-
-  { pattern: 'Ban {subject} in the town centre', descPattern: 'Prohibit {subject} within the designated town centre zone.', category: 'environment', baseLean: { change: 20, growth: -10 }, baseBlocImpact: { river_walkers: 10, workshop_crews: -8 } },
-  { pattern: 'Create a green corridor along {location}', descPattern: 'Plant trees and hedgerows to create wildlife habitat along {location}.', category: 'environment', baseLean: { change: 15, services: 5 }, baseBlocImpact: { river_walkers: 12, pondside_peacemakers: 8 } },
-  { pattern: 'Impose {subject} charges', descPattern: 'Introduce a levy on {subject} to fund environmental improvements.', category: 'environment', baseLean: { change: 15, growth: -5 }, baseBlocImpact: { river_walkers: 8, market_regulars: -6 } },
-  { pattern: 'Plant 500 trees along {location}', descPattern: 'Major tree-planting initiative along {location} to improve air quality.', category: 'environment', baseLean: { change: 18, services: 5 }, baseBlocImpact: { river_walkers: 12, hill_street_households: 5 } },
-  { pattern: 'Declare a climate emergency', descPattern: 'Commit the council to net-zero carbon operations within five years.', category: 'environment', baseLean: { change: 30, growth: -15 }, baseBlocImpact: { river_walkers: 15, workshop_crews: -10 } },
-  { pattern: 'Introduce a clean air zone around {location}', descPattern: 'Charge polluting vehicles entering the zone around {location}.', category: 'environment', baseLean: { change: 20, growth: -10 }, baseBlocImpact: { river_walkers: 10, workshop_crews: -8 } },
-  { pattern: 'Create car-free Sundays on {location}', descPattern: 'Close {location} to motor traffic every Sunday for pedestrians and cyclists.', category: 'environment', baseLean: { change: 15, growth: -5 }, baseBlocImpact: { river_walkers: 8, market_regulars: 5 } },
-  { pattern: 'Expand recycling collection to include {subject}', descPattern: 'Add {subject} to kerbside recycling collections borough-wide.', category: 'environment', baseLean: { change: 10, services: 8 }, baseBlocImpact: { river_walkers: 6, hill_street_households: 4 } },
-  { pattern: 'Install electric vehicle chargers at {location}', descPattern: 'Place 20 new public EV charging points at {location}.', category: 'environment', baseLean: { change: 12, growth: 5 }, baseBlocImpact: { college_corner: 5, workshop_crews: 3 } },
-
-  { pattern: 'Raise council tax by 3%', descPattern: 'Approve a 3% increase in council tax to fund service improvements.', category: 'budget', baseLean: { services: 15, growth: -5 }, baseBlocImpact: { hill_street_households: -5, old_town_loyalists: -8 } },
-  { pattern: 'Sell {subject} to raise revenue', descPattern: 'Dispose of {subject} on the open market to generate capital receipts.', category: 'budget', baseLean: { growth: 20, services: -10 }, baseBlocImpact: { market_regulars: 6, river_walkers: -10 } },
-  { pattern: 'Freeze spending on {subject}', descPattern: 'Maintain current {subject} budget with no increase for the coming year.', category: 'budget', baseLean: { services: -10, growth: 5 }, baseBlocImpact: { old_town_loyalists: 5, college_corner: -5 } },
-  { pattern: 'Invest £2m in {subject}', descPattern: 'Major capital investment in {subject} from council reserves.', category: 'budget', baseLean: { services: 20, growth: 10 }, baseBlocImpact: { hill_street_households: 10, workshop_crews: 8 } },
-  { pattern: 'Accept central government austerity grant', descPattern: 'Take the reduced settlement without protest to maintain central government relations.', category: 'budget', baseLean: { growth: 5, services: -15 }, baseBlocImpact: { old_town_loyalists: -5, college_corner: -8 } },
-  { pattern: 'Introduce workplace parking levy', descPattern: 'Charge businesses for staff car parking spaces to fund public transport.', category: 'budget', baseLean: { change: 10, growth: -5, services: 10 }, baseBlocImpact: { river_walkers: 5, workshop_crews: -8 } },
-  { pattern: 'Create a community investment fund', descPattern: 'Pool resident contributions into a fund for neighbourhood improvements.', category: 'budget', baseLean: { services: 12, change: 8 }, baseBlocImpact: { pondside_peacemakers: 8, hill_street_households: 6 } },
-  { pattern: 'Cut councillor expenses by 15%', descPattern: 'Reduce the councillor travel and subsistence budget.', category: 'budget', baseLean: { services: 5, growth: -5 }, baseBlocImpact: { old_town_loyalists: 6, market_regulars: 4 } },
-
-  { pattern: 'Reform {subject} committee structure', descPattern: 'Restructure the {subject} committee to improve decision-making.', category: 'governance', baseLean: { change: 10 }, baseBlocImpact: { pondside_peacemakers: 5, college_corner: 3 } },
-  { pattern: 'Increase transparency of {subject} decisions', descPattern: 'Require all {subject} decisions to be published with full reasoning within 48 hours.', category: 'governance', baseLean: { change: 15, services: 5 }, baseBlocImpact: { college_corner: 8, pondside_peacemakers: 6 } },
-  { pattern: 'Create new deputy {subject} chair role', descPattern: 'Establish a paid deputy chair position on the {subject} committee.', category: 'governance', baseLean: { growth: 5 }, baseBlocImpact: { old_town_loyalists: -3, college_corner: -2 } },
-  { pattern: 'Reduce councillor allowances by 10%', descPattern: 'Cut annual councillor pay to save public money.', category: 'governance', baseLean: { growth: -5, services: 5 }, baseBlocImpact: { old_town_loyalists: 8, market_regulars: 5 } },
-  { pattern: 'Introduce public question time at council meetings', descPattern: 'Allow 30 minutes of public questions at the start of each full council meeting.', category: 'governance', baseLean: { change: 12, services: 5 }, baseBlocImpact: { pondside_peacemakers: 10, college_corner: 6 } },
-  { pattern: 'Livestream all {subject} committee meetings', descPattern: 'Broadcast {subject} committee meetings online for public viewing.', category: 'governance', baseLean: { change: 10, services: 3 }, baseBlocImpact: { college_corner: 6, pondside_peacemakers: 5 } },
-  { pattern: 'Establish a citizens\' assembly on {subject}', descPattern: 'Convene a randomly-selected citizens\' panel to advise on {subject} policy.', category: 'governance', baseLean: { change: 18, services: 8 }, baseBlocImpact: { pondside_peacemakers: 10, college_corner: 8 } },
-  { pattern: 'Appoint independent auditor for {subject}', descPattern: 'Hire an external auditor to review {subject} spending and processes.', category: 'governance', baseLean: { change: 8, growth: -3 }, baseBlocImpact: { old_town_loyalists: 5, pondside_peacemakers: 4 } },
-]
-
-type ScopeLevel = 'modest' | 'standard' | 'ambitious'
-
-const SCOPE_MODIFIERS: Record<ScopeLevel, { multiplier: number; adjectives: string[] }> = {
-  modest: { multiplier: 0.6, adjectives: ['minor', 'small-scale', 'limited', 'pilot'] },
-  standard: { multiplier: 1.0, adjectives: [] },
-  ambitious: { multiplier: 1.5, adjectives: ['major', 'comprehensive', 'sweeping', 'bold'] },
-}
-
-function pickScope(rng: () => number): ScopeLevel {
-  const r = rng()
-  if (r < 0.3) return 'modest'
-  if (r < 0.8) return 'standard'
-  return 'ambitious'
-}
 
 function pickFrom<T>(arr: T[], rng: () => number): T {
-  return arr[Math.floor(rng() * arr.length)]
-}
-
-function getSubjectsForCategory(category: MotionCategory): string[] {
-  switch (category) {
-    case 'planning': return PLANNING_SUBJECTS
-    case 'services': return SERVICES_SUBJECTS
-    case 'environment': return ENVIRONMENTAL_SUBJECTS
-    case 'budget': return BUDGET_SUBJECTS
-    case 'governance': return GOVERNANCE_SUBJECTS
-  }
-}
-
-function generateProceduralMotion(rng: () => number): Omit<CouncilMotion, 'id' | 'proposerId' | 'proposerName' | 'status' | 'votes' | 'partyWhipDirection' | 'playerVote' | 'whipIssuerId' | 'whipIssuerName'> {
-  const template = pickFrom(MOTION_TEMPLATES, rng)
-  const subjects = getSubjectsForCategory(template.category)
-  const subject = pickFrom(subjects, rng)
-  const location = pickFrom(LOCATIONS, rng)
-  const scope = pickScope(rng)
-  const scopeMod = SCOPE_MODIFIERS[scope]
-
-  const headline = template.pattern
-    .replace('{subject}', subject)
-    .replace('{location}', location)
-
-  const scopeAdj = scopeMod.adjectives.length > 0 ? pickFrom(scopeMod.adjectives, rng) + ' ' : ''
-  const description = template.descPattern
-    .replace('{subject}', subject)
-    .replace('{location}', location)
-    .replace('{scope}', scopeAdj)
-
-  const ideologyLean: Partial<PoliticalValues> = {}
-  if (template.baseLean.change !== undefined) ideologyLean.change = Math.round(template.baseLean.change * scopeMod.multiplier)
-  if (template.baseLean.growth !== undefined) ideologyLean.growth = Math.round(template.baseLean.growth * scopeMod.multiplier)
-  if (template.baseLean.services !== undefined) ideologyLean.services = Math.round(template.baseLean.services * scopeMod.multiplier)
-
-  const blocImpact: Record<string, number> = {}
-  for (const [bloc, val] of Object.entries(template.baseBlocImpact)) {
-    blocImpact[bloc] = Math.round(val * scopeMod.multiplier)
-  }
-
-  return { headline, description, category: template.category, ideologyLean, blocImpact }
-}
-
-function blocImpactForCategory(category: MotionCategory, ideologyLean: Partial<PoliticalValues>) {
-  const categoryBlocMap: Record<MotionCategory, string[]> = {
-    environment: ['river_walkers', 'college_corner'],
-    services: ['hill_street_households', 'old_town_loyalists'],
-    planning: ['workshop_crews', 'market_regulars'],
-    budget: ['old_town_loyalists', 'market_regulars'],
-    governance: ['pondside_peacemakers', 'college_corner'],
-  }
-  const magnitude = Math.abs(ideologyLean.change ?? 0) + Math.abs(ideologyLean.growth ?? 0) + Math.abs(ideologyLean.services ?? 0)
-  return Object.fromEntries(categoryBlocMap[category].map((bloc) => [bloc, Math.round(magnitude * 0.1)]))
-}
-
-export function generateCouncilSession(world: World): World {
-  if (!world.politicianMode) return world
-  const pm = world.politicianMode
-  if (!pm.politician.isIncumbent) return world
-
-  const rng = createRng(world.seed + world.week * 3331)
-  const queuedMotion = pm.queuedMotion
-  const m = queuedMotion
-    ? {
-        headline: queuedMotion.headline,
-        description: queuedMotion.description,
-        category: queuedMotion.category,
-        ideologyLean: queuedMotion.ideologyLean,
-        blocImpact: blocImpactForCategory(queuedMotion.category, queuedMotion.ideologyLean),
-      }
-    : generateProceduralMotion(rng)
-
-  const { directions: whipDirection, whipIssuer } = buildPartyWhips(world, m.ideologyLean, m.category, pm)
-
-  const ayePartyIds = new Set(Object.entries(whipDirection).filter(([, d]) => d === 'aye').map(([id]) => id))
-  const ayeCouncillors = pm.councillors.filter((c) => ayePartyIds.has(c.partyId))
-  let proposer: { id: string; name: string; partyId: string }
-  if (queuedMotion) {
-    proposer = pm.politician
-  } else if (ayeCouncillors.length > 0) {
-    proposer = pickFrom(ayeCouncillors, rng)
-  } else {
-    const sorted = [...pm.councillors].sort((a, b) => ideologyDistanceToMotion(a.personalValues, m.ideologyLean) - ideologyDistanceToMotion(b.personalValues, m.ideologyLean))
-    proposer = sorted[0]
-    whipDirection[proposer.partyId] = 'aye'
-  }
-
-  const motions: CouncilMotion[] = [{
-    ...m,
-    id: `motion_${world.week}_0`,
-    proposerId: proposer.id,
-    proposerName: proposer.name,
-    status: 'voting' as const,
-    votes: [],
-    partyWhipDirection: whipDirection,
-    playerVote: queuedMotion ? 'aye' : undefined,
-    whipIssuerId: whipIssuer?.id,
-    whipIssuerName: whipIssuer?.name,
-  }]
-
-  return {
-    ...world,
-    politicianMode: {
-      ...pm,
-      queuedMotion: undefined,
-      currentSession: { week: world.week, motions, resolved: false },
-    },
-  }
+  return arr[Math.floor(rng() * arr.length) % arr.length]
 }
 
 function motionLeanToValues(lean: Partial<PoliticalValues>): PoliticalValues {
@@ -4801,19 +4775,181 @@ function ideologyDistanceToMotion(values: PoliticalValues, lean: Partial<Politic
   return valueDistance(values, motionLeanToValues(lean), { change: 1, growth: 1, services: 1 })
 }
 
-function supportBand(values: PoliticalValues, motion: Pick<CouncilMotion, 'ideologyLean' | 'category'> | { ideologyLean: Partial<PoliticalValues>; category: MotionCategory }) {
-  const technicalAllowance = motion.category === 'services' || motion.category === 'governance' ? 900 : 0
-  const distance = Math.max(0, ideologyDistanceToMotion(values, motion.ideologyLean) - technicalAllowance)
-  if (distance <= 2200) return 'support' as const
-  if (distance >= 9000) return 'oppose' as const
+function contestednessFromSignals(leanMagnitude: number, costSignal: number): CouncilMotion['contestedness'] {
+  const score = leanMagnitude / 60 + costSignal
+  if (score < 0.85) return 'broad'
+  if (score < 1.35) return 'contested'
+  return 'divisive'
+}
+
+function leanForArea(category: MotionCategory, intervention: string, rng: () => number): Partial<PoliticalValues> {
+  const base: Partial<PoliticalValues> = {}
+  const swing = () => Math.round((rng() * 36) - 10)
+  if (category === 'environment' || category === 'governance') base.change = 18 + swing()
+  if (category === 'planning' || category === 'economy' || category === 'housing') base.growth = 16 + swing()
+  if (category === 'services' || category === 'safety' || category === 'budget') base.services = 16 + swing()
+  if (intervention.includes('cut') || intervention.includes('sell') || intervention.includes('freeze') || intervention.includes('waive')) {
+    base.services = (base.services ?? 0) - 28
+    base.growth = (base.growth ?? 0) + 14
+  }
+  if (intervention.includes('raise') || intervention.includes('charge') || intervention.includes('ban') || intervention.includes('require')) {
+    base.change = (base.change ?? 0) + 16
+    base.growth = (base.growth ?? 0) - 14
+  }
+  if (rng() < 0.45) {
+    const secondary = VALUE_KEYS[Math.floor(rng() * VALUE_KEYS.length)]
+    base[secondary] = (base[secondary] ?? 0) + Math.round((rng() * 30) - 15)
+  }
+  return base
+}
+
+function blocImpactForCategory(category: MotionCategory, ideologyLean: Partial<PoliticalValues>, costSignal: number) {
+  const categoryBlocMap: Record<MotionCategory, string[]> = {
+    environment: ['river_walkers', 'college_corner'],
+    services: ['hill_street_households', 'old_town_loyalists'],
+    planning: ['workshop_crews', 'market_regulars'],
+    housing: ['hill_street_households', 'college_corner'],
+    transport: ['workshop_crews', 'river_walkers'],
+    safety: ['pondside_peacemakers', 'market_regulars'],
+    economy: ['market_regulars', 'workshop_crews'],
+    budget: ['old_town_loyalists', 'market_regulars'],
+    governance: ['pondside_peacemakers', 'college_corner'],
+  }
+  const magnitude = Math.abs(ideologyLean.change ?? 0) + Math.abs(ideologyLean.growth ?? 0) + Math.abs(ideologyLean.services ?? 0)
+  const sign = (ideologyLean.services ?? 0) >= 0 ? 1 : -1
+  return Object.fromEntries((categoryBlocMap[category] ?? ['pondside_peacemakers']).map((bloc, index) => [
+    bloc,
+    Math.round((magnitude * 0.08 + costSignal * 8) * (index === 0 ? sign : -sign * 0.6)),
+  ]))
+}
+
+function generateProceduralMotion(rng: () => number, recentHeadlines: string[] = [], preferredCategory?: MotionCategory): GeneratedMotion {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const area = preferredCategory
+      ? POLICY_AREAS.find((entry) => entry.category === preferredCategory) ?? pickFrom(POLICY_AREAS, rng)
+      : pickFrom(POLICY_AREAS, rng)
+    const intervention = pickFrom(area.interventions, rng)
+    const subject = pickFrom(area.subjects, rng)
+    const location = pickFrom(LOCATIONS, rng)
+    const mechanism = pickFrom(area.mechanisms, rng)
+    const beneficiary = pickFrom(area.beneficiaries, rng)
+    const tradeOff = pickFrom(area.tradeOffs, rng)
+    const costSignal = clamp(0.2 + rng() * 0.7 + (intervention.includes('raise') || intervention.includes('ban') || intervention.includes('sell') || intervention.includes('cut') ? 0.15 : 0), 0, 1)
+    const ideologyLean = leanForArea(area.category, intervention, rng)
+    const leanMagnitude = Math.abs(ideologyLean.change ?? 0) + Math.abs(ideologyLean.growth ?? 0) + Math.abs(ideologyLean.services ?? 0)
+    const contestedness = contestednessFromSignals(leanMagnitude, costSignal)
+    const headline = `${intervention[0].toUpperCase()}${intervention.slice(1)} ${subject} around ${location}`
+    if (recentHeadlines.some((entry) => entry.toLowerCase() === headline.toLowerCase())) continue
+    const description = `Council is asked to ${intervention} ${subject} ${mechanism}, aiming to help ${beneficiary}. Officers warn of ${tradeOff}.`
+    return {
+      headline,
+      description,
+      category: area.category,
+      kind: 'ordinary',
+      ideologyLean,
+      blocImpact: blocImpactForCategory(area.category, ideologyLean, costSignal),
+      costSignal,
+      contestedness,
+    }
+  }
+  return {
+    headline: 'Review neighbourhood service standards',
+    description: 'A routine review of service standards with limited fiscal impact.',
+    category: 'services',
+    kind: 'ordinary',
+    ideologyLean: { services: 6 },
+    blocImpact: { hill_street_households: 4 },
+    costSignal: 0.2,
+    contestedness: 'broad',
+  }
+}
+
+export function listMotionPromptOptions(category: MotionCategory) {
+  const area = POLICY_AREAS.find((entry) => entry.category === category) ?? POLICY_AREAS[0]
+  return {
+    interventions: area.interventions,
+    subjects: area.subjects,
+    locations: LOCATIONS,
+    mechanisms: area.mechanisms,
+    beneficiaries: area.beneficiaries,
+    tradeOffs: area.tradeOffs,
+  }
+}
+
+export function assembleMotionDraft(parts: {
+  category: MotionCategory
+  intervention: string
+  subject: string
+  location: string
+  seedSalt?: number
+}): CustomMotionInput & { contestedness: CouncilMotion['contestedness'] } {
+  const area = POLICY_AREAS.find((entry) => entry.category === parts.category) ?? POLICY_AREAS[0]
+  const rng = createRng((parts.seedSalt ?? 1) + parts.intervention.length * 17 + parts.subject.length * 31)
+  const mechanism = pickFrom(area.mechanisms, rng)
+  const beneficiary = pickFrom(area.beneficiaries, rng)
+  const tradeOff = pickFrom(area.tradeOffs, rng)
+  const ideologyLean = roundPoliticalValues(motionLeanToValues(leanForArea(parts.category, parts.intervention, rng)))
+  const costSignal = clamp(0.25 + (parts.intervention.includes('raise') || parts.intervention.includes('ban') || parts.intervention.includes('cut') ? 0.2 : 0.1), 0, 1)
+  const leanMagnitude = Math.abs(ideologyLean.change) + Math.abs(ideologyLean.growth) + Math.abs(ideologyLean.services)
+  return {
+    headline: `${parts.intervention[0].toUpperCase()}${parts.intervention.slice(1)} ${parts.subject} around ${parts.location}`.slice(0, 80),
+    description: `Council is asked to ${parts.intervention} ${parts.subject} ${mechanism}, aiming to help ${beneficiary}. Officers warn of ${tradeOff}.`.slice(0, 150),
+    category: parts.category,
+    ideologyLean,
+    kind: 'ordinary',
+    costSignal,
+    contestedness: contestednessFromSignals(leanMagnitude, costSignal),
+  }
+}
+
+export function suggestCustomMotion(seedSalt: number, recentHeadlines: string[] = [], category?: MotionCategory): CustomMotionInput & { contestedness: CouncilMotion['contestedness'] } {
+  const generated = generateProceduralMotion(createRng(seedSalt), recentHeadlines, category)
+  return {
+    headline: generated.headline.slice(0, 80),
+    description: generated.description.slice(0, 150),
+    category: generated.category,
+    ideologyLean: roundPoliticalValues(motionLeanToValues(generated.ideologyLean)),
+    kind: 'ordinary',
+    costSignal: generated.costSignal,
+    contestedness: generated.contestedness,
+  }
+}
+
+export function previewMotionContestedness(ideologyLean: PoliticalValues, costSignal = 0.4): CouncilMotion['contestedness'] {
+  const leanMagnitude = Math.abs(ideologyLean.change) + Math.abs(ideologyLean.growth) + Math.abs(ideologyLean.services)
+  return contestednessFromSignals(leanMagnitude, costSignal)
+}
+
+function supportBand(
+  values: PoliticalValues,
+  motion: Pick<CouncilMotion, 'ideologyLean' | 'category' | 'costSignal' | 'contestedness'> | { ideologyLean: Partial<PoliticalValues>; category: MotionCategory; costSignal?: number; contestedness?: CouncilMotion['contestedness'] },
+) {
+  const technicalAllowance = motion.contestedness === 'broad' ? 400 : 0
+  const costPenalty = (motion.costSignal ?? 0.4) * 4200
+  const distance = Math.max(0, ideologyDistanceToMotion(values, motion.ideologyLean) - technicalAllowance + costPenalty)
+  const supportCut = motion.contestedness === 'broad' ? 2200 : motion.contestedness === 'divisive' ? 900 : 1400
+  const opposeCut = motion.contestedness === 'broad' ? 7000 : motion.contestedness === 'divisive' ? 3200 : 4800
+  if (distance <= supportCut) return 'support' as const
+  if (distance >= opposeCut) return 'oppose' as const
   return 'mixed' as const
 }
 
-function buildPartyWhips(world: World, ideologyLean: Partial<PoliticalValues>, category: MotionCategory, pm: PoliticianModeState) {
+function buildPartyWhips(world: World, motion: Pick<CouncilMotion, 'ideologyLean' | 'category' | 'costSignal' | 'contestedness' | 'kind'>, pm: PoliticianModeState) {
   const directions: Record<string, 'aye' | 'nay' | 'free'> = {}
+  const governingIds = new Set<string>()
+  if (world.isGoverning) {
+    governingIds.add(world.playerPartyId)
+    if (world.coalitionPartnerId) governingIds.add(world.coalitionPartnerId)
+  }
   for (const party of world.parties) {
-    const band = supportBand(party.values, { ideologyLean, category })
-    directions[party.id] = band === 'support' ? 'aye' : band === 'oppose' ? 'nay' : 'free'
+    const band = supportBand(party.values, motion)
+    let direction: 'aye' | 'nay' | 'free' = band === 'support' ? 'aye' : band === 'oppose' ? 'nay' : 'free'
+    if (motion.contestedness === 'divisive' && band === 'support' && (motion.costSignal ?? 0) > 0.7 && rngLike(world, party.id) > 0.55) {
+      direction = 'free'
+    }
+    if (governingIds.has(party.id) && motion.kind === 'budget') direction = 'aye'
+    if (world.minorityGovernment && !governingIds.has(party.id) && band === 'mixed') direction = 'free'
+    directions[party.id] = direction
   }
   const playerPartyNPCs = pm.councillors.filter((councillor) => councillor.partyId === pm.politician.partyId)
   if (playerPartyNPCs.length === 0) directions[pm.politician.partyId] = 'free'
@@ -4821,6 +4957,141 @@ function buildPartyWhips(world: World, ideologyLean: Partial<PoliticalValues>, c
     ? playerPartyNPCs.reduce((a, b) => b.influence > a.influence ? b : a)
     : undefined
   return { directions, whipIssuer }
+}
+
+function rngLike(world: World, salt: string) {
+  const key = `${world.seed}-${world.week}-${salt}`
+  const roll = [...key].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0)
+  return (Math.abs(roll) % 10000) / 10000
+}
+
+function motionFromInput(input: CustomMotionInput): GeneratedMotion {
+  const costSignal = input.costSignal ?? clamp((Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)) / 120, 0.2, 1)
+  const leanMagnitude = Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)
+  return {
+    headline: input.headline || 'Untitled Motion',
+    description: input.description || '',
+    category: input.category,
+    kind: input.kind ?? (input.targetMotionId ? 'repeal' : 'ordinary'),
+    ideologyLean: input.ideologyLean,
+    blocImpact: blocImpactForCategory(input.category, input.ideologyLean, costSignal),
+    costSignal,
+    contestedness: contestednessFromSignals(leanMagnitude, costSignal),
+    targetMotionId: input.targetMotionId,
+    budgetProposal: input.budgetProposal,
+  }
+}
+
+function buildMotionRecord(world: World, pm: PoliticianModeState, generated: GeneratedMotion, proposer: { id: string; name: string }, id: string, playerVote?: 'aye' | 'nay' | 'abstain'): CouncilMotion {
+  const { directions, whipIssuer } = buildPartyWhips(world, generated, pm)
+  return {
+    ...generated,
+    id,
+    proposerId: proposer.id,
+    proposerName: proposer.name,
+    status: 'voting',
+    votes: [],
+    partyWhipDirection: directions,
+    playerVote,
+    whipIssuerId: whipIssuer?.id,
+    whipIssuerName: whipIssuer?.name,
+  }
+}
+
+export function playerPartyIsGoverning(world: World) {
+  return world.isGoverning
+}
+
+export function governingStatusLabel(world: World): string {
+  if (world.needsCoalition) return 'Hung council'
+  if (world.isGoverning && world.coalitionPartnerId) {
+    const partner = world.parties.find((party) => party.id === world.coalitionPartnerId)
+    return `Coalition · ${partner?.name ?? 'partner'}`
+  }
+  if (world.isGoverning && world.minorityGovernment) return 'Minority government'
+  if (world.isGoverning) return 'Majority government'
+  const mayor = world.currentMayorParty
+  return mayor ? `Opposition · ${mayor} governing` : 'Opposition'
+}
+
+export function generateCouncilSession(world: World): World {
+  if (!world.politicianMode) return world
+  const pm = world.politicianMode
+  if (!pm.politician.isIncumbent) return world
+
+  const budgetDue = world.week >= pm.nextBudgetWeek
+  const ordinaryDue = world.week >= pm.nextSessionWeek
+  if (budgetDue && ordinaryDue) {
+    return generateCouncilSession({
+      ...world,
+      politicianMode: { ...pm, nextBudgetWeek: world.week + 1 },
+    })
+  }
+
+  const isBudgetSession = budgetDue && !ordinaryDue
+  const rng = createRng(world.seed + world.week * 3331 + (isBudgetSession ? 17 : 0))
+
+  if (isBudgetSession) {
+    const amendment = pm.queuedMotion?.kind === 'budget' && pm.queuedMotion.budgetProposal ? pm.queuedMotion : undefined
+    const proposed = normalizeBudget(amendment?.budgetProposal ?? pm.proposedBudget ?? world.budget)
+    const lean = budgetIdeologyLean(proposed)
+    const isAmendment = Boolean(amendment)
+    const generated: GeneratedMotion = {
+      headline: amendment ? amendment.headline : 'Adopt the council budget',
+      description: amendment
+        ? amendment.description
+        : 'Approve the governing administration\'s balanced service allocations for the coming year.',
+      category: 'budget',
+      kind: 'budget',
+      ideologyLean: lean,
+      blocImpact: Object.fromEntries(proposed.categories.flatMap((category) => category.blocs.map((bloc) => [bloc, Math.round((category.funding - 50) / 5)]))),
+      costSignal: isAmendment ? 0.55 : 0.35,
+      contestedness: isAmendment ? 'contested' : 'broad',
+      budgetProposal: proposed,
+    }
+    const proposer = amendment || playerPartyIsGoverning(world)
+      ? pm.politician
+      : [...pm.councillors].sort((a, b) => b.influence - a.influence)[0] ?? pm.politician
+    const motion = buildMotionRecord(world, pm, generated, proposer, `budget_${world.week}`, proposer.id === pm.politician.id ? 'aye' : undefined)
+    return {
+      ...world,
+      politicianMode: {
+        ...pm,
+        queuedMotion: amendment ? undefined : pm.queuedMotion,
+        proposedBudget: amendment ? proposed : pm.proposedBudget,
+        currentSession: { week: world.week, motions: [motion], resolved: false, budgetSession: true },
+      },
+    }
+  }
+
+  const queuedMotion = pm.queuedMotion
+  const recent = pm.legislationHistory.map((motion) => motion.headline)
+  const generated = queuedMotion ? motionFromInput(queuedMotion) : generateProceduralMotion(rng, recent)
+  const { directions } = buildPartyWhips(world, generated, pm)
+  const ayePartyIds = new Set(Object.entries(directions).filter(([, d]) => d === 'aye').map(([id]) => id))
+  const ayeCouncillors = pm.councillors.filter((c) => ayePartyIds.has(c.partyId))
+  let proposer: { id: string; name: string }
+  if (queuedMotion) {
+    proposer = pm.politician
+  } else if (ayeCouncillors.length > 0) {
+    proposer = pickFrom(ayeCouncillors, rng)
+  } else {
+    proposer = [...pm.councillors].sort((a, b) => ideologyDistanceToMotion(a.personalValues, generated.ideologyLean) - ideologyDistanceToMotion(b.personalValues, generated.ideologyLean))[0] ?? pm.politician
+  }
+  const motion = buildMotionRecord(world, pm, generated, proposer, `motion_${world.week}_0`, queuedMotion ? 'aye' : undefined)
+  if (!ayePartyIds.has(proposer.id === pm.politician.id ? pm.politician.partyId : (pm.councillors.find((c) => c.id === proposer.id)?.partyId ?? '')) && proposer.id !== pm.politician.id) {
+    const partyId = pm.councillors.find((c) => c.id === proposer.id)?.partyId
+    if (partyId) motion.partyWhipDirection[partyId] = 'aye'
+  }
+
+  return {
+    ...world,
+    politicianMode: {
+      ...pm,
+      queuedMotion: undefined,
+      currentSession: { week: world.week, motions: [motion], resolved: false, budgetSession: false },
+    },
+  }
 }
 
 export type PredictedStance = 'aye' | 'lean_aye' | 'undecided' | 'lean_nay' | 'nay'
@@ -4831,19 +5102,19 @@ export function predictCouncillorVote(councillor: Councillor, motion: CouncilMot
   if (committedVote) return committedVote.vote === 'aye' ? 'aye' : committedVote.vote === 'nay' ? 'nay' : 'undecided'
   const whip = motion.partyWhipDirection[councillor.partyId] ?? 'free'
   const personalLeans = supportBand(councillor.personalValues, motion)
+  const minorityPressure = world.minorityGovernment ? 0.1 : 0
 
   if (whip === 'aye' && personalLeans === 'support') return 'aye'
   if (whip === 'nay' && personalLeans === 'oppose') return 'nay'
-  if (whip === 'aye' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.3 ? 'lean_aye' : 'aye'
-  if (whip === 'nay' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.3 ? 'lean_nay' : 'nay'
-  if (whip === 'aye' && personalLeans === 'oppose') return councillor.rebellionTendency > 0.25 ? 'lean_nay' : 'lean_aye'
-  if (whip === 'nay' && personalLeans === 'support') return councillor.rebellionTendency > 0.25 ? 'lean_aye' : 'lean_nay'
+  if (whip === 'aye' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.28 ? 'lean_aye' : 'aye'
+  if (whip === 'nay' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.28 ? 'lean_nay' : 'nay'
+  if (whip === 'aye' && personalLeans === 'oppose') return councillor.rebellionTendency + minorityPressure > 0.22 ? 'lean_nay' : 'lean_aye'
+  if (whip === 'nay' && personalLeans === 'support') return councillor.rebellionTendency + minorityPressure > 0.22 ? 'lean_aye' : 'lean_nay'
   if (whip === 'free') {
-    if (personalLeans === 'support') return 'lean_aye'
-    if (personalLeans === 'oppose') return 'lean_nay'
+    if (personalLeans === 'support') return motion.contestedness === 'broad' ? 'aye' : 'lean_aye'
+    if (personalLeans === 'oppose') return motion.contestedness === 'broad' ? 'nay' : 'lean_nay'
     return 'undecided'
   }
-  void world
   return 'undecided'
 }
 
@@ -4851,64 +5122,37 @@ export function createCustomMotion(world: World, input: CustomMotionInput): Worl
   if (!world.politicianMode?.currentSession) return world
   const pm = world.politicianMode
   const session = pm.currentSession!
+  if (session.resolved || session.budgetSession) return world
   const pol = pm.politician
-  const influenceCost = 8
-  if (pol.influence < influenceCost) return world
-
-  const { directions: whipDirection, whipIssuer } = buildPartyWhips(world, input.ideologyLean, input.category, pm)
-
-  const blocImpact: Record<string, number> = {}
-  const categoryBlocMap: Record<string, string[]> = {
-    environment: ['river_walkers', 'college_corner'],
-    services: ['hill_street_households', 'old_town_loyalists'],
-    planning: ['workshop_crews', 'market_regulars'],
-    budget: ['old_town_loyalists', 'market_regulars'],
-    governance: ['pondside_peacemakers', 'college_corner'],
-  }
-  const relevantBlocs = categoryBlocMap[input.category] ?? []
-  const leanMagnitude = Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)
-  for (const bloc of relevantBlocs) {
-    blocImpact[bloc] = Math.round(leanMagnitude * 0.1)
-  }
-
-  const newMotion: CouncilMotion = {
-    id: `motion_${world.week}_player_custom`,
-    proposerId: pol.id,
-    proposerName: pol.name,
-    headline: input.headline || 'Untitled Motion',
-    description: input.description || '',
-    category: input.category,
-    ideologyLean: input.ideologyLean,
-    blocImpact,
-    status: 'voting',
-    votes: [],
-    partyWhipDirection: whipDirection,
-    playerVote: 'aye',
-    whipIssuerId: whipIssuer?.id,
-    whipIssuerName: whipIssuer?.name,
-  }
-
+  if (pol.influence < MOTION_PROPOSAL_INFLUENCE_COST) return world
+  const generated = motionFromInput(input)
+  const motion = buildMotionRecord(world, pm, generated, pol, `motion_${world.week}_player_custom`, 'aye')
   return {
     ...world,
     politicianMode: {
       ...pm,
-      politician: { ...pol, influence: pol.influence - influenceCost },
-      currentSession: { ...session, motions: [...session.motions, newMotion] },
+      politician: {
+        ...pol,
+        influence: pol.influence - MOTION_PROPOSAL_INFLUENCE_COST,
+        careerHistory: [...pol.careerHistory, { week: world.week, description: `Proposed motion: ${motion.headline} (−${MOTION_PROPOSAL_INFLUENCE_COST} influence)`, tier: pol.careerTier }],
+      },
+      currentSession: { ...session, motions: [motion] },
     },
   }
 }
 
 export function queueCustomMotion(world: World, input: CustomMotionInput): World {
   const pm = world.politicianMode
-  if (!pm || pm.queuedMotion || pm.politician.influence < 8) return world
+  const cost = input.kind === 'budget' ? BUDGET_AMENDMENT_INFLUENCE_COST : MOTION_PROPOSAL_INFLUENCE_COST
+  if (!pm || pm.queuedMotion || pm.politician.influence < cost) return world
   return {
     ...world,
-    newsFeed: [`Week ${world.week}: You have queued "${input.headline}" for the next council session.`, ...world.newsFeed].slice(0, 30),
+    newsFeed: [`Week ${world.week}: You queued "${input.headline}" for the next council session (−${cost} influence).`, ...world.newsFeed].slice(0, 30),
     politicianMode: {
       ...pm,
       politician: {
         ...pm.politician,
-        influence: pm.politician.influence - 8,
+        influence: pm.politician.influence - cost,
         careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier }],
       },
       queuedMotion: input,
@@ -4916,18 +5160,31 @@ export function queueCustomMotion(world: World, input: CustomMotionInput): World
   }
 }
 
+export function queueRepealMotion(world: World, targetMotionId: string, rationale: string): World {
+  const pm = world.politicianMode
+  const target = pm?.legislationHistory.find((motion) => motion.id === targetMotionId && motion.status === 'passed')
+  if (!pm || !target || !pm.politician.isIncumbent) return world
+  return queueCustomMotion(world, {
+    headline: `Repeal: ${target.headline}`,
+    description: rationale || `Repeal the previously passed motion "${target.headline}".`,
+    category: target.category,
+    ideologyLean: {
+      change: -(target.ideologyLean.change ?? 0),
+      growth: -(target.ideologyLean.growth ?? 0),
+      services: -(target.ideologyLean.services ?? 0),
+    },
+    kind: 'repeal',
+    targetMotionId,
+    costSignal: Math.min(1, (target.costSignal ?? 0.5) + 0.2),
+  })
+}
+
 export function castPlayerVote(world: World, motionId: string, vote: 'aye' | 'nay' | 'abstain'): World {
   if (!world.politicianMode?.currentSession) return world
   const pm = world.politicianMode
   const session = pm.currentSession!
-  const motions = session.motions.map((m) => {
-    if (m.id !== motionId) return m
-    return { ...m, playerVote: vote }
-  })
-  return {
-    ...world,
-    politicianMode: { ...pm, currentSession: { ...session, motions } },
-  }
+  const motions = session.motions.map((m) => m.id !== motionId ? m : { ...m, playerVote: vote })
+  return { ...world, politicianMode: { ...pm, currentSession: { ...session, motions } } }
 }
 
 export function resolveCouncilSession(world: World): World {
@@ -4936,6 +5193,10 @@ export function resolveCouncilSession(world: World): World {
   const session = pm.currentSession!
   const rng = createRng(world.seed + world.week * 4441)
   let pol = pm.politician
+  let nextBudget = world.budget
+  let proposedBudget = pm.proposedBudget
+  let nextBudgetWeek = pm.nextBudgetWeek
+  let budgetHistory = pm.budgetHistory
 
   const resolvedMotions = session.motions.map((motion) => {
     const votes: CouncilMotionVote[] = []
@@ -4953,24 +5214,30 @@ export function resolveCouncilSession(world: World): World {
       let baseVote: 'aye' | 'nay' | 'abstain'
       if (whip === 'free') {
         const personalBand = supportBand(cllr.personalValues, motion)
-        baseVote = personalBand === 'support' ? 'aye' : personalBand === 'oppose' ? 'nay' : 'abstain'
+        if (personalBand === 'support') baseVote = motion.contestedness === 'broad' ? (rng() < 0.82 ? 'aye' : 'abstain') : rng() < 0.62 ? 'aye' : (rng() < 0.55 ? 'abstain' : 'nay')
+        else if (personalBand === 'oppose') baseVote = motion.contestedness === 'broad' ? (rng() < 0.82 ? 'nay' : 'abstain') : rng() < 0.68 ? 'nay' : (rng() < 0.55 ? 'abstain' : 'aye')
+        else baseVote = rng() < 0.42 ? 'abstain' : (rng() < 0.42 ? 'aye' : 'nay')
       } else {
         baseVote = whip
       }
-      if (rng() < cllr.rebellionTendency && whip !== 'free') {
-        baseVote = whip === 'aye' ? 'nay' : 'aye'
+      const governingIds = new Set<string>()
+      if (world.isGoverning) {
+        governingIds.add(world.playerPartyId)
+        if (world.coalitionPartnerId) governingIds.add(world.coalitionPartnerId)
       }
+      const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
+      const rebellionChance = (
+        cllr.rebellionTendency
+        + (motion.contestedness === 'divisive' ? 0.18 : motion.contestedness === 'contested' ? 0.08 : 0.02)
+        + (world.minorityGovernment ? 0.1 : 0)
+        + (motion.costSignal * 0.1)
+      ) * (governingBudgetWhip ? 0.45 : 1)
+      if (rng() < rebellionChance && whip !== 'free') baseVote = whip === 'aye' ? 'nay' : 'aye'
       const relationship = pol.relationships.find((r) => r.targetId === cllr.id)
-      if (relationship && relationship.strength > 40 && rng() < 0.2) {
-        baseVote = motion.playerVote ?? baseVote
-      }
+      if (relationship && relationship.strength > 40 && rng() < 0.18) baseVote = motion.playerVote ?? baseVote
       votes.push({ councillorId: cllr.id, councillorName: cllr.name, partyId: cllr.partyId, vote: baseVote })
     }
-
-    if (motion.playerVote) {
-      votes.push({ councillorId: pol.id, councillorName: pol.name, partyId: pol.partyId, vote: motion.playerVote })
-    }
-
+    if (motion.playerVote) votes.push({ councillorId: pol.id, councillorName: pol.name, partyId: pol.partyId, vote: motion.playerVote })
     const ayes = votes.filter((v) => v.vote === 'aye').length
     const nays = votes.filter((v) => v.vote === 'nay').length
     const passed = ayes > nays
@@ -4983,31 +5250,48 @@ export function resolveCouncilSession(world: World): World {
   let rebellionCount = 0
   let reputationChange = 0
   let influenceChange = 0
+  let legislationHistory = [...pm.legislationHistory]
+  let imposedCompromiseBudget = false
 
   for (const m of resolvedMotions) {
     if (m.proposerId === pol.id) motionsProposed++
     if (m.proposerId === pol.id && m.status === 'passed') motionsPassed++
-
     if (m.playerVote) {
       const whip = m.partyWhipDirection[pol.partyId]
       const rebelled = whip !== 'free' && m.playerVote !== whip
       if (rebelled) {
         rebellionCount++
-        const maverickReduction = pol.traits.some((t) => t.id === 'maverick') ? 4 : 0
-        loyaltyChange -= (12 - maverickReduction)
+        loyaltyChange -= (12 - (pol.traits.some((t) => t.id === 'maverick') ? 4 : 0))
         reputationChange += 4
         influenceChange += 2
-      } else if (whip !== 'free') {
-        loyaltyChange += 2
-      }
+      } else if (whip !== 'free') loyaltyChange += 2
       if (m.playerVote === 'aye' && m.status === 'passed') influenceChange += 1
+    }
+    if (m.status === 'passed' && m.kind === 'budget' && m.budgetProposal) {
+      nextBudget = normalizeBudget(m.budgetProposal)
+      proposedBudget = undefined
+      nextBudgetWeek = world.week + world.electionCycleWeeks
+      budgetHistory = [...budgetHistory, { week: world.week, passed: true }]
+    } else if (m.kind === 'budget' && m.status === 'failed') {
+      proposedBudget = undefined
+      budgetHistory = [...budgetHistory, { week: world.week, passed: false }]
+      if (consecutiveBudgetFailures(budgetHistory) >= 3) {
+        nextBudget = normalizeBudget(world.budget)
+        nextBudgetWeek = world.week + world.electionCycleWeeks
+        imposedCompromiseBudget = true
+        budgetHistory = [...budgetHistory, { week: world.week, passed: true }]
+      } else {
+        nextBudgetWeek = world.week + pm.councilSessionInterval
+      }
+    }
+    if (m.status === 'passed' && m.kind === 'repeal' && m.targetMotionId) {
+      legislationHistory = legislationHistory.map((entry) => entry.id === m.targetMotionId
+        ? { ...entry, status: 'repealed', repealedById: m.id }
+        : entry)
     }
   }
 
-  if (pol.traits.some((t) => t.id === 'policy-wonk')) {
-    influenceChange += 2
-  }
-
+  if (pol.traits.some((t) => t.id === 'policy-wonk')) influenceChange += 2
   pol = {
     ...pol,
     motionsPassed,
@@ -5028,11 +5312,10 @@ export function resolveCouncilSession(world: World): World {
       if (!cllrVote) continue
       const isProposer = m.proposerId === rel.targetId
       if (cllrVote.vote === m.playerVote) {
-        const agreementBonus = isProposer && m.playerVote === 'aye' ? 10 : 5
-        strengthDelta += agreementBonus
+        strengthDelta += isProposer && m.playerVote === 'aye' ? (m.kind === 'repeal' ? 12 : 10) : 5
         if (history.length < 5) history.push(`${isProposer && m.playerVote === 'aye' ? 'Supported their motion' : 'Agreed on'}: ${m.headline}`)
       } else if (m.playerVote !== 'abstain' && cllrVote.vote !== 'abstain') {
-        strengthDelta -= isProposer ? 8 : 4
+        strengthDelta -= isProposer ? (m.kind === 'repeal' ? 10 : 8) : 4
         if (history.length < 5) history.push(`${isProposer ? 'Opposed their motion' : 'Disagreed on'}: ${m.headline}`)
       }
     }
@@ -5044,19 +5327,23 @@ export function resolveCouncilSession(world: World): World {
 
   const passedCount = resolvedMotions.filter((m) => m.status === 'passed').length
   const failedCount = resolvedMotions.filter((m) => m.status === 'failed').length
-
   let updatedTiles = world.tiles
   const passedMotions = resolvedMotions.filter((m) => m.status === 'passed')
-  if (passedMotions.length > 0) {
+  if (passedMotions.length > 0 || nextBudget !== world.budget) {
     updatedTiles = world.tiles.map((tile) => {
       let approvalBoost = 0
       for (const motion of passedMotions) {
         for (const [blocId, impact] of Object.entries(motion.blocImpact)) {
           const blocWeight = tile.blocMix[blocId] ?? 0
-          if (blocWeight > 0.1) {
-            approvalBoost += (impact / 100) * blocWeight * 0.02
-          }
+          if (blocWeight > 0.1) approvalBoost += (impact / 100) * blocWeight * 0.02
         }
+      }
+      for (const category of nextBudget.categories) {
+        const under = category.funding < 35
+        const over = category.funding > 65
+        if (!under && !over) continue
+        const weight = category.blocs.reduce((sum, bloc) => sum + (tile.blocMix[bloc] ?? 0), 0)
+        if (weight > 0.08) approvalBoost += (over ? 0.01 : -0.01) * weight
       }
       if (approvalBoost === 0) return tile
       const existingBoost = tile.campaignBoosts?.[world.playerPartyId] ?? 0
@@ -5064,59 +5351,98 @@ export function resolveCouncilSession(world: World): World {
     })
   }
 
-  const councilNews: string[] = []
-  for (const m of resolvedMotions) {
-    councilNews.push(`Week ${world.week}: Council ${m.status === 'passed' ? 'passes' : 'rejects'} "${m.headline}".`)
-  }
-
+  const councilNews = resolvedMotions.map((m) => {
+    if (m.kind === 'budget' && m.status === 'failed' && imposedCompromiseBudget) {
+      return `Week ${world.week}: After three failed votes, officers impose a compromise budget.`
+    }
+    return `Week ${world.week}: Council ${m.status === 'passed' ? 'passes' : 'rejects'} "${m.headline}".`
+  })
+  const nextOrdinaryWeek = world.week + pm.councilSessionInterval
   return {
     ...world,
+    budget: nextBudget,
     tiles: updatedTiles,
     newsFeed: [...councilNews, ...world.newsFeed].slice(0, 30),
     politicianMode: {
       ...pm,
       politician: pol,
+      proposedBudget,
+      nextBudgetWeek,
+      budgetHistory,
       currentSession: { ...session, motions: resolvedMotions, resolved: true },
       sessionHistory: [...pm.sessionHistory, { week: world.week, motionsPassed: passedCount, motionsFailed: failedCount }],
-      legislationHistory: [...pm.legislationHistory, ...resolvedMotions].slice(-40),
-      nextSessionWeek: world.week + pm.councilSessionInterval,
+      legislationHistory: [...legislationHistory, ...resolvedMotions].slice(-40),
+      nextSessionWeek: nextOrdinaryWeek,
     },
   }
 }
 
 export function proposeMotion(world: World): World {
-  if (!world.politicianMode?.currentSession) return world
+  return createCustomMotion(world, {
+    headline: 'Councillor-led local motion',
+    description: 'A short councillor-led motion for local action.',
+    category: 'services',
+    ideologyLean: { change: 5, growth: 0, services: 10 },
+  })
+}
+
+export function shouldTriggerCouncilSession(world: World): boolean {
+  if (!world.politicianMode) return false
+  if (!world.politicianMode.politician.isIncumbent) return false
+  if (world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved) return false
   const pm = world.politicianMode
-  const session = pm.currentSession!
-  const pol = pm.politician
-  const influenceCost = 8
-  if (pol.influence < influenceCost) return world
+  return world.week >= pm.nextSessionWeek || world.week >= pm.nextBudgetWeek
+}
 
-  const rng = createRng(world.seed + world.week * 6661 + session.motions.length)
-  const picked = generateProceduralMotion(rng)
-
-  const { directions: whipDirection, whipIssuer } = buildPartyWhips(world, picked.ideologyLean, picked.category, pm)
-
-  const newMotion: CouncilMotion = {
-    ...picked,
-    id: `motion_${world.week}_player_${session.motions.length}`,
-    proposerId: pol.id,
-    proposerName: pol.name,
-    status: 'voting',
-    votes: [],
-    partyWhipDirection: whipDirection,
-    playerVote: 'aye',
-    whipIssuerId: whipIssuer?.id,
-    whipIssuerName: whipIssuer?.name,
-  }
-
+export function formCoalitionGovernment(world: World, partnerId: string): World {
   return {
     ...world,
-    politicianMode: {
-      ...pm,
-      politician: { ...pol, influence: pol.influence - influenceCost },
-      currentSession: { ...session, motions: [...session.motions, newMotion] },
-    },
+    isGoverning: true,
+    coalitionPartnerId: partnerId,
+    minorityGovernment: false,
+    needsCoalition: false,
+    currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+    newsFeed: [`Week ${world.week}: A coalition administration is formed with ${world.parties.find((party) => party.id === partnerId)?.name ?? 'a partner'}.`, ...world.newsFeed].slice(0, 30),
+  }
+}
+
+export function formMinorityGovernment(world: World): World {
+  return {
+    ...world,
+    isGoverning: true,
+    minorityGovernment: true,
+    coalitionPartnerId: undefined,
+    needsCoalition: false,
+    currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+    newsFeed: [`Week ${world.week}: A minority administration takes office.`, ...world.newsFeed].slice(0, 30),
+  }
+}
+
+export function formNpcOpposition(world: World): World {
+  const largest = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)[0]
+  const majority = world.stats.councilMajority
+  if (!largest || largest.partyId === world.playerPartyId) {
+    return { ...world, needsCoalition: false, isGoverning: false, minorityGovernment: false, coalitionPartnerId: undefined }
+  }
+  const partner = [...world.nationalResults]
+    .filter((result) => result.partyId !== largest.partyId && result.partyId !== world.playerPartyId)
+    .map((result) => {
+      const party = world.parties.find((entry) => entry.id === result.partyId)
+      const lead = world.parties.find((entry) => entry.id === largest.partyId)
+      const compat = party && lead ? coalitionCompatibility(lead.values, party.values) : 0
+      return { result, compat }
+    })
+    .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)[0]
+  const canCoalition = partner && largest.seatsWon + partner.result.seatsWon >= majority && partner.compat >= 50
+  return {
+    ...world,
+    needsCoalition: false,
+    isGoverning: false,
+    minorityGovernment: false,
+    coalitionPartnerId: undefined,
+    currentMayorParty: largest.partyName,
+    currentMayorLeader: largest.leader,
+    newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${canCoalition ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}.`, ...world.newsFeed].slice(0, 30),
   }
 }
 
@@ -5220,13 +5546,6 @@ export function lobbyCouncillor(world: World, councillorId: string, motionId: st
     success,
     message,
   }
-}
-
-export function shouldTriggerCouncilSession(world: World): boolean {
-  if (!world.politicianMode) return false
-  if (!world.politicianMode.politician.isIncumbent) return false
-  if (world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved) return false
-  return world.week >= world.politicianMode.nextSessionWeek
 }
 
 // ─── Career Progression ─────────────────────────────────────────────────────

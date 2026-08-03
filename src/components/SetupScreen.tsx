@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ideologySummary } from '../lib/sim'
+import { partyIdentitySummary } from '../lib/sim'
+import { formatAxis } from '../lib/format'
 import type { PartyEdit, World } from '../types/sim'
 import { IdeologyWidget } from './IdeologyWidget'
 
@@ -14,7 +15,17 @@ interface NewGameDraft {
 function initialEdits(world: World | null): Record<string, PartyEdit> {
   return Object.fromEntries((world?.parties ?? []).map((party) => [
     party.id,
-    { id: party.id, name: party.name, leader: party.leader, colour: party.colour, values: party.values },
+    {
+      id: party.id,
+      name: party.name,
+      leader: party.leader,
+      colour: party.colour,
+      values: {
+        change: Math.round(party.values.change),
+        growth: Math.round(party.values.growth),
+        services: Math.round(party.values.services),
+      },
+    },
   ]))
 }
 
@@ -61,10 +72,7 @@ export function SetupScreen({
       selectedPartyId: parties.some((party) => party.id === current.selectedPartyId)
         ? current.selectedPartyId
         : world?.playerPartyId ?? parties[0]?.id ?? '',
-      partyEdits: Object.fromEntries(parties.map((party) => [
-        party.id,
-        current.partyEdits[party.id] ?? { id: party.id, name: party.name, leader: party.leader, colour: party.colour, values: party.values },
-      ])),
+      partyEdits: initialEdits(world),
     }))
   }
 
@@ -89,8 +97,12 @@ export function SetupScreen({
   }
 
   const generatePreview = () => {
-    onGenerate(Object.values(draft.partyEdits), draft.selectedPartyId || undefined)
+    onGenerate([], draft.selectedPartyId || undefined)
     setStep('profile')
+  }
+
+  const regenerateParties = () => {
+    onGenerate([], draft.selectedPartyId || undefined)
   }
 
   const applyUKNames = () => {
@@ -210,7 +222,16 @@ export function SetupScreen({
                   const edit = draft.partyEdits[party.id]
                   return <button key={party.id} type="button" className={`setup-party-choice${party.id === selectedParty?.id ? ' is-active' : ''}`} onClick={() => updateDraft({ selectedPartyId: party.id })}>
                     <span className="setup-party-swatch" style={{ background: edit?.colour ?? party.colour }} />
-                    <span><strong>{edit?.name ?? party.name}</strong><small>{ideologySummary(edit?.values ?? party.values)}</small></span>
+                    <span>
+                      <strong>{edit?.name ?? party.name}</strong>
+                      <small>{partyIdentitySummary({
+                        archetype: party.archetype,
+                        issueFocus: party.issueFocus,
+                        values: edit?.values ?? party.values,
+                        slogan: party.slogan,
+                      })}</small>
+                      {party.slogan && <small className="setup-party-slogan">{party.slogan}</small>}
+                    </span>
                   </button>
                 })}
               </div>
@@ -224,15 +245,30 @@ export function SetupScreen({
                     {(['change', 'growth', 'services'] as const).map((axis) => (
                       <label key={axis} className="setup-edit-field setup-edit-slider">
                         <span>{axis === 'change' ? 'Reform' : axis === 'growth' ? 'Business' : 'Services'}</span>
-                        <input type="range" min={-100} max={100} value={selectedEdit.values?.[axis] ?? selectedParty.values[axis]} onChange={(event) => updateSelectedEdit({ values: { ...(selectedEdit.values ?? selectedParty.values), [axis]: Number(event.target.value) } })} />
-                        <span className="slider-value">{selectedEdit.values?.[axis] ?? selectedParty.values[axis]}</span>
+                        <input
+                          type="range"
+                          min={-100}
+                          max={100}
+                          value={Math.round(selectedEdit.values?.[axis] ?? selectedParty.values[axis])}
+                          onChange={(event) => updateSelectedEdit({
+                            values: {
+                              ...(selectedEdit.values ?? selectedParty.values),
+                              [axis]: Math.round(Number(event.target.value)),
+                            },
+                          })}
+                        />
+                        <span className="slider-value">{formatAxis(selectedEdit.values?.[axis] ?? selectedParty.values[axis])}</span>
                       </label>
                     ))}
                   </div>
                   <IdeologyWidget values={selectedEdit.values ?? selectedParty.values} colour={selectedEdit.colour} />
                 </div>
               )}
-              <button type="button" className="setup-uk-names-btn" onClick={applyUKNames}>Use UK party names</button>
+              <div className="setup-theme-actions">
+                <button type="button" className="setup-uk-names-btn" onClick={applyUKNames}>Apply British party theme</button>
+                <button type="button" className="setup-uk-names-btn" onClick={regenerateParties}>Regenerate parties</button>
+              </div>
+              <p className="setup-hint">Regenerate reshuffles the whole town and party roster. British theme is an optional remapper.</p>
               <div className="setup-step-actions">
                 <button type="button" className="setup-btn-ghost" onClick={() => setStep('town')}>Back</button>
                 <button type="button" className="setup-btn-primary" disabled={!selectedParty} onClick={() => setStep('review')}>Review Campaign</button>

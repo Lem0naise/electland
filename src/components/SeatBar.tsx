@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { governingStatusLabel } from '../lib/sim'
 import type { World } from '../types/sim'
 
 export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboard }: {
@@ -9,18 +10,8 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
-  const isGoverning = world.isGoverning || !!world.coalitionPartnerId || world.minorityGovernment
-
-  const govLabel = (() => {
-    if (world.coalitionPartnerId) {
-      const partner = world.parties.find((p) => p.id === world.coalitionPartnerId)
-      return `Coalition · ${partner?.name ?? world.coalitionPartnerId}`
-    }
-    if (world.minorityGovernment) return 'Minority Government'
-    if (world.needsCoalition) return 'Hung Council'
-    if (world.isGoverning) return 'Majority Government'
-    return null
-  })()
+  const isGoverning = world.isGoverning
+  const govLabel = governingStatusLabel(world)
 
   const seatBreakdown = world.nationalResults.map((r) => (
     <div
@@ -57,19 +48,17 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
               {pol.isIncumbent && ` · ${pol.influence} influence`}
             </span>
           )}
-          {!isPoliticianMode && govLabel && (
-            <span className="seat-bar-gov-label">
-              <span className="seat-bar-gov-dot" />
-              {govLabel}
-            </span>
-          )}
+          <span className="seat-bar-gov-label">
+            <span className="seat-bar-gov-dot" />
+            {govLabel}
+          </span>
           <span className="seat-bar-meta">
             {hasMajority
               ? `${leading?.partyName ?? 'Leading party'} holds ${leading?.seatsWon ?? 0}/${total} seats`
               : `Hung council · ${majority} seats for a majority`}
           </span>
           <div className="seat-bar-actions">
-            {!isPoliticianMode && isGoverning && (
+            {isGoverning && !isPoliticianMode && (
               <button type="button" className="seat-bar-action-btn is-gov" onClick={onOpenDashboard}>
                 {'\uD83C\uDFDB'} Govern
               </button>

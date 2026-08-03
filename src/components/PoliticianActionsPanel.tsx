@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getPoliticianActionsByCategory } from '../lib/sim'
+import { formatAxis } from '../lib/format'
 import type { PoliticianActionResult } from '../lib/sim'
 import type { PoliticalValueKey, PoliticianActionMeta, PoliticianActionType, World } from '../types/sim'
 
@@ -117,9 +118,9 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
                       <label>
                         Axis
                         <select value={policyAxis} onChange={(event) => setPolicyAxis(event.target.value as PoliticalValueKey)} disabled={!canSetPolicy}>
-                          <option value="change">Reform · {pol.personalValues.change}</option>
-                          <option value="growth">Business · {pol.personalValues.growth}</option>
-                          <option value="services">Services · {pol.personalValues.services}</option>
+                          <option value="change">Reform · {formatAxis(pol.personalValues.change)}</option>
+                          <option value="growth">Business · {formatAxis(pol.personalValues.growth)}</option>
+                          <option value="services">Services · {formatAxis(pol.personalValues.services)}</option>
                         </select>
                       </label>
                       <label>
