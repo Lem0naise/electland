@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Constituency, World } from '../types/sim'
-import { summariseTacticalVoting } from '../lib/sim'
+import { summariseTacticalVoting, summariseWardPacts } from '../lib/sim'
 import { WardCandidateBars } from './WardCandidateBars'
 import { WardPollingHistoryModal } from './WardPollingHistoryModal'
 
@@ -20,6 +20,7 @@ export function CurrentPollingPanel({ world, constituency }: { world: World; con
   const playerWard = world.politicianMode?.politician.wardId === constituency.id
   const hasHistory = constituency.history.length > 0
   const tactical = summariseTacticalVoting(constituency)
+  const pacts = summariseWardPacts(world, constituency.id)
 
   return (
     <section className="panel current-polling-panel">
@@ -61,6 +62,16 @@ export function CurrentPollingPanel({ world, constituency }: { world: World; con
           <p>Not much tactical voting here.</p>
         )}
       </div>
+      {pacts.length > 0 && (
+        <div className="current-polling-tactical">
+          <span className="current-polling-tactical-label">Pacts</span>
+          {pacts.map((line) => (
+            <p key={`${line.standingDownPartyName}-${line.beneficiaryPartyName}`}>
+              <strong>{line.standingDownPartyName}</strong> standing down for <strong>{line.beneficiaryPartyName}</strong>
+            </p>
+          ))}
+        </div>
+      )}
       {showHistory && (
         <WardPollingHistoryModal
           world={world}

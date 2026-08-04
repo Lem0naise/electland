@@ -30,6 +30,7 @@ import {
   type TilePartyPreference,
   type TownStats,
   type VoteHistoryEntry,
+  type ElectionSeatHistoryEntry,
   type CareerTier,
   type CouncilMotion,
   type CouncilMotionVote,
@@ -1838,6 +1839,35 @@ export function summariseTacticalVoting(constituency: Constituency): TacticalVot
   return { race, squeezed, breakingThrough, active }
 }
 
+export type WardPactLine = {
+  standingDownPartyName: string
+  beneficiaryPartyName: string
+}
+
+export function summariseWardPacts(world: World, wardId: string): WardPactLine[] {
+  const partyName = (id: string) => world.parties.find((p) => p.id === id)?.name ?? id
+  const lines: WardPactLine[] = []
+
+  for (const pact of world.alliancePacts) {
+    if (pact.broken) continue
+    for (const entry of pact.entries) {
+      if (entry.wardA === wardId) {
+        lines.push({
+          standingDownPartyName: partyName(pact.partyAId),
+          beneficiaryPartyName: partyName(pact.partyBId),
+        })
+      }
+      if (entry.wardB === wardId && !entry.isUnilateral) {
+        lines.push({
+          standingDownPartyName: partyName(pact.partyBId),
+          beneficiaryPartyName: partyName(pact.partyAId),
+        })
+      }
+    }
+  }
+  return lines
+}
+
 function applyTacticalSqueeze(rankings: TilePartyPreference[], constituency?: Constituency): TilePartyPreference[] {
   if (rankings.length <= 2) return rankings
 
@@ -2983,6 +3013,7 @@ export function generateWorld(options: WorldOptions): World {
     weeklyEvent: pickWeeklyEvent(rng),
     newsFeed: [`Welcome to ${townName}. You are building a local political career. Election in ${weeksUntilElection} weeks.`],
     voteHistory: [] as VoteHistoryEntry[],
+    electionSeatHistory: [] as ElectionSeatHistoryEntry[],
     isGoverning: false,
     governanceDecisions: [] as GovernanceDecision[],
     electionNightActive: false,
@@ -3331,6 +3362,16 @@ export function simulateWeek(world: World): World {
     coalitionPartnerId: electionHappening ? undefined : world.coalitionPartnerId,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
     alliancePacts: world.alliancePacts,
+    electionSeatHistory: electionHappening
+      ? [
+          ...(world.electionSeatHistory ?? []),
+          {
+            week: world.week + 1,
+            electionNumber: world.electionsHeld + 1,
+            partySeats: Object.fromEntries(results.nationalResults.map((r) => [r.partyId, r.seatsWon])),
+          },
+        ].slice(-15)
+      : (world.electionSeatHistory ?? []),
   }
 
   if (electionHappening) {
@@ -3462,11 +3503,18 @@ export function simulateWeek(world: World): World {
       const firstSessionWeek = merged.week + politicianMode.councilSessionInterval
       politicianNews.push(`Your first council session is scheduled for week ${firstSessionWeek}.`)
     }
+    const nextSessionWeek = wonSeat
+      ? Math.max(politicianMode.nextSessionWeek, merged.week + politicianMode.councilSessionInterval)
+      : politicianMode.nextSessionWeek
+    const nextBudgetWeek = wonSeat && politicianMode.nextBudgetWeek <= merged.week
+      ? merged.week + world.electionCycleWeeks
+      : politicianMode.nextBudgetWeek
     politicianMode = {
       ...politicianMode,
       politician: { ...updatedPol, relationships: updatedRelationships },
       councillors: updatedCouncillors,
-      nextSessionWeek: firstTerm ? merged.week + politicianMode.councilSessionInterval : politicianMode.nextSessionWeek,
+      nextSessionWeek,
+      nextBudgetWeek,
     }
   }
 
@@ -5439,6 +5487,7 @@ export function shouldTriggerCouncilSession(world: World): boolean {
   if (!world.politicianMode) return false
   if (!world.politicianMode.politician.isIncumbent) return false
   if (world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved) return false
+  if (world.electionNightActive) return false
   const pm = world.politicianMode
   return world.week >= pm.nextSessionWeek || world.week >= pm.nextBudgetWeek
 }

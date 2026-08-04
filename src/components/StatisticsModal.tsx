@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { electedSeatCounts, loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
 import { VoteHistoryChart } from './VoteHistoryChart'
+import { SeatHistoryChart } from './SeatHistoryChart'
 import type { World } from '../types/sim'
 
 interface StatisticsModalProps {
@@ -424,6 +425,13 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
             <div className="stats-section">
               <div className="stats-section-label">Vote share over time</div>
               <VoteHistoryChart world={world} tall />
+            </div>
+          )}
+
+          {(world.electionSeatHistory?.length ?? 0) >= 1 && (
+            <div className="stats-section">
+              <div className="stats-section-label">Seats over time</div>
+              <SeatHistoryChart world={world} />
             </div>
           )}
 

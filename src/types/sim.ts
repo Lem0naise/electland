@@ -272,6 +272,12 @@ export interface VoteHistoryEntry {
   partySeats: Record<string, number>
 }
 
+export interface ElectionSeatHistoryEntry {
+  week: number
+  electionNumber: number
+  partySeats: Record<string, number>
+}
+
 // Election night result for dramatic reveal
 export interface ElectionNightResult {
   wardId: string
@@ -370,6 +376,7 @@ export interface World {
   weeklyEvent?: WeeklyEvent
   newsFeed: string[]
   voteHistory: VoteHistoryEntry[]
+  electionSeatHistory: ElectionSeatHistoryEntry[]
   isGoverning: boolean
   governanceDecisions: GovernanceDecision[]
   electionNightActive: boolean

@@ -27,11 +27,9 @@ export function filterCampaignHistory<T extends { week: number }>(
 export function electionBoundaryWeeks(historyWeeks: number[], world: World): number[] {
   if (historyWeeks.length === 0 || world.electionsHeld < 1) return []
   const cycle = world.electionCycleWeeks
-  // Election runs when weeksUntilElection hits 0; that week's snapshot is stored, then the
-  // next week begins the new campaign (campaignCycleStartWeek).
-  const lastElectionWeek = world.weeksUntilElection === 0
-    ? world.week
-    : campaignCycleStartWeek(world) - 1
+  // After an election advance, campaignCycleStartWeek equals the election-night week
+  // (merged.week when weeksUntilElection reset to electionCycleWeeks).
+  const lastElectionWeek = campaignCycleStartWeek(world)
   if (lastElectionWeek < 1) return []
 
   const minWeek = historyWeeks[0]

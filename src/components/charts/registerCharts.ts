@@ -1,4 +1,6 @@
 import {
+  BarController,
+  BarElement,
   CategoryScale,
   Chart as ChartJS,
   Filler,
@@ -18,6 +20,8 @@ export function registerCharts() {
     LinearScale,
     PointElement,
     LineElement,
+    BarController,
+    BarElement,
     Tooltip,
     Legend,
     Filler,

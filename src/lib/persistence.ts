@@ -70,6 +70,7 @@ function normalizeSave(data: SaveData): SaveData {
     ])),
   }))
   if (!w.voteHistory) w.voteHistory = []
+  if (!w.electionSeatHistory) w.electionSeatHistory = []
   if (!w.newsFeed) w.newsFeed = []
   if (w.pendingActionToast) w.pendingActionToast = undefined
   if (!w.activeCampaigns) w.activeCampaigns = []
