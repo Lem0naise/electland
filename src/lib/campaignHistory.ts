@@ -23,16 +23,22 @@ export function filterCampaignHistory<T extends { week: number }>(
   return entries.filter((entry) => entry.week >= start)
 }
 
-/** Week numbers that mark election boundaries within a history series (for chart markers). */
+/** Week numbers of elections that fall within a history series (for chart markers). */
 export function electionBoundaryWeeks(historyWeeks: number[], world: World): number[] {
-  if (historyWeeks.length === 0) return []
+  if (historyWeeks.length === 0 || world.electionsHeld < 1) return []
   const cycle = world.electionCycleWeeks
-  const currentStart = campaignCycleStartWeek(world)
+  // Election runs when weeksUntilElection hits 0; that week's snapshot is stored, then the
+  // next week begins the new campaign (campaignCycleStartWeek).
+  const lastElectionWeek = world.weeksUntilElection === 0
+    ? world.week
+    : campaignCycleStartWeek(world) - 1
+  if (lastElectionWeek < 1) return []
+
+  const minWeek = historyWeeks[0]
+  const weekSet = new Set(historyWeeks)
   const boundaries: number[] = []
-  for (let start = currentStart; start >= historyWeeks[0]; start -= cycle) {
-    if (start > historyWeeks[0] && historyWeeks.includes(start)) {
-      boundaries.push(start)
-    }
+  for (let week = lastElectionWeek; week >= minWeek; week -= cycle) {
+    if (weekSet.has(week)) boundaries.push(week)
   }
   return boundaries
 }

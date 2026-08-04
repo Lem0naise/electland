@@ -31,7 +31,7 @@ export function WardPollingHistoryModal({
         <div className="modal-header">
           <span className="modal-kicker">Ward polling</span>
           <h2 id="ward-history-title">{constituency.name} — polling history</h2>
-          <p className="modal-sub">Vote share by week across up to three election cycles. Highlighted lines are your party and the sitting incumbent where known. ★ marks an election.</p>
+          <p className="modal-sub">Vote share by week across up to three election cycles. Highlighted lines are your party and the sitting incumbent where known. Dashed vertical lines mark elections.</p>
         </div>
         {history.length < 2 ? (
           <p className="history-empty">Advance a few weeks to see trends.</p>

@@ -4191,6 +4191,11 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .workspace-panel > .panel, .workspace-panel > .council-composition { margin: 0; }
 .council-workspace-panel h3 { margin: 2px 0 5px; font-size: 0.92rem; }
 .council-workspace-panel p { margin: 0 0 10px; color: var(--ink-mid); font-size: 0.75rem; }
+.panel.is-locked,
+.council-workspace-panel.is-locked {
+  opacity: 0.78;
+}
+.council-workspace-panel.is-locked h3 { color: var(--ink-mid); }
 .council-queued-motion { margin-top: 10px !important; padding: 6px; border-left: 3px solid var(--accent-gold); background: rgba(184, 134, 11, 0.08); }
 .motion-composer-modal { width: min(540px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; }
 .active-legislation-list { display: grid; gap: 4px; margin-top: 5px; }

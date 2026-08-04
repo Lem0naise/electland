@@ -647,7 +647,7 @@ function App() {
                     { id: 'campaign', label: 'Actions' },
                     { id: 'ward', label: 'Ward' },
                     ...(world.politicianMode ? [{ id: 'political' as const, label: 'Political life' }] : []),
-                    ...(world.politicianMode?.politician.isIncumbent ? [{ id: 'council' as const, label: 'Council', badge: world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? '!' : undefined }] : []),
+                    ...(world.politicianMode ? [{ id: 'council' as const, label: 'Council', badge: world.politicianMode.politician.isIncumbent && world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved ? '!' : undefined }] : []),
                   ]}
                 />
                 <div className="workspace-panel">
@@ -709,9 +709,10 @@ function App() {
                       )}
                     </>
                   )}
-                  {activeWorkspaceTab === 'council' && world.politicianMode?.politician.isIncumbent && (() => {
+                  {activeWorkspaceTab === 'council' && world.politicianMode && (() => {
                     const pm = world.politicianMode!
-                    const sessionLive = pm.currentSession && !pm.currentSession.resolved
+                    const seated = pm.politician.isIncumbent
+                    const sessionLive = seated && pm.currentSession && !pm.currentSession.resolved
                     const weeksToOrdinary = Math.max(0, pm.nextSessionWeek - world.week)
                     const weeksToBudget = Math.max(0, pm.nextBudgetWeek - world.week)
                     const budgetSoon = weeksToBudget <= 4 || (sessionLive && pm.currentSession?.budgetSession)
@@ -719,57 +720,67 @@ function App() {
                     return (
                       <>
                         <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
-                        <section className="panel council-workspace-panel">
+                        <section className={`panel council-workspace-panel${seated ? '' : ' is-locked'}`}>
                           <div className="panel-kicker">Council business</div>
-                          <p className="council-gov-status">{governingStatusLabel(world)}</p>
-                          <h3>
-                            {sessionLive
-                              ? (pm.currentSession?.budgetSession ? 'Budget session is ready' : 'A council session is ready')
-                              : weeksToOrdinary <= weeksToBudget
-                                ? `Next ordinary session: week ${pm.nextSessionWeek}`
-                                : `Next budget session: week ${pm.nextBudgetWeek}`}
-                          </h3>
-                          <p>
-                            {sessionLive
-                              ? (pm.currentSession?.budgetSession
-                                ? 'Review the budget proposal, lobby colleagues, and cast your vote.'
-                                : 'Review the motion, lobby colleagues, and cast your vote.')
-                              : `Next ordinary: ${weeksToOrdinary} week${weeksToOrdinary === 1 ? '' : 's'} · next budget: ${weeksToBudget} week${weeksToBudget === 1 ? '' : 's'}.`}
-                          </p>
-                          <p className="council-influence-note">Influence: {pm.politician.influence} · proposing costs {MOTION_PROPOSAL_INFLUENCE_COST}</p>
-                          {sessionLive && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
-                          {governing && budgetSoon && (
-                            <button
-                              type="button"
-                              className="ink-button"
-                              onClick={() => { setBudgetEditorMode('propose'); setShowBudgetModal(true) }}
-                            >
-                              {pm.proposedBudget ? 'Revise government budget draft' : 'Prepare government budget draft'}
-                            </button>
+                          {!seated ? (
+                            <>
+                              <h3>Chamber locked</h3>
+                              <p>Win a seat to speak, vote, and propose motions in the council chamber.</p>
+                              <p className="council-influence-note">Choose your ward above, then campaign until election night.</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="council-gov-status">{governingStatusLabel(world)}</p>
+                              <h3>
+                                {sessionLive
+                                  ? (pm.currentSession?.budgetSession ? 'Budget session is ready' : 'A council session is ready')
+                                  : weeksToOrdinary <= weeksToBudget
+                                    ? `Next ordinary session: week ${pm.nextSessionWeek}`
+                                    : `Next budget session: week ${pm.nextBudgetWeek}`}
+                              </h3>
+                              <p>
+                                {sessionLive
+                                  ? (pm.currentSession?.budgetSession
+                                    ? 'Review the budget proposal, lobby colleagues, and cast your vote.'
+                                    : 'Review the motion, lobby colleagues, and cast your vote.')
+                                  : `Next ordinary: ${weeksToOrdinary} week${weeksToOrdinary === 1 ? '' : 's'} · next budget: ${weeksToBudget} week${weeksToBudget === 1 ? '' : 's'}.`}
+                              </p>
+                              <p className="council-influence-note">Influence: {pm.politician.influence} · proposing costs {MOTION_PROPOSAL_INFLUENCE_COST}</p>
+                              {sessionLive && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
+                              {governing && budgetSoon && (
+                                <button
+                                  type="button"
+                                  className="ink-button"
+                                  onClick={() => { setBudgetEditorMode('propose'); setShowBudgetModal(true) }}
+                                >
+                                  {pm.proposedBudget ? 'Revise government budget draft' : 'Prepare government budget draft'}
+                                </button>
+                              )}
+                              {!governing && budgetSoon && (
+                                <button
+                                  type="button"
+                                  className="ink-button secondary"
+                                  onClick={() => { setBudgetEditorMode('amend'); setShowBudgetModal(true) }}
+                                >
+                                  Propose budget amendment (10 influence)
+                                </button>
+                              )}
+                              {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (
+                                <button type="button" className="ink-button secondary" onClick={() => { setRepealTargetId(null); setShowMotionComposer(true) }}>
+                                  Propose a Motion ({MOTION_PROPOSAL_INFLUENCE_COST} influence)
+                                </button>
+                              )}
+                              {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence < MOTION_PROPOSAL_INFLUENCE_COST && (
+                                <p className="council-influence-note">Need {MOTION_PROPOSAL_INFLUENCE_COST} influence to queue a motion (you have {pm.politician.influence}).</p>
+                              )}
+                              {pm.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{pm.queuedMotion.headline}</strong> · remaining influence {pm.politician.influence}</p>}
+                            </>
                           )}
-                          {!governing && budgetSoon && (
-                            <button
-                              type="button"
-                              className="ink-button secondary"
-                              onClick={() => { setBudgetEditorMode('amend'); setShowBudgetModal(true) }}
-                            >
-                              Propose budget amendment (10 influence)
-                            </button>
-                          )}
-                          {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (
-                            <button type="button" className="ink-button secondary" onClick={() => { setRepealTargetId(null); setShowMotionComposer(true) }}>
-                              Propose a Motion ({MOTION_PROPOSAL_INFLUENCE_COST} influence)
-                            </button>
-                          )}
-                          {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence < MOTION_PROPOSAL_INFLUENCE_COST && (
-                            <p className="council-influence-note">Need {MOTION_PROPOSAL_INFLUENCE_COST} influence to queue a motion (you have {pm.politician.influence}).</p>
-                          )}
-                          {pm.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{pm.queuedMotion.headline}</strong> · remaining influence {pm.politician.influence}</p>}
                         </section>
-                        <section className="panel">
+                        <section className={`panel${seated ? '' : ' is-locked'}`}>
                           <CouncilLegislationRegister
                             motions={pm.legislationHistory}
-                            canRepeal={!pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (!pm.currentSession || pm.currentSession.resolved)}
+                            canRepeal={seated && !pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (!pm.currentSession || pm.currentSession.resolved)}
                             onRepeal={(motionId) => {
                               setRepealTargetId(motionId)
                               setShowMotionComposer(true)

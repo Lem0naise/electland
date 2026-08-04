@@ -5475,6 +5475,17 @@ export function formNpcOpposition(world: World): World {
   }
 
   if (largest.partyId === world.playerPartyId) {
+    if (largest.seatsWon >= majority) {
+      return {
+        ...world,
+        isGoverning: true,
+        minorityGovernment: false,
+        coalitionPartnerId: undefined,
+        needsCoalition: false,
+        currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+        newsFeed: [`Week ${world.week}: Party leadership forms a majority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
+      }
+    }
     const partner = [...world.nationalResults]
       .filter((result) => result.partyId !== world.playerPartyId)
       .map((result) => {
@@ -5494,6 +5505,19 @@ export function formNpcOpposition(world: World): World {
     return {
       ...formMinorityGovernment(world),
       newsFeed: [`Week ${world.week}: Party leadership forms a minority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
+    }
+  }
+
+  if (largest.seatsWon >= majority) {
+    return {
+      ...world,
+      needsCoalition: false,
+      isGoverning: false,
+      minorityGovernment: false,
+      coalitionPartnerId: undefined,
+      currentMayorParty: largest.partyName,
+      currentMayorLeader: largest.leader,
+      newsFeed: [`Week ${world.week}: ${largest.partyName} forms a majority administration. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
     }
   }
 
