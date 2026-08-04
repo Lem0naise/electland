@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { PartyShareLineChart } from './charts/PartyShareLineChart'
-import { filterCampaignHistory } from '../lib/campaignHistory'
+import { electionBoundaryWeeks, filterCampaignHistory } from '../lib/campaignHistory'
 import type { World } from '../types/sim'
 
 export const VoteHistoryChart = memo(function VoteHistoryChart({ world, tall = false }: { world: World; tall?: boolean }) {
@@ -10,6 +10,9 @@ export const VoteHistoryChart = memo(function VoteHistoryChart({ world, tall = f
   }
 
   const labels = history.map((entry) => `Wk ${entry.week}`)
+  const weeks = history.map((entry) => entry.week)
+  const boundaries = electionBoundaryWeeks(weeks, world)
+  const boundaryLabelIndices = boundaries.map((week) => weeks.indexOf(week)).filter((i) => i >= 0)
   const parties = world.nationalResults
   const datasets = parties.map((party) => ({
     label: party.partyName,
@@ -20,7 +23,12 @@ export const VoteHistoryChart = memo(function VoteHistoryChart({ world, tall = f
 
   return (
     <div className="history-chart-wrap">
-      <PartyShareLineChart labels={labels} datasets={datasets} height={tall ? 220 : 140} />
+      <PartyShareLineChart
+        labels={labels}
+        datasets={datasets}
+        height={tall ? 220 : 140}
+        boundaryLabelIndices={boundaryLabelIndices}
+      />
     </div>
   )
 })

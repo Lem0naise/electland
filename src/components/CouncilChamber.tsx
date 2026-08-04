@@ -17,15 +17,12 @@ const CONTESTEDNESS_LABEL: Record<CouncilMotion['contestedness'], string> = {
   divisive: 'Divisive',
 }
 
-export function CouncilChamber({ world, onVote, onResolve, onLobby, onProposeCustom }: {
+export function CouncilChamber({ world, onVote, onResolve, onLobby }: {
   world: World
   onVote: (motionId: string, vote: 'aye' | 'nay' | 'abstain') => void
   onResolve: () => void
   onLobby?: (councillorId: string, motionId: string, desiredVote: 'aye' | 'nay') => void
-  onProposeCustom?: (input: CustomMotionInput) => void
 }) {
-  const [showProposalForm, setShowProposalForm] = useState(false)
-
   const pm = world.politicianMode
   if (!pm?.currentSession) return null
 
@@ -34,7 +31,6 @@ export function CouncilChamber({ world, onVote, onResolve, onLobby, onProposeCus
   const allVoted = session.motions.every((m) => m.playerVote || m.status === 'passed' || m.status === 'failed')
   const isResolved = session.resolved
   const playerPartyId = world.playerPartyId
-  const canPropose = Boolean(onProposeCustom && !session.budgetSession && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST)
 
   return (
     <div className="modal-backdrop">
@@ -84,21 +80,6 @@ export function CouncilChamber({ world, onVote, onResolve, onLobby, onProposeCus
             </div>
           ) : null
         })()}
-
-        {!isResolved && !showProposalForm && canPropose && (
-          <button type="button" className="propose-motion-btn" onClick={() => setShowProposalForm(true)}>
-            Replace Agenda Motion ({MOTION_PROPOSAL_INFLUENCE_COST} influence · you have {pm.politician.influence})
-          </button>
-        )}
-
-        {showProposalForm && onProposeCustom && (
-          <ProposalForm
-            world={world}
-            onSubmit={(input) => { onProposeCustom(input); setShowProposalForm(false) }}
-            onCancel={() => setShowProposalForm(false)}
-            submitLabel={`Submit Motion (−${MOTION_PROPOSAL_INFLUENCE_COST} influence)`}
-          />
-        )}
 
         <div className="council-actions">
           {!isResolved && allVoted && (

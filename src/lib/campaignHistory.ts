@@ -1,14 +1,40 @@
 import type { Constituency, ConstituencyResult, World } from '../types/sim'
 
+const HISTORY_CYCLES = 3
+
 /** First week of the current election campaign (inclusive). */
 export function campaignCycleStartWeek(world: World): number {
   const elapsed = world.electionCycleWeeks - world.weeksUntilElection
   return Math.max(1, world.week - elapsed)
 }
 
-export function filterCampaignHistory<T extends { week: number }>(entries: T[], world: World): T[] {
-  const start = campaignCycleStartWeek(world)
+/** First week of the N-cycle history window (inclusive). */
+export function multiCycleHistoryStartWeek(world: World, cycles = HISTORY_CYCLES): number {
+  const currentStart = campaignCycleStartWeek(world)
+  return Math.max(1, currentStart - (cycles - 1) * world.electionCycleWeeks)
+}
+
+export function filterCampaignHistory<T extends { week: number }>(
+  entries: T[],
+  world: World,
+  cycles = HISTORY_CYCLES,
+): T[] {
+  const start = multiCycleHistoryStartWeek(world, cycles)
   return entries.filter((entry) => entry.week >= start)
+}
+
+/** Week numbers that mark election boundaries within a history series (for chart markers). */
+export function electionBoundaryWeeks(historyWeeks: number[], world: World): number[] {
+  if (historyWeeks.length === 0) return []
+  const cycle = world.electionCycleWeeks
+  const currentStart = campaignCycleStartWeek(world)
+  const boundaries: number[] = []
+  for (let start = currentStart; start >= historyWeeks[0]; start -= cycle) {
+    if (start > historyWeeks[0] && historyWeeks.includes(start)) {
+      boundaries.push(start)
+    }
+  }
+  return boundaries
 }
 
 type WardHistoryEntry = Constituency['history'][number]
@@ -37,5 +63,5 @@ export function wardHistoryDatasets(world: World, constituency: Constituency) {
     }
   })
 
-  return { labels, datasets, history }
+  return { labels, datasets, history, boundaryWeeks: electionBoundaryWeeks(history.map((e) => e.week), world) }
 }

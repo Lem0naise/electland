@@ -1,3 +1,4 @@
+import { electedPartyIdForWard, electedSeatCounts } from '../lib/sim'
 import type { World } from '../types/sim'
 
 export function CouncilComposition({ world, onChangeWard }: { world: World; onChangeWard: () => void }) {
@@ -5,17 +6,18 @@ export function CouncilComposition({ world, onChangeWard }: { world: World; onCh
   if (!pm) return null
 
   const majority = Math.floor(world.constituencies.length / 2) + 1
-  const seatsByParty = new Map<string, number>()
-  for (const ward of world.constituencies) {
-    seatsByParty.set(ward.leadingPartyId, (seatsByParty.get(ward.leadingPartyId) ?? 0) + 1)
-  }
+  const seatsByParty = new Map<string, number>(Object.entries(electedSeatCounts(world)))
   const leader = [...seatsByParty.entries()].sort((a, b) => b[1] - a[1])[0]
   const leadingParty = world.parties.find((party) => party.id === leader?.[0])
   const playerWard = world.constituencies.find((ward) => ward.id === pm.politician.wardId)
   const sortedWards = [...world.constituencies].sort((a, b) => {
-    const seatDifference = (seatsByParty.get(b.leadingPartyId) ?? 0) - (seatsByParty.get(a.leadingPartyId) ?? 0)
+    const partyA = electedPartyIdForWard(world, a.id) ?? ''
+    const partyB = electedPartyIdForWard(world, b.id) ?? ''
+    const seatDifference = (seatsByParty.get(partyB) ?? 0) - (seatsByParty.get(partyA) ?? 0)
     if (seatDifference !== 0) return seatDifference
-    const partyDifference = a.leadingPartyName.localeCompare(b.leadingPartyName)
+    const nameA = world.parties.find((p) => p.id === partyA)?.name ?? partyA
+    const nameB = world.parties.find((p) => p.id === partyB)?.name ?? partyB
+    const partyDifference = nameA.localeCompare(nameB)
     return partyDifference !== 0 ? partyDifference : a.name.localeCompare(b.name)
   })
 
@@ -34,17 +36,25 @@ export function CouncilComposition({ world, onChangeWard }: { world: World; onCh
       </div>
       <div className="council-dots">
         {sortedWards.map((ward) => {
-          const party = world.parties.find((entry) => entry.id === ward.leadingPartyId)
+          const electedPartyId = electedPartyIdForWard(world, ward.id)
+          const party = world.parties.find((entry) => entry.id === electedPartyId)
           const councillor = pm.councillors.find((entry) => entry.wardId === ward.id)
           const isPlayerWard = ward.id === pm.politician.wardId
-          const name = isPlayerWard && pm.politician.isIncumbent ? pm.politician.name : councillor?.name ?? ward.currentWinner?.name ?? 'Representative pending'
+          const name = isPlayerWard && pm.politician.isIncumbent
+            ? pm.politician.name
+            : councillor?.name
+              ?? (world.electionsHeld >= 1
+                ? world.electionNightResults.find((r) => r.wardId === ward.id)?.winner?.name
+                : undefined)
+              ?? 'Representative pending'
+          const partyName = party?.name ?? 'Independent'
           return (
             <span
               key={ward.id}
               className={`council-dot${isPlayerWard ? ' council-dot--player' : ''}`}
               style={{ background: party?.colour ?? '#888' }}
-              title={`${ward.name}: ${name} (${party?.name ?? ward.leadingPartyName})`}
-              aria-label={`${ward.name}, ${name}, ${party?.name ?? ward.leadingPartyName}${isPlayerWard ? ', your ward' : ''}`}
+              data-tooltip={`${name} · ${ward.name} · ${partyName}`}
+              aria-label={`${ward.name}, ${name}, ${partyName}${isPlayerWard ? ', your ward' : ''}`}
             />
           )
         })}

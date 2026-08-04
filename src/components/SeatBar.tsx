@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { governingStatusLabel } from '../lib/sim'
+import { electedSeatCounts, governingStatusLabel } from '../lib/sim'
 import type { World } from '../types/sim'
 
 export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboard }: {
@@ -12,8 +12,19 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
   const playerPartyId = world.playerPartyId
   const isGoverning = world.isGoverning
   const govLabel = governingStatusLabel(world)
+  const seatCounts = electedSeatCounts(world)
 
-  const seatBreakdown = world.nationalResults.map((r) => (
+  const partiesBySeats = [...world.parties]
+    .map((p) => ({
+      partyId: p.id,
+      partyName: p.name,
+      colour: p.colour,
+      seatsWon: seatCounts[p.id] ?? 0,
+    }))
+    .filter((p) => p.seatsWon > 0)
+    .sort((a, b) => b.seatsWon - a.seatsWon || a.partyName.localeCompare(b.partyName))
+
+  const seatBreakdown = partiesBySeats.map((r) => (
     <div
       key={r.partyId}
       className={`seat-bar-segment${r.partyId === playerPartyId ? ' is-player' : ''}`}
@@ -22,9 +33,9 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
     />
   ))
 
-  const filled = world.nationalResults.reduce((s, r) => s + r.seatsWon, 0)
+  const filled = partiesBySeats.reduce((s, r) => s + r.seatsWon, 0)
   const empty = total - filled
-  const leading = world.nationalResults[0]
+  const leading = partiesBySeats[0]
   const hasMajority = (leading?.seatsWon ?? 0) >= majority
 
   const isPoliticianMode = Boolean(world.politicianMode)

@@ -36,7 +36,6 @@ import {
   dominantBlocId,
   lobbyCouncillor,
   promoteCareer,
-  createCustomMotion,
   queueCustomMotion,
   queueRepealMotion,
   estimateTilePreference,
@@ -685,7 +684,6 @@ function App() {
                         setWorld(next)
                         setLastActionResult(newsToast(next.newsFeed[0] ?? 'Promotion accepted.', 'success'))
                       }} /></section>
-                      <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
                       <section className="panel"><div className="panel-kicker">{world.politicianMode.politician.isIncumbent ? 'Council colleagues' : 'Political contacts'}</div><RelationshipsPanel world={world} onRelationshipAction={handleRelationshipAction} lastResult={lastPolResult} /></section>
                       {['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) && (
                         <section className="panel">
@@ -720,6 +718,7 @@ function App() {
                     const governing = playerPartyIsGoverning(world)
                     return (
                       <>
+                        <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
                         <section className="panel council-workspace-panel">
                           <div className="panel-kicker">Council business</div>
                           <p className="council-gov-status">{governingStatusLabel(world)}</p>
@@ -939,7 +938,6 @@ function App() {
             setLastPolResult({ action: { type: 'lobby_councillor', label: 'Lobby', description: result.message, apCost: 0 }, outcome: result.success ? 'success' : 'neutral', description: result.message })
             setLastActionResult(newsToast(result.message, result.success ? 'success' : 'neutral'))
           }}
-          onProposeCustom={(input) => setWorld(createCustomMotion(world, input))}
         />
       )}
 

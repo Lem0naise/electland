@@ -14,14 +14,18 @@ export function PartyShareLineChart({
   labels,
   datasets,
   height = 260,
+  boundaryLabelIndices = [],
 }: {
   labels: string[]
   datasets: PartyShareDataset[]
   height?: number
+  /** Label indices that mark election cycle boundaries (vertical annotation lines). */
+  boundaryLabelIndices?: number[]
 }) {
   const ink = 'rgba(44, 31, 14, 0.72)'
   const inkSoft = 'rgba(44, 31, 14, 0.45)'
   const grid = 'rgba(44, 31, 14, 0.1)'
+  const boundarySet = new Set(boundaryLabelIndices)
 
   return (
     <div className="party-share-line-chart" style={{ height }}>
@@ -74,8 +78,20 @@ export function PartyShareLineChart({
           },
           scales: {
             x: {
-              ticks: { color: inkSoft, font: { size: 10 } },
-              grid: { color: grid },
+              ticks: {
+                color: inkSoft,
+                font: { size: 10 },
+                callback: (_value, index) => {
+                  if (boundarySet.has(index)) return `${labels[index]} ★`
+                  // Thin labels on long series
+                  if (labels.length > 36 && index % 3 !== 0 && !boundarySet.has(index)) return ''
+                  return labels[index]
+                },
+              },
+              grid: {
+                color: (ctx) => (boundarySet.has(ctx.index) ? 'rgba(44, 31, 14, 0.35)' : grid),
+                lineWidth: (ctx) => (boundarySet.has(ctx.index) ? 1.5 : 1),
+              },
               border: { color: grid },
             },
             y: {

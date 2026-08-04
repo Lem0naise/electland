@@ -3084,7 +3084,7 @@ export function simulateWeek(world: World): World {
     history: [
       ...seat.history,
       { week: world.week, leadingPartyId: seat.leadingPartyId, margin: seat.margin, results: seat.results },
-    ].slice(-world.electionCycleWeeks),
+    ].slice(-(3 * world.electionCycleWeeks)),
   }))
 
   const provisional = {
@@ -3100,7 +3100,7 @@ export function simulateWeek(world: World): World {
     // New weekly event
     weeklyEvent: pickWeeklyEvent(rng),
     policyShiftUsedThisCycle: world.weeksUntilElection === 0 ? false : world.policyShiftUsedThisCycle,
-    voteHistory: [...world.voteHistory, historyEntry].slice(-52),
+    voteHistory: [...world.voteHistory, historyEntry].slice(-(3 * world.electionCycleWeeks)),
   }
 
   // Permanent party campaigns deprecated — keep field empty
@@ -3351,10 +3351,14 @@ export function simulateWeek(world: World): World {
     const pol = politicianMode.politician
     const approvalDecay = pol.personalApproval * 0.03
     const relationshipDecay = pol.isIncumbent ? 1 : 0.5
-    const decayedRelationships = pol.relationships.map((r) => ({
-      ...r,
-      strength: r.strength > 0 ? r.strength - relationshipDecay : r.strength < 0 ? r.strength + relationshipDecay : 0,
-    }))
+    const decayedRelationships = pol.relationships.map((r) => {
+      const sameParty = r.partyId === pol.partyId
+      const decay = sameParty ? relationshipDecay * 0.5 : relationshipDecay
+      return {
+        ...r,
+        strength: r.strength > 0 ? r.strength - decay : r.strength < 0 ? r.strength + decay : 0,
+      }
+    })
     const nextPol = { ...pol, personalApproval: pol.personalApproval - approvalDecay, relationships: decayedRelationships }
     politicianMode = {
       ...politicianMode,
@@ -3433,7 +3437,7 @@ export function simulateWeek(world: World): World {
           wardId: c.id,
           wardName: c.name,
           personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
-          rebellionTendency: existing?.rebellionTendency ?? rng() * 0.4,
+          rebellionTendency: existing?.rebellionTendency ?? rng() * 0.22,
           influence: existing?.influence ?? 10 + Math.floor(rng() * 30),
         }
       })
@@ -4360,7 +4364,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
         wardId: c.id,
         wardName: c.name,
         personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
-        rebellionTendency: rng() * 0.4,
+        rebellionTendency: rng() * 0.22,
         influence: 10 + Math.floor(rng() * 30),
       }
     })
@@ -4372,7 +4376,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     partyColour: c.partyColour,
     wardId: c.wardId,
     type: c.partyId === world.playerPartyId ? 'ally' as const : 'neutral' as const,
-    strength: c.partyId === world.playerPartyId ? 20 : 0,
+    strength: c.partyId === world.playerPartyId ? 55 : 0,
     history: [],
   }))
 
@@ -4405,7 +4409,7 @@ function createCouncillorForWard(world: World, ward: Constituency, rng: () => nu
     wardId: ward.id,
     wardName: ward.name,
     personalValues: party ? roundPoliticalValues(party.values) : { change: 0, growth: 0, services: 0 },
-    rebellionTendency: rng() * 0.4,
+    rebellionTendency: rng() * 0.22,
     influence: 10 + Math.floor(rng() * 30),
   }
 }
@@ -4421,7 +4425,7 @@ function addRelationshipForCouncillor(politician: PoliticianState, councillor: C
       partyColour: councillor.partyColour,
       wardId: councillor.wardId,
       type: councillor.partyId === politician.partyId ? 'ally' : 'neutral',
-      strength: councillor.partyId === politician.partyId ? 20 : 0,
+      strength: councillor.partyId === politician.partyId ? 55 : 0,
       history: ['Met through local politics.'],
     }],
   }
@@ -5060,6 +5064,32 @@ export function governingStatusLabel(world: World): string {
   return mayor ? `Opposition · ${mayor} governing` : 'Opposition'
 }
 
+/** Party holding the elected seat in a ward; falls back to poll leader before first election. */
+export function electedPartyIdForWard(world: World, wardId: string): string | null {
+  if (world.electionsHeld >= 1) {
+    const winner = world.electionNightResults.find((r) => r.wardId === wardId)?.winner?.partyId
+    if (winner) return winner
+  }
+  return world.constituencies.find((c) => c.id === wardId)?.leadingPartyId ?? null
+}
+
+/** Seat counts from last election (or current poll projection if none held yet). */
+export function electedSeatCounts(world: World): Record<string, number> {
+  const counts: Record<string, number> = {}
+  if (world.electionsHeld >= 1 && world.electionNightResults.length > 0) {
+    for (const r of world.electionNightResults) {
+      const id = r.winner?.partyId
+      if (id) counts[id] = (counts[id] ?? 0) + 1
+    }
+    return counts
+  }
+  for (const ward of world.constituencies) {
+    const id = ward.leadingPartyId
+    if (id) counts[id] = (counts[id] ?? 0) + 1
+  }
+  return counts
+}
+
 export function generateCouncilSession(world: World): World {
   if (!world.politicianMode) return world
   const pm = world.politicianMode
@@ -5152,39 +5182,16 @@ export function predictCouncillorVote(councillor: Councillor, motion: CouncilMot
 
   if (whip === 'aye' && personalLeans === 'support') return 'aye'
   if (whip === 'nay' && personalLeans === 'oppose') return 'nay'
-  if (whip === 'aye' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.28 ? 'lean_aye' : 'aye'
-  if (whip === 'nay' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.28 ? 'lean_nay' : 'nay'
-  if (whip === 'aye' && personalLeans === 'oppose') return councillor.rebellionTendency + minorityPressure > 0.22 ? 'lean_nay' : 'lean_aye'
-  if (whip === 'nay' && personalLeans === 'support') return councillor.rebellionTendency + minorityPressure > 0.22 ? 'lean_aye' : 'lean_nay'
+  if (whip === 'aye' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.35 ? 'lean_aye' : 'aye'
+  if (whip === 'nay' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.35 ? 'lean_nay' : 'nay'
+  if (whip === 'aye' && personalLeans === 'oppose') return councillor.rebellionTendency + minorityPressure > 0.30 ? 'lean_nay' : 'lean_aye'
+  if (whip === 'nay' && personalLeans === 'support') return councillor.rebellionTendency + minorityPressure > 0.30 ? 'lean_aye' : 'lean_nay'
   if (whip === 'free') {
     if (personalLeans === 'support') return motion.contestedness === 'broad' ? 'aye' : 'lean_aye'
     if (personalLeans === 'oppose') return motion.contestedness === 'broad' ? 'nay' : 'lean_nay'
     return 'undecided'
   }
   return 'undecided'
-}
-
-export function createCustomMotion(world: World, input: CustomMotionInput): World {
-  if (!world.politicianMode?.currentSession) return world
-  const pm = world.politicianMode
-  const session = pm.currentSession!
-  if (session.resolved || session.budgetSession) return world
-  const pol = pm.politician
-  if (pol.influence < MOTION_PROPOSAL_INFLUENCE_COST) return world
-  const generated = motionFromInput(input)
-  const motion = buildMotionRecord(world, pm, generated, pol, `motion_${world.week}_player_custom`, 'aye')
-  return {
-    ...world,
-    politicianMode: {
-      ...pm,
-      politician: {
-        ...pol,
-        influence: pol.influence - MOTION_PROPOSAL_INFLUENCE_COST,
-        careerHistory: [...pol.careerHistory, { week: world.week, description: `Proposed motion: ${motion.headline} (−${MOTION_PROPOSAL_INFLUENCE_COST} influence)`, tier: pol.careerTier }],
-      },
-      currentSession: { ...session, motions: [motion] },
-    },
-  }
 }
 
 export function queueCustomMotion(world: World, input: CustomMotionInput): World {
@@ -5272,15 +5279,18 @@ export function resolveCouncilSession(world: World): World {
         if (world.coalitionPartnerId) governingIds.add(world.coalitionPartnerId)
       }
       const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
+      const sameParty = cllr.partyId === pol.partyId
       const rebellionChance = (
         cllr.rebellionTendency
-        + (motion.contestedness === 'divisive' ? 0.18 : motion.contestedness === 'contested' ? 0.08 : 0.02)
-        + (world.minorityGovernment ? 0.1 : 0)
-        + (motion.costSignal * 0.1)
-      ) * (governingBudgetWhip ? 0.45 : 1)
+        + (motion.contestedness === 'divisive' ? 0.10 : motion.contestedness === 'contested' ? 0.04 : 0.01)
+        + (world.minorityGovernment ? 0.05 : 0)
+        + (motion.costSignal * 0.05)
+      ) * (governingBudgetWhip ? 0.45 : 1) * (sameParty ? 0.35 : 1)
       if (rng() < rebellionChance && whip !== 'free') baseVote = whip === 'aye' ? 'nay' : 'aye'
       const relationship = pol.relationships.find((r) => r.targetId === cllr.id)
-      if (relationship && relationship.strength > 40 && rng() < 0.18) baseVote = motion.playerVote ?? baseVote
+      const followThreshold = sameParty ? 30 : 40
+      const followChance = sameParty ? 0.40 : 0.18
+      if (relationship && relationship.strength > followThreshold && rng() < followChance) baseVote = motion.playerVote ?? baseVote
       votes.push({ councillorId: cllr.id, councillorName: cllr.name, partyId: cllr.partyId, vote: baseVote })
     }
     if (motion.playerVote) votes.push({ councillorId: pol.id, councillorName: pol.name, partyId: pol.partyId, vote: motion.playerVote })
@@ -5352,13 +5362,15 @@ export function resolveCouncilSession(world: World): World {
   const updatedRelationships = pol.relationships.map((rel) => {
     let strengthDelta = networkerBonus
     const history = [...rel.history]
+    const sameParty = rel.partyId === pol.partyId
     for (const m of resolvedMotions) {
       if (!m.playerVote) continue
       const cllrVote = m.votes.find((v) => v.councillorId === rel.targetId)
       if (!cllrVote) continue
       const isProposer = m.proposerId === rel.targetId
       if (cllrVote.vote === m.playerVote) {
-        strengthDelta += isProposer && m.playerVote === 'aye' ? (m.kind === 'repeal' ? 12 : 10) : 5
+        const agreeBonus = isProposer && m.playerVote === 'aye' ? (m.kind === 'repeal' ? 12 : 10) : 5
+        strengthDelta += sameParty ? agreeBonus + 2 : agreeBonus
         if (history.length < 5) history.push(`${isProposer && m.playerVote === 'aye' ? 'Supported their motion' : 'Agreed on'}: ${m.headline}`)
       } else if (m.playerVote !== 'abstain' && cllrVote.vote !== 'abstain') {
         strengthDelta -= isProposer ? (m.kind === 'repeal' ? 10 : 8) : 4
@@ -5421,15 +5433,6 @@ export function resolveCouncilSession(world: World): World {
       nextSessionWeek: nextOrdinaryWeek,
     },
   }
-}
-
-export function proposeMotion(world: World): World {
-  return createCustomMotion(world, {
-    headline: 'Councillor-led local motion',
-    description: 'A short councillor-led motion for local action.',
-    category: 'services',
-    ideologyLean: { change: 5, growth: 0, services: 10 },
-  })
 }
 
 export function shouldTriggerCouncilSession(world: World): boolean {
@@ -5537,7 +5540,8 @@ export function applyRelationshipAction(
 
   const rng = createRng(world.seed + world.week * 809 + councillorId.length + (action === 'reach_out' ? 1 : 2))
   const organiserBonus = pm.politician.traits.some((trait) => trait.id === 'community-organiser') ? 0.15 : 0
-  const successChance = clamp(0.45 + organiserBonus + pm.politician.influence / 250 + relationship.strength / 300, 0.2, 0.85)
+  const samePartyBonus = relationship.partyId === pm.politician.partyId ? 0.20 : 0
+  const successChance = clamp(0.45 + organiserBonus + samePartyBonus + pm.politician.influence / 250 + relationship.strength / 300, 0.2, 0.85)
   const successful = action === 'antagonise' || rng() < successChance
   const delta = action === 'antagonise' ? -(10 + Math.floor(rng() * 6)) : successful ? 8 + Math.floor(rng() * 5) : 0
   const description = action === 'antagonise'
@@ -5578,7 +5582,8 @@ export function lobbyCouncillor(world: World, councillorId: string, motionId: st
   const rng = createRng(world.seed + world.week * 5551 + councillorId.length)
   const relationship = pol.relationships.find((r) => r.targetId === councillorId)
   const relationshipBonus = relationship ? relationship.strength / 200 : 0
-  const successChance = 0.3 + relationshipBonus + (pol.influence / 200)
+  const samePartyBonus = cllr.partyId === pol.partyId ? 0.15 : 0
+  const successChance = 0.3 + relationshipBonus + samePartyBonus + (pol.influence / 200)
 
   const success = rng() < successChance
   let message: string

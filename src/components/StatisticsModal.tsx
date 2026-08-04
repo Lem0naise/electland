@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
+import { electedSeatCounts, loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
 import { VoteHistoryChart } from './VoteHistoryChart'
 import type { World } from '../types/sim'
 
@@ -14,6 +14,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
+  const electedSeats = electedSeatCounts(world)
 
   const sortedByMargin = [...world.constituencies].sort((a, b) => a.margin - b.margin)
   const closest = sortedByMargin.slice(0, 7)
@@ -47,8 +48,12 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
 
   const leader = world.nationalResults[0]
   const playerResult = world.nationalResults.find((r) => r.partyId === playerPartyId)
-  const playerSeatsNeeded = playerResult ? Math.max(0, majority - playerResult.seatsWon) : majority
+  const projectedSeatsNeeded = playerResult ? Math.max(0, majority - playerResult.seatsWon) : majority
   const playerParty = world.parties.find((p) => p.id === playerPartyId)
+
+  const standingsByElectedSeats = [...world.nationalResults]
+    .map((r) => ({ ...r, electedSeats: electedSeats[r.partyId] ?? 0 }))
+    .sort((a, b) => b.electedSeats - a.electedSeats || b.voteShare - a.voteShare)
 
   // Selected party detail
   const selectedParty = world.parties.find((p) => p.id === selectedPartyId)
@@ -62,8 +67,9 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
         .sort((a, b) => b.share - a.share)
     : []
 
-  const partySeatsWon = world.nationalResults.find((r) => r.partyId === selectedPartyId)?.seatsWon ?? 0
+  const partySeatsHeld = electedSeats[selectedPartyId] ?? 0
   const partySeatsLeading = world.constituencies.filter((c) => c.leadingPartyId === selectedPartyId).length
+  const partyProjectedSeats = world.nationalResults.find((r) => r.partyId === selectedPartyId)?.seatsWon ?? 0
   const partyVoteShare = world.nationalResults.find((r) => r.partyId === selectedPartyId)?.voteShare ?? 0
   const partyBestWard = partyWards[0]
   const partyWorstWard = partyWards[partyWards.length - 1]
@@ -98,16 +104,16 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
           <div className="stats-section">
             <div className="stats-section-label">Council seats</div>
             <div className="stats-seat-bar">
-              {world.nationalResults.map((r) => (
+              {standingsByElectedSeats.filter((r) => r.electedSeats > 0).map((r) => (
                 <div
                   key={r.partyId}
                   className={`stats-seat-bar-seg${r.partyId === playerPartyId ? ' is-player' : ''}`}
-                  style={{ width: `${(r.seatsWon / total) * 100}%`, background: r.colour }}
-                  title={`${r.partyName}: ${r.seatsWon} seats`}
+                  style={{ width: `${(r.electedSeats / total) * 100}%`, background: r.colour }}
+                  title={`${r.partyName}: ${r.electedSeats} seats`}
                 />
               ))}
               {(() => {
-                const filled = world.nationalResults.reduce((s, r) => s + r.seatsWon, 0)
+                const filled = Object.values(electedSeats).reduce((s, n) => s + n, 0)
                 const empty = total - filled
                 return empty > 0 ? (
                   <div className="stats-seat-bar-seg empty" style={{ width: `${(empty / total) * 100}%` }} />
@@ -123,9 +129,9 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
             <div className="stats-section">
               <div className="stats-section-label">Full standings</div>
               <div className="stats-standings">
-                {world.nationalResults.map((r, rank) => {
+                {standingsByElectedSeats.map((r, rank) => {
                   const isPlayer = r.partyId === playerPartyId
-                  const atMajority = r.seatsWon >= majority
+                  const atMajority = r.electedSeats >= majority
                   return (
                     <div
                       key={r.partyId}
@@ -135,7 +141,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                       <span className="stats-stand-swatch" style={{ background: r.colour }} />
                       <span className="stats-stand-name">{r.partyName}</span>
                       <span className="stats-stand-leader">{r.leader}</span>
-                      <span className="stats-stand-seats">{r.seatsWon}</span>
+                      <span className="stats-stand-seats">{r.electedSeats}</span>
                       <span className="stats-stand-share">{r.voteShare.toFixed(1)}%</span>
                     </div>
                   )
@@ -162,7 +168,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                       <span className="stats-proj-player-swatch" style={{ background: playerParty?.colour ?? '#888' }} />
                       <span>
                         {playerParty?.name ?? 'You'} — {playerResult.seatsWon} seats
-                        {playerSeatsNeeded > 0 ? ` (need ${playerSeatsNeeded} more)` : ' — MAJORITY'}
+                        {projectedSeatsNeeded > 0 ? ` (need ${projectedSeatsNeeded} more)` : ' — MAJORITY'}
                       </span>
                     </div>
                   )}
@@ -459,8 +465,12 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                     <span className="spm-value">{partyVoteShare.toFixed(1)}%</span>
                   </div>
                   <div className="stats-party-metric">
+                    <span className="spm-label">Council seats</span>
+                    <span className="spm-value">{partySeatsHeld}</span>
+                  </div>
+                  <div className="stats-party-metric">
                     <span className="spm-label">Projected seats</span>
-                    <span className="spm-value">{partySeatsWon}</span>
+                    <span className="spm-value">{partyProjectedSeats}</span>
                   </div>
                   <div className="stats-party-metric">
                     <span className="spm-label">Wards leading</span>

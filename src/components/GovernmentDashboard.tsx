@@ -1,4 +1,5 @@
 import type { World } from '../types/sim'
+import { electedSeatCounts } from '../lib/sim'
 
 export function GovernmentDashboard({ world, onOpenBudget, onClose }: {
   world: World
@@ -9,10 +10,7 @@ export function GovernmentDashboard({ world, onOpenBudget, onClose }: {
   const councilHistory = world.councilHistory ?? []
   const playerParty = world.parties.find((p) => p.id === world.playerPartyId)
   const majority = world.stats.councilMajority
-  const seatCounts: Record<string, number> = {}
-  world.nationalResults.forEach((r) => {
-    seatCounts[r.partyId] = r.seatsWon
-  })
+  const seatCounts = electedSeatCounts(world)
   const playerSeats = seatCounts[world.playerPartyId] ?? 0
 
   const govLabel = (() => {
