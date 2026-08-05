@@ -6,11 +6,10 @@ import type { World } from '../types/sim'
 
 interface StatisticsModalProps {
   world: World
-  previousNationalById: Map<string, { voteShare: number; seatsWon: number }>
   onClose: () => void
 }
 
-export function StatisticsModal({ world, previousNationalById, onClose }: StatisticsModalProps) {
+export function StatisticsModal({ world, onClose }: StatisticsModalProps) {
   const [selectedPartyId, setSelectedPartyId] = useState<string>('')
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
@@ -21,31 +20,11 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
   const closest = sortedByMargin.slice(0, 7)
   const safest = [...sortedByMargin].sort((a, b) => b.margin - a.margin).slice(0, 7)
 
-  // Trends: vote share gains from first history entry vs seat swings from last week
-  interface PartyTrend {
-    partyId: string
-    partyName: string
-    colour: string
-    voteDelta: number
-    seatDelta: number | null
-    currentSeats: number
-    currentShare: number
-  }
-  const trends: PartyTrend[] = []
   const firstHistory = world.voteHistory[0]
+  const voteDeltaByParty = new Map<string, number>()
   for (const r of world.nationalResults) {
-    const prev = previousNationalById.get(r.partyId)
-    trends.push({
-      partyId: r.partyId,
-      partyName: r.partyName,
-      colour: r.colour,
-      voteDelta: firstHistory ? (r.voteShare - (firstHistory.partyShares[r.partyId] ?? 0)) : 0,
-      seatDelta: prev ? r.seatsWon - prev.seatsWon : null,
-      currentSeats: r.seatsWon,
-      currentShare: r.voteShare,
-    })
+    voteDeltaByParty.set(r.partyId, firstHistory ? (r.voteShare - (firstHistory.partyShares[r.partyId] ?? 0)) : 0)
   }
-  trends.sort((a, b) => b.voteDelta - a.voteDelta)
 
   const leader = world.nationalResults[0]
   const playerResult = world.nationalResults.find((r) => r.partyId === playerPartyId)
@@ -53,10 +32,13 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
   const playerParty = world.parties.find((p) => p.id === playerPartyId)
 
   const standingsByElectedSeats = [...world.nationalResults]
-    .map((r) => ({ ...r, electedSeats: electedSeats[r.partyId] ?? 0 }))
+    .map((r) => ({
+      ...r,
+      electedSeats: electedSeats[r.partyId] ?? 0,
+      voteDelta: voteDeltaByParty.get(r.partyId) ?? 0,
+    }))
     .sort((a, b) => b.electedSeats - a.electedSeats || b.voteShare - a.voteShare)
 
-  // Selected party detail
   const selectedParty = world.parties.find((p) => p.id === selectedPartyId)
   const partyWards = selectedParty
     ? world.constituencies
@@ -70,38 +52,32 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
 
   const partySeatsHeld = electedSeats[selectedPartyId] ?? 0
   const partySeatsLeading = world.constituencies.filter((c) => c.leadingPartyId === selectedPartyId).length
-  const partyProjectedSeats = world.nationalResults.find((r) => r.partyId === selectedPartyId)?.seatsWon ?? 0
   const partyVoteShare = world.nationalResults.find((r) => r.partyId === selectedPartyId)?.voteShare ?? 0
   const partyBestWard = partyWards[0]
   const partyWorstWard = partyWards[partyWards.length - 1]
-  const partyBestMargin = [...world.constituencies]
-    .filter((c) => c.leadingPartyId === selectedPartyId)
-    .sort((a, b) => b.margin - a.margin)[0]
-  const partyWorstMargin = [...world.constituencies]
-    .filter((c) => c.leadingPartyId === selectedPartyId)
-    .sort((a, b) => a.margin - b.margin)[0]
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
         <div className="stats-modal-header">
           <div className="stats-modal-title-row">
             <div>
               <span className="modal-kicker">Campaign Statistics</span>
-              <h2>{world.townName} Council</h2>
+              <h2 id="stats-modal-title">{world.townName} Council</h2>
             </div>
             <div className="stats-modal-meta">
               <span>Week {world.week}</span>
               <span>{total} wards</span>
               <span>{majority} for majority</span>
               <span>{world.weeksUntilElection} wk to election</span>
+              <span>{world.stats.battlegroundWardIds.length} battlegrounds</span>
+              <span>{(world.stats.averageTurnout * 100).toFixed(1)}% turnout</span>
               <button className="ink-button secondary small" type="button" onClick={onClose}>Close</button>
             </div>
           </div>
         </div>
 
         <div className="stats-modal-body">
-          {/* ── Council seats bar ───────────────────────────────────────── */}
           <div className="stats-section">
             <div className="stats-section-label">Council seats</div>
             <div className="stats-seat-bar">
@@ -119,16 +95,14 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                 return empty > 0 ? (
                   <div className="stats-seat-bar-seg empty" style={{ width: `${(empty / total) * 100}%` }} />
                 ) : null
-          })()}
+              })()}
               <div className="stats-seat-majority" style={{ left: `${(majority / total) * 100}%` }} />
             </div>
           </div>
 
-          {/* ── Standings + Projection side-by-side ──────────────────────── */}
           <div className="stats-two-col">
-            {/* Standings table */}
             <div className="stats-section">
-              <div className="stats-section-label">Full standings</div>
+              <div className="stats-section-label">Standings (seats won)</div>
               <div className="stats-standings">
                 {standingsByElectedSeats.map((r, rank) => {
                   const isPlayer = r.partyId === playerPartyId
@@ -144,15 +118,19 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                       <span className="stats-stand-leader">{r.leader}</span>
                       <span className="stats-stand-seats">{r.electedSeats}</span>
                       <span className="stats-stand-share">{r.voteShare.toFixed(1)}%</span>
+                      <span className={`stats-stand-delta${Math.abs(r.voteDelta) > 0.1 ? (r.voteDelta > 0 ? ' up' : ' down') : ''}`}>
+                        {Math.abs(r.voteDelta) > 0.1
+                          ? `${r.voteDelta > 0 ? '+' : ''}${r.voteDelta.toFixed(1)}`
+                          : '—'}
+                      </span>
                     </div>
                   )
                 })}
               </div>
             </div>
 
-            {/* Projection / trends panel */}
             <div className="stats-section">
-              <div className="stats-section-label">Trends &amp; prediction</div>
+              <div className="stats-section-label">If the election were held today</div>
               <div className="stats-projection">
                 <div className="stats-proj-header">
                   {leader && (
@@ -166,7 +144,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                   )}
                   {playerResult && (
                     <div className="stats-proj-player">
-                      <span className="stats-proj-player-swatch" style={{ background: playerParty?.colour ?? '#888' }} />
+                      <span className="stats-proj-player-swatch" style={{ background: playerParty?.colour ?? 'var(--ink-soft)' }} />
                       <span>
                         {playerParty?.name ?? 'You'} — {playerResult.seatsWon} seats
                         {projectedSeatsNeeded > 0 ? ` (need ${projectedSeatsNeeded} more)` : ' — MAJORITY'}
@@ -174,51 +152,10 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                     </div>
                   )}
                 </div>
-
-                <div className="stats-proj-grid">
-                  {/* Vote share trend */}
-                  <div className="stats-proj-card">
-                    <div className="stats-proj-card-label">Vote share trend</div>
-                    {trends.filter((t) => Math.abs(t.voteDelta) > 0.1).length === 0 ? (
-                      <span className="stats-empty-hint">Advance a few more weeks.</span>
-                    ) : (
-                      trends.filter((t) => Math.abs(t.voteDelta) > 0.1).map((t) => (
-                        <div key={t.partyId} className="stats-trend-row">
-                          <span className="stats-trend-swatch" style={{ background: t.colour }} />
-                          <span className="stats-trend-name">{t.partyName}</span>
-                          <span className={`stats-trend-delta ${t.voteDelta > 0 ? 'up' : 'down'}`}>
-                            {t.voteDelta > 0 ? '+' : ''}{t.voteDelta.toFixed(1)}pp
-                          </span>
-                          <span className="stats-trend-share">{t.currentShare.toFixed(1)}%</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Seat swing (week over week) */}
-                  <div className="stats-proj-card">
-                    <div className="stats-proj-card-label">Seat swing this week</div>
-                    {trends.filter((t) => t.seatDelta !== null && t.seatDelta !== 0).length === 0 ? (
-                      <span className="stats-empty-hint">No seat changes this week.</span>
-                    ) : (
-                      trends.filter((t) => t.seatDelta !== null && t.seatDelta !== 0).map((t) => (
-                        <div key={t.partyId} className="stats-trend-row">
-                          <span className="stats-trend-swatch" style={{ background: t.colour }} />
-                          <span className="stats-trend-name">{t.partyName}</span>
-                          <span className={`stats-trend-delta ${t.seatDelta! > 0 ? 'up' : 'down'}`}>
-                            {t.seatDelta! > 0 ? '+' : ''}{t.seatDelta}
-                          </span>
-                          <span className="stats-trend-share">{t.currentSeats} seats</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* ── Incumbency ──────────────────────────────────────────────── */}
           {world.electionsHeld >= 1 && (() => {
             const tenure = loadCouncillorTenure(world.seed)
             const reElected: Array<{ ward: string; wardId: string; name: string; party: string; colour: string; terms: number }> = []
@@ -241,7 +178,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                 heldBySameParty.push({ ward: r.wardName, name: currName, party: currParty, colour: currColour, terms: currTerms })
               } else if (prevName && prevParty !== currParty) {
                 const prevTerms = prevName === t?.name ? 0 : (t?.history.find((h) => h.name === prevName)?.termsServed ?? 0)
-                defeated.push({ ward: r.wardName, wardId: r.wardId, name: prevName, party: prevParty ?? '?', colour: r.previousWinnerColour ?? '#888', terms: prevTerms })
+                defeated.push({ ward: r.wardName, wardId: r.wardId, name: prevName, party: prevParty ?? '?', colour: r.previousWinnerColour ?? 'var(--ink-soft)', terms: prevTerms })
                 if (currName) {
                   newFaces.push({ ward: r.wardName, name: currName, party: currParty ?? '?', colour: currColour })
                 }
@@ -313,36 +250,34 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                       </div>
                     )}
                   </div>
-                </div>
 
-                {heldBySameParty.length > 0 && (
-                  <div className="stats-grid-card" style={{ marginTop: 4 }}>
-                    <div className="stats-grid-card-label">
-                      Same party, new candidate ({heldBySameParty.length})
+                  {heldBySameParty.length > 0 && (
+                    <div className="stats-grid-card">
+                      <div className="stats-grid-card-label">
+                        Same party, new candidate ({heldBySameParty.length})
+                      </div>
+                      <div className="stats-incumbency-list">
+                        {heldBySameParty.map((c, i) => (
+                          <div key={i} className="stats-incumbency-row">
+                            <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
+                            <span className="stats-incumbency-name">{c.name}{c.terms > 0 ? ` · ${c.terms} term${c.terms !== 1 ? 's' : ''}` : ''}</span>
+                            <span className="stats-incumbency-ward">{c.ward}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="stats-incumbency-list">
-                      {heldBySameParty.map((c, i) => (
-                        <div key={i} className="stats-incumbency-row">
-                          <span className="stats-incumbency-swatch" style={{ background: c.colour }} />
-                          <span className="stats-incumbency-name">{c.name}{c.terms > 0 ? ` · ${c.terms} term${c.terms !== 1 ? 's' : ''}` : ''}</span>
-                          <span className="stats-incumbency-ward">{c.ward}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )
           })()}
 
-          {/* ── 3-column card grid ───────────────────────────────────────── */}
-          <div className="stats-grid-three">
-            {/* Closest seats */}
+          <div className="stats-grid-two">
             <div className="stats-grid-card">
               <div className="stats-grid-card-label">Closest seats</div>
               <div className="stats-seat-list">
                 {closest.map((c) => {
-                  const leader = c.results[0]
+                  const seatLeader = c.results[0]
                   const runnerUp = c.results[1]
                   const isBg = world.stats.battlegroundWardIds.includes(c.id)
                   return (
@@ -352,8 +287,8 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                         <span className="stats-seat-margin">{c.margin.toFixed(1)}pts</span>
                       </div>
                       <div className="stats-seat-bottom">
-                        <span className="stats-seat-leader" style={{ color: leader?.colour ?? 'var(--ink)' }}>
-                          {leader?.partyName ?? '—'}
+                        <span className="stats-seat-leader" style={{ color: seatLeader?.colour ?? 'var(--ink)' }}>
+                          {seatLeader?.partyName ?? '—'}
                         </span>
                         {runnerUp && (
                           <span className="stats-seat-runnerup">vs {runnerUp.partyName} ({runnerUp.voteShare.toFixed(1)}%)</span>
@@ -365,12 +300,11 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
               </div>
             </div>
 
-            {/* Safest seats */}
             <div className="stats-grid-card">
               <div className="stats-grid-card-label">Safest seats</div>
               <div className="stats-seat-list">
                 {safest.map((c) => {
-                  const leader = c.results[0]
+                  const seatLeader = c.results[0]
                   return (
                     <div key={c.id} className="stats-seat-row">
                       <div className="stats-seat-top">
@@ -378,8 +312,8 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                         <span className="stats-seat-margin safe">{c.margin.toFixed(1)}pts</span>
                       </div>
                       <div className="stats-seat-bottom">
-                        <span className="stats-seat-leader" style={{ color: leader?.colour ?? 'var(--ink)' }}>
-                          {leader?.partyName ?? '—'}
+                        <span className="stats-seat-leader" style={{ color: seatLeader?.colour ?? 'var(--ink)' }}>
+                          {seatLeader?.partyName ?? '—'}
                         </span>
                       </div>
                     </div>
@@ -387,40 +321,8 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                 })}
               </div>
             </div>
-
-            {/* At a glance */}
-            <div className="stats-grid-card">
-              <div className="stats-grid-card-label">At a glance</div>
-              <div className="stats-fact-list">
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{total}</span>
-                  <span className="stats-fact-label">wards</span>
-                </div>
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{majority}</span>
-                  <span className="stats-fact-label">for majority</span>
-                </div>
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{world.stats.battlegroundWardIds.length}</span>
-                  <span className="stats-fact-label">battlegrounds</span>
-                </div>
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{(world.stats.averageTurnout * 100).toFixed(1)}%</span>
-                  <span className="stats-fact-label">avg turnout</span>
-                </div>
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{world.weeksUntilElection}</span>
-                  <span className="stats-fact-label">weeks left</span>
-                </div>
-                <div className="stats-fact">
-                  <span className="stats-fact-num">{world.voteHistory.length}</span>
-                  <span className="stats-fact-label">weeks tracked</span>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* ── Vote history chart ──────────────────────────────────────── */}
           {world.voteHistory.length >= 2 && (
             <div className="stats-section">
               <div className="stats-section-label">Vote share over time</div>
@@ -435,7 +337,6 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
             </div>
           )}
 
-          {/* ── Party filter / detail ───────────────────────────────────── */}
           <div className="stats-section">
             <div className="stats-section-label">Party detail</div>
             <div className="stats-party-filter">
@@ -445,6 +346,7 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                   type="button"
                   className={`stats-party-chip${p.id === selectedPartyId ? ' is-active' : ''}`}
                   style={p.id === selectedPartyId ? { borderColor: p.colour } : undefined}
+                  aria-pressed={p.id === selectedPartyId}
                   onClick={() => setSelectedPartyId(p.id === selectedPartyId ? '' : p.id)}
                 >
                   <span className="stats-party-chip-swatch" style={{ background: p.colour }} />
@@ -477,10 +379,6 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                     <span className="spm-value">{partySeatsHeld}</span>
                   </div>
                   <div className="stats-party-metric">
-                    <span className="spm-label">Projected seats</span>
-                    <span className="spm-value">{partyProjectedSeats}</span>
-                  </div>
-                  <div className="stats-party-metric">
                     <span className="spm-label">Wards leading</span>
                     <span className="spm-value">{partySeatsLeading}</span>
                   </div>
@@ -492,16 +390,6 @@ export function StatisticsModal({ world, previousNationalById, onClose }: Statis
                     <span className="spm-label">Weakest</span>
                     <span className="spm-value">{partyWorstWard ? `${partyWorstWard.ward.name} (${partyWorstWard.share.toFixed(1)}%)` : '—'}</span>
                   </div>
-                  <div className="stats-party-metric">
-                    <span className="spm-label">Best margin</span>
-                    <span className="spm-value">{partyBestMargin ? `${partyBestMargin.name} (+${partyBestMargin.margin.toFixed(1)})` : '—'}</span>
-                  </div>
-                  {partyWorstMargin && partyWorstMargin.id !== partyBestMargin?.id && (
-                    <div className="stats-party-metric">
-                      <span className="spm-label">Tightest lead</span>
-                      <span className="spm-value">{partyWorstMargin.name} (+{partyWorstMargin.margin.toFixed(1)})</span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="stats-party-wards">

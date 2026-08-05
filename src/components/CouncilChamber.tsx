@@ -83,12 +83,12 @@ export function CouncilChamber({ world, onVote, onResolve, onLobby }: {
 
         <div className="council-actions">
           {!isResolved && allVoted && (
-            <button type="button" className="setup-btn-primary" onClick={onResolve}>
+            <button type="button" className="ink-button" onClick={onResolve}>
               Conclude Session
             </button>
           )}
           {isResolved && (
-            <button type="button" className="setup-btn-primary" onClick={onResolve}>
+            <button type="button" className="ink-button" onClick={onResolve}>
               Close
             </button>
           )}
@@ -556,7 +556,7 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
       <div className="proposal-actions">
         <button
           type="button"
-          className="setup-btn-primary"
+          className="ink-button"
           disabled={!headline.trim() || (isRepeal && !description.trim())}
           onClick={() => onSubmit({
             headline,

@@ -47,7 +47,7 @@ export function WardSwitchModal({ world, onSelect, onClose }: {
             )
           })}
         </div>
-        <button type="button" className="setup-btn-secondary" onClick={onClose}>Cancel</button>
+        <button type="button" className="ink-button secondary" onClick={onClose}>Cancel</button>
       </div>
     </div>
   )

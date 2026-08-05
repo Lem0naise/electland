@@ -40,7 +40,7 @@ export function CareerTracker({ world, onPromote }: { world: World; onPromote: (
             ))}
           </div>
           {nextReqs.eligible && (
-            <button type="button" className="setup-btn-primary career-promote-btn" onClick={onPromote}>
+            <button type="button" className="ink-button career-promote-btn" onClick={onPromote}>
               Accept Promotion
             </button>
           )}

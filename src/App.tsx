@@ -148,11 +148,6 @@ function App() {
 
   const selectedTileEstimate = selectedTile ? tilePreferenceById.get(selectedTile.id) ?? null : null
 
-  const previousNationalById = useMemo(
-    () => new Map((previousNationalResults ?? []).map((result) => [result.partyId, result])),
-    [previousNationalResults],
-  )
-
   const playerParty = world?.parties.find((party) => party.id === world.playerPartyId)
 
   useEffect(() => {
@@ -659,6 +654,9 @@ function App() {
                         const pm = world.politicianMode
                         const autoCampaigns = pm.autoCampaigns[0] === type ? [] : [type]
                         setWorld({ ...world, politicianMode: { ...pm, autoCampaigns } })
+                      }} onSetColleagueTarget={(wardId) => {
+                        if (!world.politicianMode) return
+                        setWorld({ ...world, politicianMode: { ...world.politicianMode, autoColleagueWardId: wardId } })
                       }} lastResult={lastPolResult} />
                     </section>
                   )}
@@ -809,7 +807,6 @@ function App() {
       {showStatsModal && world && (
         <StatisticsModal
           world={world}
-          previousNationalById={previousNationalById}
           onClose={() => setShowStatsModal(false)}
         />
       )}
@@ -1012,7 +1009,7 @@ function App() {
               <>
                 <p>Congratulations, Cllr. {world.politicianMode.politician.name}! You have been elected to represent <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong>.</p>
                 <p>Term {world.politicianMode.politician.termsServed} begins. The council chamber awaits.</p>
-                <button type="button" className="setup-btn-primary" onClick={() => {
+                <button type="button" className="ink-button" onClick={() => {
                   setPolElectionOutcome(null)
                   afterPersonalElection(world)
                 }}>
@@ -1023,13 +1020,13 @@ function App() {
               <>
                 <p>The voters of <strong>{world.constituencies.find((c) => c.id === world.politicianMode!.politician.wardId)?.name}</strong> have chosen someone else. You remain active in local politics and can build towards the next election.</p>
                 <div className="pol-outcome-actions">
-                  <button type="button" className="setup-btn-primary" onClick={() => {
+                  <button type="button" className="ink-button" onClick={() => {
                     setPolElectionOutcome(null)
                     afterPersonalElection(world)
                   }}>
                     Continue as Challenger
                   </button>
-                  <button type="button" className="setup-btn-secondary" onClick={() => {
+                  <button type="button" className="ink-button secondary" onClick={() => {
                     setPolElectionOutcome(null)
                     setShowWardSwitchModal(true)
                     afterPersonalElection(world)

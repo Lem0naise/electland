@@ -23,7 +23,7 @@ export const SeatHistoryChart = memo(function SeatHistoryChart({ world }: { worl
     return {
       label: party?.name ?? national?.partyName ?? partyId,
       data: history.map((entry) => entry.partySeats[partyId] ?? 0),
-      backgroundColor: party?.colour ?? national?.colour ?? '#888',
+      backgroundColor: party?.colour ?? national?.colour ?? '#7a6040',
       borderColor: 'rgba(44, 31, 14, 0.2)',
       borderWidth: 1,
       stack: 'seats',

@@ -29,7 +29,7 @@ export function CouncilComposition({ world, onChangeWard }: { world: World; onCh
           <strong>{leadingParty?.name ?? 'No overall leader'} {leader && `${leader[1]}/${world.constituencies.length}`}</strong>
         </div>
         {!pm.politician.isIncumbent && (
-          <button type="button" className="council-change-ward-btn" onClick={onChangeWard}>
+          <button type="button" className="ink-button secondary small" onClick={onChangeWard}>
             {playerWard ? 'Change ward' : 'Choose ward'}
           </button>
         )}
@@ -52,7 +52,7 @@ export function CouncilComposition({ world, onChangeWard }: { world: World; onCh
             <span
               key={ward.id}
               className={`council-dot${isPlayerWard ? ' council-dot--player' : ''}`}
-              style={{ background: party?.colour ?? '#888' }}
+              style={{ background: party?.colour ?? 'var(--ink-soft)' }}
               data-tooltip={`${name} · ${ward.name} · ${partyName}`}
               aria-label={`${ward.name}, ${name}, ${partyName}${isPlayerWard ? ', your ward' : ''}`}
             />

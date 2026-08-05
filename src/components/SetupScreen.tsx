@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { partyIdentitySummary } from '../lib/sim'
+import { applyPartyPresetPack, PARTY_PRESET_PACKS } from '../lib/partyPresets'
 import { formatAxis } from '../lib/format'
 import type { PartyEdit, World } from '../types/sim'
 import { IdeologyWidget } from './IdeologyWidget'
@@ -105,28 +106,10 @@ export function SetupScreen({
     onGenerate([], draft.selectedPartyId || undefined)
   }
 
-  const applyUKNames = () => {
-    const presets = [
-      { colour: '#0087DC', name: 'Local Conservatives', values: { change: -30, growth: 15, services: 25 } },
-      { colour: '#E4003B', name: 'Labour', values: { change: 15, growth: 5, services: 35 } },
-      { colour: '#FAA61A', name: 'Lib Dems', values: { change: 10, growth: 15, services: 20 } },
-      { colour: '#02A95B', name: 'Green Party', values: { change: 40, growth: -35, services: 30 } },
-      { colour: '#70147A', name: 'Reform UK', values: { change: -35, growth: 15, services: 15 } },
-    ]
-    const distance = (a: string, b: string) => {
-      const left = parseInt(a.replace('#', ''), 16)
-      const right = parseInt(b.replace('#', ''), 16)
-      return ((left >> 16 & 255) - (right >> 16 & 255)) ** 2 + ((left >> 8 & 255) - (right >> 8 & 255)) ** 2 + ((left & 255) - (right & 255)) ** 2
-    }
+  const applyPreset = (packId: string) => {
     setDraft((current) => ({
       ...current,
-      partyEdits: Object.fromEntries(parties.map((party) => {
-        const currentEdit = current.partyEdits[party.id]
-        const preset = [...presets].sort((a, b) => distance(currentEdit.colour, a.colour) - distance(currentEdit.colour, b.colour))[0]
-        return [party.id, preset && distance(currentEdit.colour, preset.colour) < 3600
-          ? { ...currentEdit, name: preset.name, values: preset.values }
-          : currentEdit]
-      })),
+      partyEdits: applyPartyPresetPack(parties, current.partyEdits, packId),
     }))
   }
 
@@ -265,10 +248,19 @@ export function SetupScreen({
                 </div>
               )}
               <div className="setup-theme-actions">
-                <button type="button" className="setup-uk-names-btn" onClick={applyUKNames}>Apply British party theme</button>
+                {PARTY_PRESET_PACKS.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    className="setup-uk-names-btn"
+                    onClick={() => applyPreset(pack.id)}
+                  >
+                    {pack.label}
+                  </button>
+                ))}
                 <button type="button" className="setup-uk-names-btn" onClick={regenerateParties}>Regenerate parties</button>
               </div>
-              <p className="setup-hint">Regenerate reshuffles the whole town and party roster. British theme is an optional remapper.</p>
+              <p className="setup-hint">Presets rename parties and set colours and ideologies. Regenerate reshuffles the town and roster — re-apply a preset afterwards if you want.</p>
               <div className="setup-step-actions">
                 <button type="button" className="setup-btn-ghost" onClick={() => setStep('town')}>Back</button>
                 <button type="button" className="setup-btn-primary" disabled={!selectedParty} onClick={() => setStep('review')}>Review Campaign</button>

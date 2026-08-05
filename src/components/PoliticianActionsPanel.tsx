@@ -1,24 +1,33 @@
-import { useState } from 'react'
-import { getPoliticianActionsByCategory } from '../lib/sim'
+import { useMemo, useState } from 'react'
+import { getColleagueCampaignTargets, getPoliticianActionsByCategory } from '../lib/sim'
 import { formatAxis } from '../lib/format'
 import type { PoliticianActionResult } from '../lib/sim'
 import type { PoliticalValueKey, PoliticianActionMeta, PoliticianActionType, World } from '../types/sim'
 
-export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResult }: {
+export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetColleagueTarget, lastResult }: {
   world: World
   onAction: (action: PoliticianActionMeta) => void
   onToggleAuto: (type: PoliticianActionType) => void
+  onSetColleagueTarget: (wardId: string) => void
   lastResult: PoliticianActionResult | null
 }) {
   const pm = world.politicianMode
   const [policyAxis, setPolicyAxis] = useState<PoliticalValueKey>('change')
   const [policyDirection, setPolicyDirection] = useState<1 | -1>(1)
+  const [colleagueWardId, setColleagueWardId] = useState(pm?.autoColleagueWardId ?? '')
+  const [showColleaguePicker, setShowColleaguePicker] = useState(false)
+  const colleagueTargets = useMemo(() => (pm ? getColleagueCampaignTargets(world) : []), [pm, world])
+
   if (!pm) return null
 
   const groups = getPoliticianActionsByCategory(world)
   const actionAvailable = world.playerActionPoints >= 1
   const pol = pm.politician
   const weekly = pm.autoCampaigns[0]
+  const selectedColleague = colleagueTargets.find((entry) => entry.wardId === colleagueWardId)
+    ?? colleagueTargets.find((entry) => entry.wardId === pm.autoColleagueWardId)
+    ?? colleagueTargets[0]
+  const effectiveColleagueWardId = selectedColleague?.wardId ?? ''
 
   const categoryAccent: Record<string, string> = {
     grassroots: 'cat-grassroots',
@@ -62,6 +71,7 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
         {weekly && (
           <span className="pol-auto-indicator">
             Weekly auto: {weekly.replace(/_/g, ' ')}
+            {weekly === 'help_colleague' && selectedColleague ? ` → ${selectedColleague.wardName}` : ''}
             {actionAvailable ? ' (runs if you skip acting before advancing)' : ' (skipped — you already acted)'}
           </span>
         )}
@@ -75,23 +85,41 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
               const canAfford = actionAvailable
               const isAuto = weekly === action.type
               const isPolicyAction = action.type === 'shift_personal_policy'
+              const isColleagueAction = action.type === 'help_colleague'
               const canSetPolicy = canAfford && world.week >= pol.personalPolicyNextWeek
+              const canFireColleague = canAfford && Boolean(effectiveColleagueWardId)
+              const showPicker = isColleagueAction && (showColleaguePicker || !effectiveColleagueWardId)
               return (
                 <div
                   key={action.type}
-                  className={`pol-action-card${!canAfford ? ' disabled' : ''}${isAuto ? ' is-auto' : ''}`}
+                  className={`pol-action-card${!canAfford && !(isColleagueAction && isAuto) ? ' disabled' : ''}${isAuto ? ' is-auto' : ''}`}
                   onClick={() => {
-                    if (!isPolicyAction && canAfford) onAction(action)
+                    if (isPolicyAction || isColleagueAction) return
+                    if (canAfford) onAction(action)
                   }}
                 >
                   <div className="pol-action-top">
                     <button
                       type="button"
                       className="pol-action-fire"
-                      disabled={isPolicyAction ? !canSetPolicy : !canAfford}
+                      disabled={isPolicyAction ? !canSetPolicy : isColleagueAction ? !canFireColleague : !canAfford}
                       onClick={(event) => {
                         event.stopPropagation()
-                        onAction(isPolicyAction ? { ...action, policyAxis, policyDirection } : action)
+                        if (isPolicyAction) {
+                          onAction({ ...action, policyAxis, policyDirection })
+                          return
+                        }
+                        if (isColleagueAction) {
+                          if (!effectiveColleagueWardId) {
+                            setShowColleaguePicker(true)
+                            return
+                          }
+                          onSetColleagueTarget(effectiveColleagueWardId)
+                          onAction({ ...action, targetWardId: effectiveColleagueWardId })
+                          setShowColleaguePicker(false)
+                          return
+                        }
+                        onAction(action)
                       }}
                     >
                       <span className="pol-action-name">{action.label}</span>
@@ -102,7 +130,12 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
                         <input
                           type="checkbox"
                           checked={isAuto}
-                          onChange={() => onToggleAuto(action.type)}
+                          onChange={() => {
+                            if (isColleagueAction && !isAuto && effectiveColleagueWardId) {
+                              onSetColleagueTarget(effectiveColleagueWardId)
+                            }
+                            onToggleAuto(action.type)
+                          }}
                         />
                         <span className="auto-label">Weekly</span>
                       </label>
@@ -130,6 +163,47 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, lastResu
                           <option value={-1}>Move −10</option>
                         </select>
                       </label>
+                    </div>
+                  )}
+                  {isColleagueAction && (
+                    <div className="colleague-campaign-picker" onClick={(event) => event.stopPropagation()}>
+                      {selectedColleague && !showPicker ? (
+                        <div className="colleague-campaign-selected">
+                          <div className="colleague-campaign-summary">
+                            <strong>{selectedColleague.candidateName}</strong>
+                            <span>{selectedColleague.wardName}</span>
+                            <span>{(selectedColleague.partyShare * 100).toFixed(0)}% · leader {selectedColleague.leadingPartyName} by {(selectedColleague.margin * 100).toFixed(0)}</span>
+                            {selectedColleague.isBattleground && <span className="colleague-battleground">Battleground</span>}
+                          </div>
+                          <button type="button" className="colleague-change-target" onClick={() => setShowColleaguePicker(true)}>
+                            Change target ward
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="colleague-campaign-list">
+                          {colleagueTargets.map((target) => (
+                            <button
+                              key={target.wardId}
+                              type="button"
+                              className={`colleague-campaign-option${target.wardId === effectiveColleagueWardId ? ' selected' : ''}`}
+                              onClick={() => {
+                                setColleagueWardId(target.wardId)
+                                onSetColleagueTarget(target.wardId)
+                                setShowColleaguePicker(false)
+                              }}
+                            >
+                              <span className="colleague-option-main">
+                                <strong>{target.wardName}</strong>
+                                <span>{target.candidateName}{target.councillorId ? ' · councillor' : ' · candidate'}</span>
+                              </span>
+                              <span className="colleague-option-meta">
+                                {(target.partyShare * 100).toFixed(0)}% · {target.leadingPartyName} +{(target.margin * 100).toFixed(0)}
+                                {target.isBattleground ? ' · battleground' : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

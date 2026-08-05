@@ -459,6 +459,7 @@ export type PoliticianActionType =
   | 'leaflet_drop'
   | 'local_media'
   | 'call_party_support'
+  | 'help_colleague'
   | 'attend_event'
   | 'smear_opponent'
   | 'shift_personal_policy'
@@ -586,6 +587,7 @@ export interface PoliticianActionMeta {
   traitBonus?: string
   policyAxis?: PoliticalValueKey
   policyDirection?: 1 | -1
+  targetWardId?: string
 }
 
 export interface CustomMotionInput {
@@ -610,6 +612,7 @@ export interface PoliticianModeState {
   proposedBudget?: Budget
   budgetHistory: Array<{ week: number; passed: boolean }>
   autoCampaigns: PoliticianActionType[]
+  autoColleagueWardId?: string
   queuedMotion?: CustomMotionInput
   legislationHistory: CouncilMotion[]
 }
