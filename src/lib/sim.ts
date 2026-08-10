@@ -2187,44 +2187,47 @@ function partyRankInWard(ward: Constituency, partyId: string): number {
   return idx < 0 ? 99 : idx + 1
 }
 
-/** Soft competitiveness / asymmetry penalties for standing down (heavy weights). */
-function allianceStandDownPenalties(
-  world: World,
-  initiatorId: string,
-  targetId: string,
-  initiatorWardId: string,
-  targetWardId: string,
-): number {
-  const initiatorWard = world.constituencies.find((c) => c.id === initiatorWardId)
-  const targetWard = world.constituencies.find((c) => c.id === targetWardId)
-  if (!initiatorWard || !targetWard) return 0
-
-  const initiatorShare = initiatorWard.results.find((r) => r.partyId === initiatorId)?.voteShare ?? 0
-  const targetShare = targetWard.results.find((r) => r.partyId === targetId)?.voteShare ?? 0
-  const targetInInitiator = initiatorWard.results.find((r) => r.partyId === targetId)?.voteShare ?? 0
-  const initiatorRank = partyRankInWard(initiatorWard, initiatorId)
-  let penalty = 0
-
-  if (initiatorShare >= 12) penalty += 0.55
-  if (initiatorWard.leadingPartyId === initiatorId && (initiatorWard.margin ?? 0) > 8) penalty += 0.50
-  if (
-    initiatorRank === 2
-    && initiatorShare >= 10
-    && (initiatorWard.margin ?? 99) <= 12
-  ) {
-    penalty += 0.45
+/** Ward-level estimate of endorsement effect: stand-down share × 0.01 score ≈ ×0.25 pp. */
+function estimateStandDownGain(
+  ward: Constituency,
+  standDownPartyId: string,
+  beneficiaryPartyId: string,
+): { gainPp: number; beforeShare: number; afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean } {
+  const standDownShare = ward.results.find((r) => r.partyId === standDownPartyId)?.voteShare ?? 0
+  const beforeShare = ward.results.find((r) => r.partyId === beneficiaryPartyId)?.voteShare ?? 0
+  if (standDownShare <= 0 && beforeShare <= 0) {
+    return { gainPp: 0, beforeShare: 0, afterShare: 0, wouldLead: false, flipsToBeneficiary: false }
   }
 
-  if (targetShare >= 12) penalty += 0.50
+  const rawGain = standDownShare * 0.25
+  const projected = new Map<string, number>()
+  for (const r of ward.results) {
+    if (r.partyId === standDownPartyId) projected.set(r.partyId, 0)
+    else if (r.partyId === beneficiaryPartyId) projected.set(r.partyId, beforeShare + rawGain)
+    else projected.set(r.partyId, r.voteShare)
+  }
+  if (!projected.has(beneficiaryPartyId)) projected.set(beneficiaryPartyId, beforeShare + rawGain)
 
-  const shareRatio = initiatorShare / Math.max(1, targetShare)
-  if (shareRatio > 2.5) penalty += 0.60
-
-  if (initiatorShare >= 10 && targetInInitiator < initiatorShare * 0.5) {
-    penalty += 0.45
+  let total = 0
+  for (const v of projected.values()) total += v
+  if (total > 0) {
+    for (const [id, v] of projected) projected.set(id, (v / total) * 100)
   }
 
-  return penalty
+  const afterShare = projected.get(beneficiaryPartyId) ?? 0
+  const gainPp = afterShare - beforeShare
+  let bestId = ''
+  let bestShare = -1
+  for (const [id, v] of projected) {
+    if (v > bestShare) {
+      bestShare = v
+      bestId = id
+    }
+  }
+  const wouldLead = bestId === beneficiaryPartyId
+  const flipsToBeneficiary = wouldLead && ward.leadingPartyId !== beneficiaryPartyId
+
+  return { gainPp, beforeShare, afterShare, wouldLead, flipsToBeneficiary }
 }
 
 function evaluateAllianceAcceptance(
@@ -2250,49 +2253,39 @@ function evaluateAllianceAcceptance(
     }
   }
 
-  const targetResultInInitiatorWard = initiatorWard.results.find((r) => r.partyId === targetId)
-  const initiatorResultInTargetWard = targetWard.results.find((r) => r.partyId === initiatorId)
-  const targetStandingInTargetWard = targetWard.results.find((r) => r.partyId === targetId)
-
-  // Target leading strongly — refuse outright
   if (targetWard.leadingPartyId === targetId && (targetWard.margin ?? 0) > 5) {
     return STANDING_DOWN_SCORE
   }
-
-  const leaderShare = targetWard.results[0]?.voteShare ?? 1
-  const targetWinningInRequested = Math.min(1, (targetStandingInTargetWard?.voteShare ?? 0) / Math.max(1, leaderShare)) * 0.40
-  const targetHopelessInInitiator = Math.max(0, 1 - (targetResultInInitiatorWard?.voteShare ?? 0) / 25) * 0.30
-  const initiatorCloseInTarget = Math.min(1, (initiatorResultInTargetWard?.voteShare ?? 0) / 25) * 0.25
 
   const isIncumbent = world.electionsHeld >= 1 && world.electionNightResults.some(
     (r) => r.wardId === targetWardId && r.winner?.partyId === targetId
   )
   if (isIncumbent) return STANDING_DOWN_SCORE
 
+  const targetShareInTarget = targetWard.results.find((r) => r.partyId === targetId)?.voteShare ?? 0
+  const targetRank = partyRankInWard(targetWard, targetId)
+  const allyGain = estimateStandDownGain(initiatorWard, initiatorId, targetId)
+  const initiatorInTarget = estimateStandDownGain(targetWard, targetId, initiatorId)
+
   const valueDist = valueDistance(initiatorParty.values, targetParty.values, { change: 1, growth: 1, services: 1 })
   const ideologicalBonus = Math.max(0, 1 - valueDist / ALLIANCE_IDEOLOGY_SCALE)
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
-  const asymmetryBonus = Math.max(0, (targetHopelessInInitiator - initiatorCloseInTarget) * 0.5)
-  const initiatorShare = initiatorWard.results.find((r) => r.partyId === initiatorId)?.voteShare ?? 0
-  // Useful small sacrifice is rewarded; large competitive sacrifices are penalised
-  const endorsementValueBonus = initiatorShare < 8
-    ? (initiatorShare / 100) * 0.30
-    : -Math.min(0.35, (initiatorShare - 8) / 100 * 1.2)
+  const gainScore = allyGain.gainPp / 20
+  const flipBonus = allyGain.flipsToBeneficiary ? 0.20 : allyGain.wouldLead && !allyGain.flipsToBeneficiary ? 0.05 : 0
+  const allyCost = Math.min(1, targetShareInTarget / 25) * 0.45
+  const closeSecondCost =
+    targetRank === 2 && targetShareInTarget >= 10 && (targetWard.margin ?? 99) <= 12 ? 0.25 : 0
+  const partnerUsefulness = Math.min(1, initiatorInTarget.afterShare / 30) * 0.15
 
-  const competitivenessPenalty = allianceStandDownPenalties(
-    world, initiatorId, targetId, initiatorWardId, targetWardId,
-  )
-
-  return targetHopelessInInitiator
-    + initiatorCloseInTarget
-    + asymmetryBonus
-    + endorsementValueBonus
+  return gainScore
+    + flipBonus
+    + partnerUsefulness
     + ideologicalBonus * 0.25
+    - allyCost
+    - closeSecondCost
     - repPenalty
-    - targetWinningInRequested
-    - competitivenessPenalty
 }
 
 function acceptanceSeed(world: World, initiatorId: string, targetId: string, initiatorWardId: string, targetWardId: string): number {
@@ -2905,8 +2898,6 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       const acceptedEntries: AlliancePactEntry[] = []
       for (const entry of entries) {
         if (playerCommitted.has(entry.wardA) || allyCommitted.has(entry.wardB)) continue
-        const ourWard = world.constituencies.find((c) => c.id === entry.wardA)
-        if (ourWard && initiatorStandDownTooStrong(ourWard, world.playerPartyId)) continue
         if (entry.isUnilateral) {
           // Unilateral still requires the player stand-down ward to be a weak sacrifice
           const uniScore = evaluateAllianceAcceptance(
@@ -3900,6 +3891,8 @@ export interface PactSuggestion {
   theirWardId: string
   theirWardName: string
   theirWardAllyShare: number
+  allyGainPp: number
+  playerGainPp: number
   score: number
   acceptanceChance: number
   acceptanceRoll: number
@@ -3931,117 +3924,64 @@ export function suggestPacts(world: World, allyPartyId: string, totalSacrifice =
 
   for (const ourWard of world.constituencies) {
     if (playerCommitted.has(ourWard.id)) continue
-    const playerResult = ourWard.results.find((r) => r.partyId === world.playerPartyId)
-    const playerShare = playerResult?.voteShare ?? 0
-    if (initiatorStandDownTooStrong(ourWard, world.playerPartyId)) continue
-    if (playerResult && playerResult.partyId === ourWard.leadingPartyId && ourWard.margin > 15) continue
+    const playerShare = ourWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
 
     for (const theirWard of world.constituencies) {
       if (ourWard.id === theirWard.id) continue
       if (allyCommitted.has(theirWard.id)) continue
-      const allyResult = theirWard.results.find((r) => r.partyId === allyPartyId)
-      const allyShare = allyResult?.voteShare ?? 0
-      if (allyResult && allyResult.partyId === theirWard.leadingPartyId && theirWard.margin > 5) continue
-      if (allyShare >= 12) continue
+      const allyShare = theirWard.results.find((r) => r.partyId === allyPartyId)?.voteShare ?? 0
 
-      const playerWeakness = Math.max(0, 1 - playerShare / 25)
-      const allyWeakness = Math.max(0, 1 - allyShare / 25)
-      const playerLeading = playerResult?.partyId === ourWard.leadingPartyId && ourWard.margin > 8
-      const allyLeading = allyResult?.partyId === theirWard.leadingPartyId && theirWard.margin > 8
-      const playerCompetitiveness = playerResult && playerResult.partyId !== ourWard.leadingPartyId
-        ? Math.max(0, 1 - ourWard.margin / 20)
-        : 0
-      const endorsementValue = allyShare * 0.01
-      const score = playerWeakness * 0.35 + allyWeakness * 0.35
-        + (playerLeading ? -0.2 : 0) + (allyLeading ? -0.2 : 0)
-        + playerCompetitiveness * 0.1 + Math.min(1, endorsementValue * 5) * 0.1
+      const allyGain = estimateStandDownGain(ourWard, world.playerPartyId, allyPartyId)
+      const playerGain = estimateStandDownGain(theirWard, allyPartyId, world.playerPartyId)
+      let score = allyGain.gainPp + playerGain.gainPp
+      if (allyGain.flipsToBeneficiary) score += 3
+      if (playerGain.flipsToBeneficiary) score += 3
 
-      // AI acceptance — ally refuses if they're leading or incumbent
+      if (score <= 0.05 && allyGain.gainPp <= 0 && playerGain.gainPp <= 0) continue
+
       const isIncumbentHere = world.electionsHeld >= 1 && world.electionNightResults.some(
         (r) => r.wardId === theirWard.id && r.winner?.partyId === allyPartyId
       )
-      const incumbencyPenalty = isIncumbentHere ? 0.70 : 0
 
-      const valueDist = valueDistance(playerParty.values, allyParty.values, { change: 1, growth: 1, services: 1 })
-      const ideologicalBonus = Math.max(0, 1 - valueDist / 8000)
-      const repKey = [world.playerPartyId, allyPartyId].sort().join('_')
-      const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
-
-      // Could the endorsement flip the ward?
-      const playerInTheirWard = theirWard.results.find((r) => r.partyId === world.playerPartyId)
-      const playerInTheirShare = playerInTheirWard?.voteShare ?? 0
-      const boost = allyShare * 0.01
-      const estimatedGain = boost * 25
-      const currentLeader = theirWard.results[0]
-      const couldFlip = currentLeader && currentLeader.partyId !== world.playerPartyId && playerInTheirShare + estimatedGain > (currentLeader.voteShare ?? 0)
-      const flipDelta = couldFlip
-        ? `+${estimatedGain.toFixed(1)}% → flip from ${currentLeader!.partyName} to ${playerParty?.name ?? 'you'}`
-        : undefined
-
-      if (score > 0.05) {
-        const breakdown: { label: string; value: string }[] = []
-
-        const targetInOurWard = ourWard.results.find((r) => r.partyId === allyPartyId)?.voteShare ?? 0
-        const targetHopeless = (1 - targetInOurWard / 25) * 0.30
-        const targetHopelessPct = Math.round(targetHopeless * 100)
-
-        const ourInTheirWard = theirWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
-        const initiatorClose = Math.min(1, ourInTheirWard / 25) * 0.25
-        const initiatorClosePct = Math.round(initiatorClose * 100)
-
-        const ideologyPct = Math.round(ideologicalBonus * 0.25 * 100)
-        const repPct = Math.round(repPenalty * 100)
-        const incPct = Math.round(incumbencyPenalty * 100)
-        const competePct = Math.round(allianceStandDownPenalties(
-          world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id,
-        ) * 100)
-
-        const targWinningRequested = allyResult
-          ? Math.min(1, allyShare / Math.max(1, theirWard.results[0]?.voteShare ?? 100)) * 0.40
-          : 0
-        const sacrificePct = Math.round(targWinningRequested * 100)
-
-        if (Math.abs(targetHopelessPct) > 0) {
-          breakdown.push({ label: 'Their chances here', value: `${targetHopelessPct > 0 ? '+' : ''}${targetHopelessPct}%` })
-        }
-        if (initiatorClosePct > 0) {
-          breakdown.push({ label: 'Your position there', value: `+${initiatorClosePct}%` })
-        }
-        if (ideologyPct > 0) {
-          breakdown.push({ label: 'Ideology match', value: `+${ideologyPct}%` })
-        }
-        if (repPct > 0) {
-          breakdown.push({ label: 'Past broken pacts', value: `-${repPct}%` })
-        }
-        if (sacrificePct > 0) {
-          breakdown.push({ label: 'Sacrifice penalty', value: `-${sacrificePct}%` })
-        }
-        if (competePct > 0) {
-          breakdown.push({ label: 'Stand-down competitiveness', value: `-${competePct}%` })
-        }
-        if (incPct > 0) {
-          breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
-        }
-
-        const det = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, totalSacrifice, batchCount)
-
-        suggestions.push({
-          ourWardId: ourWard.id,
-          ourWardName: ourWard.name,
-          ourWardPlayerShare: playerShare,
-          theirWardId: theirWard.id,
-          theirWardName: theirWard.name,
-          theirWardAllyShare: allyShare,
-          score,
-          acceptanceChance: det.chance,
-          acceptanceRoll: det.roll,
-          multiBonus: Math.round(Math.min(0.50, totalSacrifice * 1.5) * 100),
-          willAccept: det.accepted,
-          couldFlip,
-          flipDelta,
-          breakdown,
+      const breakdown: { label: string; value: string }[] = []
+      if (allyGain.gainPp > 0) {
+        breakdown.push({
+          label: 'Their gain if you stand down',
+          value: `+${allyGain.gainPp.toFixed(1)}%${allyGain.flipsToBeneficiary ? ' (flip)' : ''}`,
         })
       }
+      if (playerGain.gainPp > 0) {
+        breakdown.push({
+          label: 'Your gain if they stand down',
+          value: `+${playerGain.gainPp.toFixed(1)}%${playerGain.flipsToBeneficiary ? ' (flip)' : ''}`,
+        })
+      }
+      if (isIncumbentHere) {
+        breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
+      }
+
+      const det = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, totalSacrifice, batchCount)
+
+      suggestions.push({
+        ourWardId: ourWard.id,
+        ourWardName: ourWard.name,
+        ourWardPlayerShare: playerShare,
+        theirWardId: theirWard.id,
+        theirWardName: theirWard.name,
+        theirWardAllyShare: allyShare,
+        allyGainPp: allyGain.gainPp,
+        playerGainPp: playerGain.gainPp,
+        score,
+        acceptanceChance: det.chance,
+        acceptanceRoll: det.roll,
+        multiBonus: Math.round(Math.min(0.50, totalSacrifice * 1.5) * 100),
+        willAccept: det.accepted,
+        couldFlip: playerGain.flipsToBeneficiary,
+        flipDelta: playerGain.flipsToBeneficiary
+          ? `+${playerGain.gainPp.toFixed(1)}% → flip to ${playerParty.name}`
+          : undefined,
+        breakdown,
+      })
     }
   }
 
@@ -4056,11 +3996,8 @@ export function reciprocalWards(world: World, allyPartyId: string, allyWardId: s
   const theirWard = world.constituencies.find((c) => c.id === allyWardId)
   if (!theirWard) return []
 
-  const allyResult = theirWard.results.find((r) => r.partyId === allyPartyId)
-  const allyShare = allyResult?.voteShare ?? 0
-  const allyLeading = allyResult?.partyId === theirWard.leadingPartyId && theirWard.margin > 8
+  const allyShare = theirWard.results.find((r) => r.partyId === allyPartyId)?.voteShare ?? 0
 
-  // Collect wards the player is already committed to
   const playerCommitted = new Set<string>()
   for (const p of world.alliancePacts) {
     if (p.broken) continue
@@ -4074,77 +4011,59 @@ export function reciprocalWards(world: World, allyPartyId: string, allyWardId: s
   for (const ourWard of world.constituencies) {
     if (ourWard.id === theirWard.id) continue
     if (playerCommitted.has(ourWard.id)) continue
-    const playerResult = ourWard.results.find((r) => r.partyId === world.playerPartyId)
-    const playerShare = playerResult?.voteShare ?? 0
-    if (initiatorStandDownTooStrong(ourWard, world.playerPartyId)) continue
-    if (playerResult && playerResult.partyId === ourWard.leadingPartyId && ourWard.margin > 15) continue
+    const playerShare = ourWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
 
-    const playerLeading = playerResult?.partyId === ourWard.leadingPartyId && ourWard.margin > 8
+    const allyGain = estimateStandDownGain(ourWard, world.playerPartyId, allyPartyId)
+    const playerGain = estimateStandDownGain(theirWard, allyPartyId, world.playerPartyId)
+    let score = allyGain.gainPp + playerGain.gainPp
+    if (allyGain.flipsToBeneficiary) score += 3
+    if (playerGain.flipsToBeneficiary) score += 3
+
+    if (score <= 0.02 && allyGain.gainPp <= 0 && playerGain.gainPp <= 0) continue
+
     const isIncumbentHere = world.electionsHeld >= 1 && world.electionNightResults.some(
       (r) => r.wardId === theirWard.id && r.winner?.partyId === allyPartyId
     )
-    const incumbencyPenalty = isIncumbentHere ? 0.70 : 0
-    const playerWeakness = Math.max(0, 1 - playerShare / 25)
-    const endorsementValue = playerShare * 0.01
-    const score = playerWeakness * 0.5 +
-      Math.min(1, endorsementValue * 5) * 0.2 +
-      (allyLeading ? 0 : allyShare / 40 * 0.2) +
-      (playerLeading ? -0.25 : 0)
 
-    if (score > 0.02) {
-      const boost = allyShare * 0.01
-      const estimatedGain = boost * 25
-      const currentLeader = theirWard.results[0]
-      const playerInAllyWard = theirWard.results.find((r) => r.partyId === world.playerPartyId)
-      const couldFlip = currentLeader && currentLeader.partyId !== world.playerPartyId &&
-        (playerInAllyWard?.voteShare ?? 0) + estimatedGain > (currentLeader.voteShare ?? 0)
-
-      const breakdown: { label: string; value: string }[] = []
-
-      const allyHope = allyLeading
-        ? -0.30
-        : Math.max(0, 1 - allyShare / 25) * 0.30
-      const playerHope = Math.max(0, 1 - playerShare / 25) * 0.25
-      const playLead = (playerLeading ? ourWard.margin / 15 : 0) * 0.60
-
-      if (allyLeading) {
-        breakdown.push({ label: 'They\'re leading here', value: `-${Math.round(0.30 * 100)}%` })
-      } else if (allyHope > 0) {
-        breakdown.push({ label: 'They\'re not leading', value: `+${Math.round(allyHope * 100)}%` })
-      }
-      if (playerHope > 0) {
-        breakdown.push({ label: 'Your endorsement', value: `+${Math.round(playerHope * 100)}%` })
-      }
-      if (playLead > 0) {
-        breakdown.push({ label: 'You\'re leading here', value: `-${Math.round(playLead * 100)}%` })
-      }
-      const theirShareInOurWard = ourWard.results.find((r) => r.partyId === allyPartyId)?.voteShare ?? 0
-      if (theirShareInOurWard > 0) {
-        breakdown.push({ label: 'Their votes here', value: `${theirShareInOurWard.toFixed(1)}%` })
-      }
-      if (incumbencyPenalty > 0) {
-        breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
-      }
-
-      const det2 = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, 0, 1)
-
-      suggestions.push({
-        ourWardId: ourWard.id,
-        ourWardName: ourWard.name,
-        ourWardPlayerShare: playerShare,
-        theirWardId: theirWard.id,
-        theirWardName: theirWard.name,
-        theirWardAllyShare: allyShare,
-        score,
-        acceptanceChance: det2.chance,
-        acceptanceRoll: det2.roll,
-        multiBonus: 0,
-        willAccept: det2.accepted,
-        couldFlip,
-        flipDelta: couldFlip ? `+${estimatedGain.toFixed(1)}% → flip from ${currentLeader!.partyName} to ${playerParty?.name ?? 'you'}` : undefined,
-        breakdown,
+    const breakdown: { label: string; value: string }[] = []
+    if (allyGain.gainPp > 0) {
+      breakdown.push({
+        label: 'Their gain if you stand down',
+        value: `+${allyGain.gainPp.toFixed(1)}%${allyGain.flipsToBeneficiary ? ' (flip)' : ''}`,
       })
     }
+    if (playerGain.gainPp > 0) {
+      breakdown.push({
+        label: 'Your gain if they stand down',
+        value: `+${playerGain.gainPp.toFixed(1)}%${playerGain.flipsToBeneficiary ? ' (flip)' : ''}`,
+      })
+    }
+    if (isIncumbentHere) {
+      breakdown.push({ label: 'Incumbent — refuses outright', value: 'hard block' })
+    }
+
+    const det2 = deterministicAcceptance(world, world.playerPartyId, allyPartyId, ourWard.id, theirWard.id, 0, 1)
+
+    suggestions.push({
+      ourWardId: ourWard.id,
+      ourWardName: ourWard.name,
+      ourWardPlayerShare: playerShare,
+      theirWardId: theirWard.id,
+      theirWardName: theirWard.name,
+      theirWardAllyShare: allyShare,
+      allyGainPp: allyGain.gainPp,
+      playerGainPp: playerGain.gainPp,
+      score,
+      acceptanceChance: det2.chance,
+      acceptanceRoll: det2.roll,
+      multiBonus: 0,
+      willAccept: det2.accepted,
+      couldFlip: playerGain.flipsToBeneficiary,
+      flipDelta: playerGain.flipsToBeneficiary
+        ? `+${playerGain.gainPp.toFixed(1)}% → flip to ${playerParty.name}`
+        : undefined,
+      breakdown,
+    })
   }
 
   return suggestions.sort((a, b) => b.score - a.score).slice(0, 4)

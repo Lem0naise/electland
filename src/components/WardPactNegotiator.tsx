@@ -129,7 +129,6 @@ export function WardPactNegotiator({
                           {suggs.map((s) => {
                             const key = `${s.ourWardId}|${s.theirWardId}`
                             const isChecked = checkedPairs.has(key)
-                            const ourBoost = s.ourWardPlayerShare * 0.01 * 25
                             return (
                               <div
                                 key={key}
@@ -141,7 +140,7 @@ export function WardPactNegotiator({
                                 </span>
                                 <span className="neg-ward">{s.ourWardName}</span>
                                 <span className="neg-share">{s.ourWardPlayerShare.toFixed(1)}%</span>
-                                <span className="neg-gain">~+{ourBoost.toFixed(1)}% for them</span>
+                                <span className="neg-gain">~+{s.allyGainPp.toFixed(1)}% for them</span>
                                 <span className={`neg-accept${s.willAccept ? '' : ' is-reject'}`}>
                                   {s.willAccept ? `\u2713 ${s.acceptanceChance}%` : `\u2717 ${s.acceptanceChance}%`}
                                 </span>
@@ -223,7 +222,6 @@ export function WardPactNegotiator({
                           {suggs.map((s) => {
                             const key = `${s.ourWardId}|${s.theirWardId}`
                             const isChecked = checkedPairs.has(key)
-                            const theirBoost = s.theirWardAllyShare * 0.01 * 25
                             return (
                               <div
                                 key={key}
@@ -235,7 +233,7 @@ export function WardPactNegotiator({
                                 </span>
                                 <span className="neg-ward">{s.theirWardName}</span>
                                 <span className="neg-share">{s.theirWardAllyShare.toFixed(1)}%</span>
-                                <span className="neg-gain">~+{theirBoost.toFixed(1)}% for you</span>
+                                <span className="neg-gain">~+{s.playerGainPp.toFixed(1)}% for you</span>
                                 <span className={`neg-accept${s.willAccept ? '' : ' is-reject'}`}>
                                   {s.willAccept ? `\u2713 ${s.acceptanceChance}%` : `\u2717 ${s.acceptanceChance}%`}
                                 </span>
