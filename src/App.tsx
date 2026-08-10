@@ -12,6 +12,7 @@ import { ElectionNightModal } from './components/ElectionNightModal'
 import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
 import { PactsPanel } from './components/PactsPanel'
+import { WardPactNegotiator } from './components/WardPactNegotiator'
 import { PoliticianActionsPanel } from './components/PoliticianActionsPanel'
 import { CouncilChamber, ProposalForm } from './components/CouncilChamber'
 import { RelationshipsPanel } from './components/RelationshipsPanel'
@@ -660,12 +661,39 @@ function App() {
                       }} lastResult={lastPolResult} />
                     </section>
                   )}
-                  {activeWorkspaceTab === 'ward' && (
-                    <>
-                      <CurrentPollingPanel world={world} constituency={selectedConstituency} />
-                      <ConstituencyInspector world={world} constituency={selectedConstituency} mapMode={mapMode} selectedBlocId={selectedBlocId} selectedTile={selectedTile as PopulationTile | undefined} selectedTileEstimate={selectedTileEstimate} />
-                    </>
-                  )}
+                  {activeWorkspaceTab === 'ward' && (() => {
+                    const pol = world.politicianMode?.politician
+                    const isLeader = pol ? ['party-leader', 'mayor'].includes(pol.careerTier) : false
+                    const isOwnWard = Boolean(pol?.wardId && selectedConstituencyId && pol.wardId === selectedConstituencyId)
+                    const canNegotiateWard = Boolean(selectedConstituencyId && (isOwnWard || isLeader))
+                    let pactLockHint: string | null = null
+                    if (selectedConstituencyId && !canNegotiateWard) {
+                      if (!pol?.wardId) {
+                        pactLockHint = 'Nominate a ward to negotiate local pacts, or become party leader to negotiate for any ward.'
+                      } else {
+                        pactLockHint = 'Become party leader to negotiate pacts for wards other than your own.'
+                      }
+                    }
+                    return (
+                      <>
+                        <CurrentPollingPanel world={world} constituency={selectedConstituency} />
+                        {canNegotiateWard && selectedConstituencyId && (
+                          <WardPactNegotiator
+                            world={world}
+                            focusWardId={selectedConstituencyId}
+                            onAction={handleAction}
+                          />
+                        )}
+                        {pactLockHint && (
+                          <section className="panel ward-pact-locked">
+                            <div className="panel-kicker">Electoral pacts</div>
+                            <p className="ward-pact-locked-hint">{pactLockHint}</p>
+                          </section>
+                        )}
+                        <ConstituencyInspector world={world} constituency={selectedConstituency} mapMode={mapMode} selectedBlocId={selectedBlocId} selectedTile={selectedTile as PopulationTile | undefined} selectedTileEstimate={selectedTileEstimate} />
+                      </>
+                    )
+                  })()}
                   {activeWorkspaceTab === 'political' && world.politicianMode && (
                     <>
                       <section className="panel personal-position-summary">

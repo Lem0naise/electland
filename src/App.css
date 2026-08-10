@@ -971,8 +971,13 @@ button, input, select, textarea { font: inherit; }
 .pacts-pending { padding: 10px; border: 1px solid var(--accent-gold); background: rgba(184, 134, 11, 0.08); border-radius: 4px; }
 .pacts-pending-actions { display: flex; gap: 8px; margin-top: 8px; }
 .pacts-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--ink-faint); }
+.pacts-row.is-broken { opacity: 0.65; }
+.pacts-empty { font-size: 0.72rem; color: var(--ink-soft); margin: 0; font-style: italic; }
 .pacts-ally-pick { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; }
 .pacts-suggestion { font-size: 0.72rem; color: var(--ink-soft); }
+.ward-pact-panel .ac-expand-toggle { width: 100%; text-align: left; }
+.ward-pact-panel.is-disabled { opacity: 0.7; }
+.ward-pact-locked-hint { font-size: 0.72rem; color: var(--ink-soft); margin: 0; }
 .ap-label-small {
   font-size: 0.65rem;
   text-transform: uppercase;
