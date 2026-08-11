@@ -5,119 +5,132 @@
 - `npm run dev` — start Vite dev server
 - `npm run build` — typecheck + production build (`tsc -b && vite build`)
 - `npm run lint` — ESLint
-- `npm install --legacy-peer-deps` — install dependencies (flag required by peer dep conflicts)
-
-There is no test framework configured.
+- `npm run test` — run Vitest once
+- `npm run test:watch` — Vitest in watch mode
+- `npm run test:coverage` — coverage report
+- `npm ci --legacy-peer-deps` — install dependencies (flag required by peer dep conflicts)
 
 ## Verification
 
 Run in this order before committing:
 1. `npm run lint`
-2. `npm run build`
+2. `npm run test`
+3. `npm run build`
 
 ## Architecture
 
 See `guidance.md` for detailed simulation logic and architecture overview.
 
-### Key files
+### Source layout
 
-| File | Lines | Role |
-|------|-------|------|
-| `src/lib/sim.ts` | ~3500 | Simulation engine — world gen, weekly sim, vote calc, alliances, pacts, redistricting, tenure |
-| `src/types/sim.ts` | ~430 | All TypeScript interfaces and types |
-| `src/lib/persistence.ts` | ~165 | Save/load with versioned migration, runtime validation, JSON export/import |
-| `src/App.tsx` | ~700 | Top-level state, all handlers, layout shell |
-| `src/App.css` | ~2700 | All styles (newspaper theme, mobile breakpoints at 720px/900px) |
-| `src/components/CampaignActionsPanel.tsx` | ~880 | Campaign UI: actions, pacts, auto-campaigns, NPC proposals, pact builder |
-| `src/components/MapFigure.tsx` | ~440 | SVG map: ward/bloc/voter/redistrict modes, seed dragging |
-| `src/components/StatisticsModal.tsx` | ~530 | Full-screen stats: standings, trends, party detail, councillor tenure |
-| `src/components/SetupScreen.tsx` | ~420 | Town gen, party picker/editor, UK names, load game |
-| `src/components/ElectionNightModal.tsx` | ~380 | Election results reveal, copy results, coalition trigger |
-| `src/components/CoalitionModal.tsx` | ~250 | Post-election government formation |
-| `src/components/ConstituencyInspector.tsx` | ~460 | Ward detail: demographics, fit, history, campaigns |
-| `src/components/GovernmentDashboard.tsx` | ~100 | Government period dashboard |
-| `src/components/BudgetModal.tsx` | ~100 | Council budget allocation |
-| `src/components/GovernanceModal.tsx` | ~60 | Council decisions during governing |
-| `src/components/SeatBar.tsx` | ~50 | Horizontal seat bar, opens stats modal |
-| `src/components/ActionFlash.tsx` | ~35 | Toast notification (memo-wrapped) |
-| `src/components/VoteHistoryChart.tsx` | ~90 | SVG sparkline chart (memo-wrapped) |
-| `src/components/IdeologyWidget.tsx` | ~40 | Three-axis position graphic (memo-wrapped) |
+```text
+src/
+  components/           React UI
+  data/                 Policy templates and game data
+  game/                 Top-level reducer/selectors
+  sim/
+    core/               Deterministic RNG and maths
+    world/              World generation and weekly progression
+    elections/          Vote calculation and candidates
+    campaigning/        Individual politician actions
+    politics/           Career, government, relationships, pacts
+    council/            Agenda, motions, voting, legislation, budget
+    redistricting/      Boundary operations
+  types/                Domain types (world, politics, council, elections)
+  lib/
+    sim.ts              Transitional barrel (legacy callers)
+    persistence.ts      Save/load/export/import + migrations
+  test/                 Test setup and builders
+```
 
-## Key systems to know
+### Dependency direction
 
-### Simulation constants (`src/lib/sim.ts` top)
-- `ISSUE_FIT_SCALE = 7000` — ideological distance divisor in `scorePartyForTile`
-- `ALLIANCE_IDEOLOGY_SCALE = 8000` — ideology divisor for alliance acceptance
-- `COALITION_IDEOLOGY_SCALE = 12000` — ideology divisor for coalition compatibility
-- `SOFTMAX_TEMP = 0.85` — softmax temperature for vote share calculation
-- `STANDING_DOWN_SCORE = -999` — sentinel score for parties standing down
-- `WARD_BOOST_DECAY = 0.78` — weekly decay rate for ward campaign boosts
-- `CAMPAIGN_BOOST_DECAY = 0.78` — weekly decay rate for tile campaign boosts
+```text
+data/types/core
+      ↓
+domain modules (sim/)
+      ↓
+game reducer/selectors
+      ↓
+React components/App
+```
 
-### Alliance pacts
-- Created via `applyCampaignAction` case `'propose_alliance'`
-- Scored per-tile in `allianceModifier()`: standing-down party gets `STANDING_DOWN_SCORE`, ally gets endorsement bonus = stored share × 0.01
-- Acceptance via `evaluateAllianceAcceptance()` and `deterministicAcceptance()` (hash-based using ward IDs, stable within a week)
-- `suggestPacts()` returns ranked ward pairs with breakdown and acceptance info
-- NPC pacts: 5% per party per week in `runAICampaigns()`, reviewed every 4 weeks
-- Pacts persist across elections
-- All pact/entry IDs are deterministic from `world.seed + world.week` (no `Date.now()`)
+Do not import React/UI code into simulation modules.
 
-### Coalition government
-- Post-election NOC triggers `CoalitionModal`
-- `coalitionCompatibility()` scores ideology match 0-100% using `COALITION_IDEOLOGY_SCALE`
-- `generateGovernanceDecisions(n)` picks governance decisions (Fisher-Yates shuffle)
-- `blocEffects` applied to coalition partner's utility
+### Key domain modules
 
-### Voting
-- `scorePartyForTile()`: wardFit + focus + organization + tagBonus + issueFit + eventBonus + baseUtility + momentum + wardBoost + tileBoost + incumbencyBonus
-- Softmax over scores gives vote shares. Score range roughly -0.5 to +2.5
-- +0.20 score shift ≈ +5% vote share gain
-- `campaignBoosts` decay weekly (rate `CAMPAIGN_BOOST_DECAY`), preventing permanent stacking
-- Custom-tier parties receive `'minor'`-targeted popularity currents
+| Module | Role |
+|--------|------|
+| `src/sim/core/random.ts` | Deterministic RNG (createRng, shuffle) |
+| `src/sim/core/math.ts` | clamp, lerp, softmax, roundPoliticalValues |
+| `src/sim/politics/career.ts` | 3-rank career, leadership challenge, Mayor derivation |
+| `src/sim/politics/government.ts` | GovernmentState lifecycle, selectors |
+| `src/sim/politics/pacts.ts` | Commitment-based electoral pacts |
+| `src/sim/politics/relationships.ts` | Councillor relationships |
+| `src/sim/council/agenda.ts` | Session generation, resolution |
+| `src/sim/council/motions.ts` | Motion generation from templates |
+| `src/sim/council/voting.ts` | NPC votes, whips |
+| `src/sim/council/legislation.ts` | Active enactments, repeal, policy scoring |
+| `src/sim/council/budget.ts` | Budget authorship, effects, failure handling |
+| `src/data/policyTemplates.ts` | Structured policy templates |
+| `src/game/reducer.ts` | Typed game action reducer |
+| `src/game/selectors.ts` | Derived state selectors |
+| `src/lib/persistence.ts` | Save v3, migrations, validation |
 
-### Redistricting
-- Map mode `'redistrict'`: drag Voronoi seed points to gerrymander
-- Tile reassignment uses Delaunay (computed immutably in App.tsx, not mutated in MapFigure)
-- `recalculateWardAggregates()` + `regenerateCellPaths()` + `calculateResults()` on Done
-- Snapshot save/restore for undo
+### Key types
 
-### Persistence (`src/lib/persistence.ts`)
-- Save format version: 2 (auto-migrates from v1)
-- Stores `previousNationalResults` (not full previous World) to reduce size
-- `loadGame()` returns `{ data } | { error }` for user feedback
-- `saveGame()` returns `{ ok, error? }`
-- `validateWorld()` checks structural integrity on load
-- `normalizeSave()` fills missing fields with defaults on migration
-- `hasSave()` validates structure, not just key existence
+| File | Contents |
+|------|----------|
+| `src/types/world.ts` | World, Budget, Party, Constituency, tiles, events |
+| `src/types/politics.ts` | CareerRank, GovernmentState, VictoryState, ElectoralPact, PoliticianState |
+| `src/types/council.ts` | CouncilMotion, CouncilSession, EnactedPolicy, BudgetEvent, Councillor |
+| `src/types/elections.ts` | Election result types |
+| `src/types/sim.ts` | Barrel re-export of all type modules |
 
-### Councillor tenure
-- `loadCouncillorTenure()` / `updateCouncillorTenure()` — localStorage persistence
-- Displayed in StatisticsModal
+## Key systems
 
-## Type system notes
+### Career progression
+- Ranks: `backbencher -> committee-chair -> party-leader`
+- No Deputy Leader rank
+- Mayor is an office, not a rank: derived from Party Leader + government lead
 
-- `CampaignActionType` — all action types (11 variants)
-- `PermanentCampaignType` — narrowed to `'canvass' | 'ads' | 'fix_potholes' | 'improve_bins'`
-- `ActiveCampaign.type` uses `PermanentCampaignType` (not full action type)
-- `World.budget` is required (not optional)
-- `World` does NOT have: `name`, `headlines`, `playerWon`, `playerLost`
-- `TownStats` does NOT have: `currentMayorParty`, `currentMayorLeader`, `electionCycleWeeks`, `weeksUntilElection` (use `World.*` directly)
+### Government
+- `GovernmentState` with `status: 'forming' | 'formed'`
+- Kinds: caretaker, majority, minority, coalition
+- Use selectors: `isPlayerMayor`, `isPartyInGovernment`, `isPlayerPartyGovernmentLead`
 
-## UI conventions
-- Newspaper theme: serif fonts, var(--ink) color palette, var(--paper) backgrounds
-- Inline action cards with `.ac-expand-toggle` pattern for config panels
-- Modals use `.modal-backdrop` + `.modal` classes with `role="dialog" aria-modal="true"`
-- Mobile: `@media (max-width: 720px)` for game UI, `@media (max-width: 900px)` for stats modal
-- `prefers-reduced-motion` support: all animations disabled
-- `:focus-visible` global outline ring for keyboard users
-- Success/positive color: `var(--safe)` (do NOT hardcode hex greens)
-- Dismissable modals close on Escape key (stats, budget, gov dashboard, menu)
+### Legislation
+- Vote history (CouncilMotion[]) separate from active policy (EnactedPolicy[])
+- Repeal deactivates enactments; repealed policy has no scoring effect
+- Policy effects scored via `scorePolicyReputationForTile` (not baked into campaignBoosts)
+- Budget effects aggregated properly (no duplicate bloc overwrite)
+
+### Electoral pacts
+- Commitment-based model (PactCommitment[])
+- Election-scoped: complete at election
+- Trust-based (pactTrust: Record<string, number>)
+- One evaluator for preview and submission
+
+### Persistence
+- Save version: 3
+- Pure migrations (no input mutation)
+- Migrates career, government, pacts, legislation from v1/v2
 
 ## Conventions
-- TypeScript strict mode with `noUnusedLocals` and `noUnusedParameters` — no dead code allowed
-- No comments in code unless requested
-- All RNG must be deterministic: use `createRng(seed)` or `shuffle(arr, rng)`, never `Math.random()` in sim
+
+- TypeScript strict mode with `noUnusedLocals` and `noUnusedParameters`
+- No comments in code unless explaining non-obvious intent
+- All simulation RNG must be deterministic: use `createRng(seed)`, never `Math.random()`
+- Domain functions must not mutate input World
+- Resolution functions must be idempotent
 - Default branch is `master`
-- Deployed to GitHub Pages via CI on push to `master`
-- CI runs lint + build on PRs (`.github/workflows/ci.yml`)
+- CI runs lint + test + build on PRs (`.github/workflows/ci.yml`)
+
+## UI conventions
+
+- Newspaper theme: serif fonts, var(--ink) color palette, var(--paper) backgrounds
+- Modals use `.modal-backdrop` + `.modal` with `role="dialog" aria-modal="true"`
+- Mobile: `@media (max-width: 720px)` for game UI, `@media (max-width: 900px)` for stats
+- `prefers-reduced-motion` support
+- `:focus-visible` global outline ring
+- Success/positive color: `var(--safe)` (do NOT hardcode hex greens)

@@ -30,6 +30,7 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
   const effectiveColleagueWardId = selectedColleague?.wardId ?? ''
 
   const categoryAccent: Record<string, string> = {
+    incumbent: 'cat-political',
     grassroots: 'cat-grassroots',
     communications: 'cat-comms',
     political: 'cat-political',
@@ -68,11 +69,11 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
 
       <div className="pol-ap-display">
         <strong>{actionAvailable ? 'Action available' : 'Action used'}</strong> this week
-        {weekly && (
+        {(weekly && actionAvailable) && (
           <span className="pol-auto-indicator">
-            Weekly auto: {weekly.replace(/_/g, ' ')}
-            {weekly === 'help_colleague' && selectedColleague ? ` → ${selectedColleague.wardName}` : ''}
-            {actionAvailable ? ' (runs if you skip acting before advancing)' : ' (skipped — you already acted)'}
+            If you do nothing, {weekly.replace(/_/g, ' ')}
+            {weekly === 'help_colleague' && selectedColleague ? ` → ${selectedColleague.wardName} ` : ''}
+            {' '} will happen automatically
           </span>
         )}
       </div>
@@ -123,22 +124,22 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
                       }}
                     >
                       <span className="pol-action-name">{action.label}</span>
-                      <span className="pol-action-cost">Uses weekly action</span>
                     </button>
                     {!isPolicyAction && (
-                      <label className="pol-auto-toggle" title="Run automatically at week end if you have not acted" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isAuto}
-                          onChange={() => {
-                            if (isColleagueAction && !isAuto && effectiveColleagueWardId) {
-                              onSetColleagueTarget(effectiveColleagueWardId)
-                            }
-                            onToggleAuto(action.type)
-                          }}
-                        />
-                        <span className="auto-label">Weekly</span>
-                      </label>
+                      <button
+                        type="button"
+                        className={`pol-auto-btn${isAuto ? ' active' : ''}`}
+                        title="Run automatically at week end if you have not acted"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (isColleagueAction && !isAuto && effectiveColleagueWardId) {
+                            onSetColleagueTarget(effectiveColleagueWardId)
+                          }
+                          onToggleAuto(action.type)
+                        }}
+                      >
+                        AUTO
+                      </button>
                     )}
                   </div>
                   <div className="pol-action-meta">
@@ -172,7 +173,7 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
                           <div className="colleague-campaign-summary">
                             <strong>{selectedColleague.candidateName}</strong>
                             <span>{selectedColleague.wardName}</span>
-                            <span>{(selectedColleague.partyShare * 100).toFixed(0)}% · leader {selectedColleague.leadingPartyName} by {(selectedColleague.margin * 100).toFixed(0)}</span>
+                            <span>{selectedColleague.partyShare.toFixed(0)}% · leader {selectedColleague.leadingPartyName} by {selectedColleague.margin.toFixed(0)}%</span>
                             {selectedColleague.isBattleground && <span className="colleague-battleground">Battleground</span>}
                           </div>
                           <button type="button" className="colleague-change-target" onClick={() => setShowColleaguePicker(true)}>
@@ -197,7 +198,7 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
                                 <span>{target.candidateName}{target.councillorId ? ' · councillor' : ' · candidate'}</span>
                               </span>
                               <span className="colleague-option-meta">
-                                {(target.partyShare * 100).toFixed(0)}% · {target.leadingPartyName} +{(target.margin * 100).toFixed(0)}
+                                {target.partyShare.toFixed(0)}% · {target.leadingPartyName} +{target.margin.toFixed(0)}%
                                 {target.isBattleground ? ' · battleground' : ''}
                               </span>
                             </button>

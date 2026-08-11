@@ -31,7 +31,9 @@ import {
   type TownStats,
   type VoteHistoryEntry,
   type ElectionSeatHistoryEntry,
-  type CareerTier,
+  type CareerRank,
+  type GovernmentState,
+  type ElectoralPact,
   type CouncilMotion,
   type CouncilMotionVote,
   type Councillor,
@@ -49,6 +51,11 @@ import {
   type World,
   type WorldOptions,
 } from '../types/sim'
+import {
+  createCaretakerGovernment,
+  governmentLeadParty,
+  isPlayerPartyGovernmentLead,
+} from '../sim/politics/government'
 
 const MAP_WIDTH = 920
 const MAP_HEIGHT = 640
@@ -3078,8 +3085,12 @@ export function generateWorld(options: WorldOptions): World {
     nationalResults: [] as PartyPerformance[],
     tiles,
     playerPartyId: defaultPlayerPartyId,
-    currentMayorParty: incumbent?.name ?? establishedParties[0]?.name ?? parties[0]?.name ?? '',
-    currentMayorLeader: incumbent?.leader ?? establishedParties[0]?.leader ?? parties[0]?.leader ?? '',
+    electoralPacts: [] as ElectoralPact[],
+    pactTrust: {} as Record<string, number>,
+    government: createCaretakerGovernment(
+      incumbent?.id ?? establishedParties[0]?.id ?? parties[0]?.id ?? defaultPlayerPartyId,
+      1,
+    ),
     electionCycleWeeks,
     weeksUntilElection,
     playerActionPoints: 1,
@@ -3090,7 +3101,6 @@ export function generateWorld(options: WorldOptions): World {
     newsFeed: [`Welcome to ${townName}. You are building a local political career. Election in ${weeksUntilElection} weeks.`],
     voteHistory: [] as VoteHistoryEntry[],
     electionSeatHistory: [] as ElectionSeatHistoryEntry[],
-    isGoverning: false,
     governanceDecisions: [] as GovernanceDecision[],
     electionNightActive: false,
     electionNightResults: [],
@@ -3100,8 +3110,6 @@ export function generateWorld(options: WorldOptions): World {
     policyShiftUsedThisCycle: false,
     alliancePacts: [] as AlliancePact[],
     allianceReputation: {} as Record<string, number>,
-    needsCoalition: false,
-    minorityGovernment: false,
     budget: getDefaultBudget(),
     councilHistory: [] as CouncilDecisionRecord[],
   }
@@ -3168,6 +3176,52 @@ export function generateWorld(options: WorldOptions): World {
   }
 
   return finalWorld
+}
+
+function electionGovernmentAfterWeek(
+  world: World,
+  electionHappening: boolean,
+  playerWon: boolean,
+  seatLeader: PartyPerformance | undefined,
+  majority: number,
+  nationalResults: PartyPerformance[],
+): GovernmentState | undefined {
+  if (!electionHappening) return world.government
+
+  const formedWeek = world.week + 1
+  const electionNumber = world.electionsHeld + 1
+
+  if (playerWon) {
+    return {
+      status: 'formed',
+      kind: 'majority',
+      leadPartyId: world.playerPartyId,
+      partnerPartyIds: [],
+      formedWeek,
+      electionNumber,
+    }
+  }
+
+  const hasMajority = nationalResults.some((r) => r.seatsWon >= majority)
+  if (!hasMajority) {
+    return {
+      status: 'forming',
+      kind: 'caretaker',
+      leadPartyId: seatLeader?.partyId ?? world.playerPartyId,
+      partnerPartyIds: [],
+      formedWeek,
+      electionNumber,
+    }
+  }
+
+  return {
+    status: 'formed',
+    kind: 'majority',
+    leadPartyId: seatLeader!.partyId,
+    partnerPartyIds: [],
+    formedWeek,
+    electionNumber,
+  }
 }
 
 // ─── Week simulation ──────────────────────────────────────────────────────────
@@ -3424,18 +3478,22 @@ export function simulateWeek(world: World): World {
         : seat.candidates,
     })),
     nationalResults: results.nationalResults,
-    currentMayorParty: electionHappening && seatLeader ? seatLeader.partyName : world.currentMayorParty,
-    currentMayorLeader: electionHappening && seatLeader ? seatLeader.leader : world.currentMayorLeader,
+    government: electionGovernmentAfterWeek(
+      world,
+      electionHappening,
+      playerWon,
+      seatLeader,
+      majority,
+      results.nationalResults,
+    ),
+    electoralPacts: world.electoralPacts ?? [],
+    pactTrust: world.pactTrust ?? {},
     electionNightActive: electionHappening,
     electionNightResults: sortedResults,
     electionNightRevealIndex: 0,
     electionNightPreviousSeats,
     electionsHeld: world.electionsHeld + (electionHappening ? 1 : 0),
-    isGoverning: electionHappening ? playerWon : world.isGoverning,
     governanceDecisions: electionHappening ? [] : world.governanceDecisions,
-    needsCoalition: electionHappening && !playerWon && !results.nationalResults.some((r) => r.seatsWon >= majority),
-    minorityGovernment: electionHappening ? false : world.minorityGovernment,
-    coalitionPartnerId: electionHappening ? undefined : world.coalitionPartnerId,
     newsFeed: [...newsFeedLines.map((l) => `Week ${world.week + 1}: ${l}`), ...world.newsFeed].slice(0, 30),
     alliancePacts: world.alliancePacts,
     electionSeatHistory: electionHappening
@@ -3494,17 +3552,17 @@ export function simulateWeek(world: World): World {
         let infGain = 0
         let autoToast: string | undefined
         switch (weeklyType) {
-          case 'door_knock': approvalGain = 0.05 + autoRng() * 0.04; break
+          case 'door_knock': approvalGain = 0.05 + autoRng() * 0.04; repGain = 3 + Math.floor(autoRng() * 3); break
           case 'hold_surgery': approvalGain = 0.04 + autoRng() * 0.03; repGain = 2; break
-          case 'leaflet_drop': repGain = 4 + Math.floor(autoRng() * 3); approvalGain = 0.02; break
+          case 'leaflet_drop': approvalGain = 0.05 + autoRng() * 0.04; repGain = 3 + Math.floor(autoRng() * 3); break
           case 'local_media': if (autoRng() < 0.2) { approvalGain = -0.04; repGain = -3 } else { approvalGain = 0.06; repGain = 5 } break
           case 'call_party_support': {
-            if (autoPol.partyLoyalty >= 30 && autoPol.wardId) {
+            if (autoPol.partyLoyalty >= 40 && autoPol.wardId) {
               const wardBoostAmount = (0.08 + autoRng() * 0.04) * (autoPol.partyLoyalty / 100)
               autoParties = autoParties.map((party) => party.id === world.playerPartyId
                 ? { ...party, wardBoosts: { ...party.wardBoosts, [autoPol.wardId]: clamp((party.wardBoosts[autoPol.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
                 : party)
-              autoPol = { ...autoPol, partyLoyalty: clamp(autoPol.partyLoyalty + 3, 0, 100) }
+              autoPol = { ...autoPol, partyLoyalty: clamp(autoPol.partyLoyalty - 5, 0, 100) }
             }
             break
           }
@@ -3534,7 +3592,7 @@ export function simulateWeek(world: World): World {
               })
               autoPol = {
                 ...autoPol,
-                partyLoyalty: clamp(autoPol.partyLoyalty + 2, 0, 100),
+                partyLoyalty: clamp(autoPol.partyLoyalty + 5, 0, 100),
                 relationships,
               }
               autoToast = `Weekly action completed: campaigned for ${autoTarget.candidateName} in ${autoTarget.wardName}.`
@@ -3570,7 +3628,7 @@ export function simulateWeek(world: World): World {
       termsServed: wonSeat ? pol.termsServed + 1 : pol.termsServed,
       careerHistory: [
         ...pol.careerHistory,
-        { week: world.week + 1, description: wonSeat ? 'Won seat' : pol.wardId ? 'Lost seat' : 'Remained without a seat', tier: pol.careerTier },
+        { week: world.week + 1, description: wonSeat ? 'Won seat' : pol.wardId ? 'Lost seat' : 'Remained without a seat', tier: pol.careerTier, rank: pol.careerRank },
       ],
     }
     const updatedCouncillors = merged.constituencies
@@ -4437,6 +4495,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     careerHistory: [{ week: world.week, description: wardId ? 'Selected as candidate' : 'Joined the local party', tier: 'backbencher' }],
     personalFunds: 3,
     influence: 5,
+    careerRank: 'backbencher',
     careerTier: 'backbencher',
     partyLoyalty: 80,
     motionsProposed: 0,
@@ -4483,8 +4542,10 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     councilSessionInterval: 8,
     nextBudgetWeek: world.week + world.electionCycleWeeks,
     budgetHistory: [],
+    budgetEvents: [],
     autoCampaigns: [],
     legislationHistory: [],
+    activePolicies: [],
   }
 }
 
@@ -4559,7 +4620,7 @@ export function selectWard(world: World, wardId: string): World {
     ...pol,
     wardId,
     personalApproval: 0,
-    careerHistory: [...pol.careerHistory, { week: world.week, description: `Selected to contest ${ward.name}`, tier: pol.careerTier }],
+    careerHistory: [...pol.careerHistory, { week: world.week, description: `Selected to contest ${ward.name}`, tier: pol.careerTier, rank: pol.careerRank }],
   }, oldCouncillor ?? createCouncillorForWard({ ...world, constituencies }, ward, rng))
   const councillors = pm.councillors
     .filter((councillor) => councillor.wardId !== wardId)
@@ -4683,36 +4744,35 @@ export function getColleagueCampaignTargets(world: World): ColleagueCampaignTarg
 export function getPoliticianActions(world: World): PoliticianActionMeta[] {
   if (!world.politicianMode) return []
   const pol = world.politicianMode.politician
-  const usedAttendEvent = world.actionsThisWeek.some((a) => a.action.label === 'Attend local event')
+  const usedAttendEvent = world.actionsThisWeek.some((a) => a.action.label === 'Gain influence in council' || a.action.label === 'Attend local event')
   const hasLocalRoots = pol.traits.some((t) => t.id === 'local-roots')
   const hasChampion = pol.traits.some((t) => t.id === 'peoples-champion')
   const hasMediaSavvy = pol.traits.some((t) => t.id === 'media-savvy')
   const colleagueTargets = getColleagueCampaignTargets(world)
 
   const actions: PoliticianActionMeta[] = [
-    { type: 'door_knock', label: 'Door-knock streets', description: 'Knock on doors to build personal support.', apCost: 1, category: 'grassroots', expectedEffect: '+5–9% approval', traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined },
-    { type: 'leaflet_drop', label: 'Leaflet drop', description: 'Distribute leaflets for name recognition.', apCost: 1, category: 'communications', expectedEffect: '+4–7 reputation, +2% approval' },
+    { type: 'door_knock', label: 'Door-knock streets', description: 'Knock on doors and distribute leaflets to build support and recognition.', apCost: 1, category: 'grassroots', expectedEffect: '+5–9% approval, +3–5 rep', traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined },
     { type: 'local_media', label: 'Local media', description: 'Appear on local radio or newspaper.', apCost: 1, category: 'communications', expectedEffect: '+6–10% approval, +5–9 rep', riskDescription: hasMediaSavvy ? '10% gaffe risk' : '20% gaffe risk', traitBonus: hasMediaSavvy ? 'Media Savvy: halved risk' : undefined },
-    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward.', apCost: 1, category: 'political', expectedEffect: 'Ward boost + loyalty' },
-    { type: 'smear_opponent', label: 'Smear opponent', description: 'Attack the leading rival candidate.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
+    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward. Requires loyalty ≥ 40; spends 5 loyalty.', apCost: 1, category: 'political', expectedEffect: 'Ward boost (costs 5 loyalty)', riskDescription: pol.partyLoyalty < 40 ? 'Loyalty too low' : undefined },
+    { type: 'smear_opponent', label: 'Attack opponent', description: 'Attack the leading rival candidate publicly.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
     { type: 'shift_personal_policy', label: 'Set personal position', description: 'Move your own public position without changing the party platform.', apCost: 1, category: 'political', expectedEffect: 'Personal ward fit shifts', riskDescription: world.week < pol.personalPolicyNextWeek ? `Available again in week ${pol.personalPolicyNextWeek}` : 'May reduce party loyalty if you diverge' },
   ]
   if (colleagueTargets.length > 0) {
-    actions.splice(4, 0, {
+    actions.splice(3, 0, {
       type: 'help_colleague',
       label: 'Campaign for a colleague',
-      description: 'Knock doors in another ward to boost a same-party candidate.',
+      description: 'Knock doors in another ward to boost a same-party candidate. Gains loyalty.',
       apCost: 1,
       category: 'political',
-      expectedEffect: 'Ward boost for colleague + loyalty',
+      expectedEffect: 'Ward boost for colleague, +5 loyalty',
       traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined,
     })
   }
   if (pol.isIncumbent) {
-    actions.splice(1, 0, { type: 'hold_surgery', label: 'Hold surgery', description: 'Meet constituents face-to-face as their councillor.', apCost: 1, category: 'grassroots', expectedEffect: '+4–7% approval, +2 rep', traitBonus: hasChampion ? "People's Champion: +30%" : undefined })
-  }
-  if (!usedAttendEvent) {
-    actions.push({ type: 'attend_event', label: 'Attend local event', description: 'Show up at a community event and build local connections.', apCost: 1, category: 'grassroots', expectedEffect: '+1 influence' })
+    actions.push({ type: 'hold_surgery', label: 'Hold surgery', description: 'Meet constituents face-to-face as their councillor.', apCost: 1, category: 'incumbent', expectedEffect: '+4–7% approval, +2 rep', traitBonus: hasChampion ? "People's Champion: +30%" : undefined })
+    if (!usedAttendEvent) {
+      actions.push({ type: 'attend_event', label: 'Gain influence in council', description: 'Attend a council function and build your political network.', apCost: 1, category: 'incumbent', expectedEffect: '+1 influence' })
+    }
   }
   return actions
 }
@@ -4720,9 +4780,10 @@ export function getPoliticianActions(world: World): PoliticianActionMeta[] {
 export function getPoliticianActionsByCategory(world: World): Array<{ category: ActionCategory; label: string; actions: PoliticianActionMeta[] }> {
   const all = getPoliticianActions(world)
   const groups: Array<{ category: ActionCategory; label: string; actions: PoliticianActionMeta[] }> = [
-    { category: 'grassroots', label: 'Ground Game', actions: all.filter((a) => a.category === 'grassroots') },
-    { category: 'communications', label: 'Outreach', actions: all.filter((a) => a.category === 'communications') },
-    { category: 'political', label: 'Power Plays', actions: all.filter((a) => a.category === 'political') },
+    { category: 'incumbent', label: 'Incumbent Actions', actions: all.filter((a) => a.category === 'incumbent') },
+    { category: 'grassroots', label: 'Campaigning', actions: all.filter((a) => a.category === 'grassroots') },
+    { category: 'communications', label: 'Communications', actions: all.filter((a) => a.category === 'communications') },
+    { category: 'political', label: 'Political', actions: all.filter((a) => a.category === 'political') },
   ]
   return groups.filter((g) => g.actions.length > 0)
 }
@@ -4752,7 +4813,8 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
     case 'door_knock': {
       const localRootsBonus = pol.traits.some((t) => t.id === 'local-roots') ? 1.2 : 1.0
       approvalDelta = (0.05 + rng() * 0.04) * localRootsBonus
-      description = `You knocked on doors across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
+      reputationDelta = 3 + Math.floor(rng() * 3)
+      description = `You knocked on doors and dropped leaflets across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
       break
     }
     case 'hold_surgery': {
@@ -4763,9 +4825,9 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       break
     }
     case 'leaflet_drop': {
-      reputationDelta = 4 + Math.floor(rng() * 3)
-      approvalDelta = 0.02
-      description = 'Leaflets distributed across the ward. Your name recognition improved.'
+      reputationDelta = 3 + Math.floor(rng() * 3)
+      approvalDelta = (0.05 + rng() * 0.04)
+      description = `You knocked on doors and dropped leaflets across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
       break
     }
     case 'local_media': {
@@ -4783,19 +4845,19 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       break
     }
     case 'call_party_support': {
-      const loyaltyFactor = pol.partyLoyalty / 100
-      const wardBoostAmount = (0.08 + rng() * 0.04) * loyaltyFactor
-      if (pol.partyLoyalty < 30) {
+      if (pol.partyLoyalty < 40) {
         outcome = 'neutral'
         description = 'Party HQ declined your request. Your loyalty score is too low for them to invest resources.'
         break
       }
+      const loyaltyFactor = pol.partyLoyalty / 100
+      const wardBoostAmount = (0.08 + rng() * 0.04) * loyaltyFactor
       const updatedParties = world.parties.map((p) =>
         p.id === world.playerPartyId
           ? { ...p, wardBoosts: { ...p.wardBoosts, [pol.wardId]: clamp((p.wardBoosts[pol.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
           : p,
       )
-      loyaltyDelta = 3
+      loyaltyDelta = -5
       description = pol.partyLoyalty < 60
         ? 'Party HQ sent limited resources — your loyalty record has them cautious.'
         : 'Party HQ sent activists and resources to your ward. The campaign feels stronger.'
@@ -4826,7 +4888,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
           ? { ...p, wardBoosts: { ...p.wardBoosts, [target.wardId]: clamp((p.wardBoosts[target.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
           : p,
       )
-      loyaltyDelta = 2
+      loyaltyDelta = 5
       const relationships = pol.relationships.map((relationship) => {
         if (!target.councillorId || relationship.targetId !== target.councillorId) return relationship
         const strength = clamp(relationship.strength + 6, -100, 100)
@@ -4843,7 +4905,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
         ...pol,
         partyLoyalty: clamp(pol.partyLoyalty + loyaltyDelta, 0, 100),
         relationships,
-        careerHistory: [...pol.careerHistory, { week: world.week, description: `Campaigned for ${target.candidateName} in ${target.wardName}`, tier: pol.careerTier }],
+        careerHistory: [...pol.careerHistory, { week: world.week, description: `Campaigned for ${target.candidateName} in ${target.wardName}`, tier: pol.careerTier, rank: pol.careerRank }],
       }
       return {
         world: {
@@ -4863,7 +4925,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
     }
     case 'attend_event': {
       influenceDelta = 1
-      description = 'You attended the community fair and strengthened your local political network.'
+      description = 'You worked the room at a council function and strengthened your political network.'
       break
     }
     case 'smear_opponent': {
@@ -4899,7 +4961,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
         personalValues,
         personalPolicyNextWeek: world.week + 4,
         partyLoyalty: clamp(pol.partyLoyalty + loyaltyDelta, 0, 100),
-        careerHistory: [...pol.careerHistory, { week: world.week, description: `Set personal position on ${axisLabel}`, tier: pol.careerTier }],
+        careerHistory: [...pol.careerHistory, { week: world.week, description: `Set personal position on ${axisLabel}`, tier: pol.careerTier, rank: pol.careerRank }],
       }
       return {
         world: {
@@ -4943,7 +5005,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
 export const MOTION_PROPOSAL_INFLUENCE_COST = 8
 export const BUDGET_AMENDMENT_INFLUENCE_COST = 10
 
-type GeneratedMotion = Omit<CouncilMotion, 'id' | 'proposerId' | 'proposerName' | 'status' | 'votes' | 'partyWhipDirection' | 'playerVote' | 'whipIssuerId' | 'whipIssuerName'>
+type GeneratedMotion = Omit<CouncilMotion, 'id' | 'proposerId' | 'proposerName' | 'proposerPartyId' | 'status' | 'votes' | 'partyWhipDirection' | 'playerVote' | 'whipIssuerId' | 'whipIssuerName' | 'effects'>
 
 const LOCATIONS = [
   'High Street', 'Market Square', 'the industrial estate', 'Riverside Path',
@@ -5199,13 +5261,26 @@ function supportBand(
   return 'mixed' as const
 }
 
+function governingPartyIds(world: World): Set<string> {
+  const gov = world.government
+  if (!gov || gov.status !== 'formed') return new Set()
+  return new Set([gov.leadPartyId, ...gov.partnerPartyIds])
+}
+
+function createCouncilSession(week: number, motions: CouncilMotion[], budgetSession: boolean) {
+  return {
+    week,
+    motions,
+    activeMotionIndex: 0,
+    phase: 'voting' as const,
+    resolved: false,
+    budgetSession,
+  }
+}
+
 function buildPartyWhips(world: World, motion: Pick<CouncilMotion, 'ideologyLean' | 'category' | 'costSignal' | 'contestedness' | 'kind'>, pm: PoliticianModeState) {
   const directions: Record<string, 'aye' | 'nay' | 'free'> = {}
-  const governingIds = new Set<string>()
-  if (world.isGoverning) {
-    governingIds.add(world.playerPartyId)
-    if (world.coalitionPartnerId) governingIds.add(world.coalitionPartnerId)
-  }
+  const governingIds = governingPartyIds(world)
   for (const party of world.parties) {
     const band = supportBand(party.values, motion)
     let direction: 'aye' | 'nay' | 'free' = band === 'support' ? 'aye' : band === 'oppose' ? 'nay' : 'free'
@@ -5213,7 +5288,7 @@ function buildPartyWhips(world: World, motion: Pick<CouncilMotion, 'ideologyLean
       direction = 'free'
     }
     if (governingIds.has(party.id) && motion.kind === 'budget') direction = 'aye'
-    if (world.minorityGovernment && !governingIds.has(party.id) && band === 'mixed') direction = 'free'
+    if (world.government?.kind === 'minority' && !governingIds.has(party.id) && band === 'mixed') direction = 'free'
     directions[party.id] = direction
   }
   const playerPartyNPCs = pm.councillors.filter((councillor) => councillor.partyId === pm.politician.partyId)
@@ -5247,13 +5322,19 @@ function motionFromInput(input: CustomMotionInput): GeneratedMotion {
   }
 }
 
-function buildMotionRecord(world: World, pm: PoliticianModeState, generated: GeneratedMotion, proposer: { id: string; name: string }, id: string, playerVote?: 'aye' | 'nay' | 'abstain'): CouncilMotion {
+function buildMotionRecord(world: World, pm: PoliticianModeState, generated: GeneratedMotion, proposer: { id: string; name: string; partyId?: string }, id: string, playerVote?: 'aye' | 'nay' | 'abstain'): CouncilMotion {
   const { directions, whipIssuer } = buildPartyWhips(world, generated, pm)
+  const proposerPartyId = proposer.partyId
+    ?? (proposer.id === pm.politician.id
+      ? pm.politician.partyId
+      : pm.councillors.find((councillor) => councillor.id === proposer.id)?.partyId ?? pm.politician.partyId)
   return {
     ...generated,
     id,
     proposerId: proposer.id,
     proposerName: proposer.name,
+    proposerPartyId,
+    effects: [],
     status: 'voting',
     votes: [],
     partyWhipDirection: directions,
@@ -5264,19 +5345,19 @@ function buildMotionRecord(world: World, pm: PoliticianModeState, generated: Gen
 }
 
 export function playerPartyIsGoverning(world: World) {
-  return world.isGoverning
+  return isPlayerPartyGovernmentLead(world)
 }
 
 export function governingStatusLabel(world: World): string {
-  if (world.needsCoalition) return 'Hung council'
-  if (world.isGoverning && world.coalitionPartnerId) {
-    const partner = world.parties.find((party) => party.id === world.coalitionPartnerId)
+  if (world.government?.status === 'forming') return 'Hung council'
+  if (isPlayerPartyGovernmentLead(world) && world.government?.kind === 'coalition') {
+    const partner = world.parties.find((party) => party.id === world.government?.partnerPartyIds[0])
     return `Coalition · ${partner?.name ?? 'partner'}`
   }
-  if (world.isGoverning && world.minorityGovernment) return 'Minority government'
-  if (world.isGoverning) return 'Majority government'
-  const mayor = world.currentMayorParty
-  return mayor ? `Opposition · ${mayor} governing` : 'Opposition'
+  if (isPlayerPartyGovernmentLead(world) && world.government?.kind === 'minority') return 'Minority government'
+  if (isPlayerPartyGovernmentLead(world)) return 'Majority government'
+  const lead = governmentLeadParty(world)
+  return lead ? `Opposition · ${lead.name} governing` : 'Opposition'
 }
 
 /** Party holding the elected seat in a ward; falls back to poll leader before first election. */
@@ -5350,7 +5431,7 @@ export function generateCouncilSession(world: World): World {
         ...pm,
         queuedMotion: amendment ? undefined : pm.queuedMotion,
         proposedBudget: amendment ? proposed : pm.proposedBudget,
-        currentSession: { week: world.week, motions: [motion], resolved: false, budgetSession: true },
+        currentSession: createCouncilSession(world.week, [motion], true),
       },
     }
   }
@@ -5380,7 +5461,7 @@ export function generateCouncilSession(world: World): World {
     politicianMode: {
       ...pm,
       queuedMotion: undefined,
-      currentSession: { week: world.week, motions: [motion], resolved: false, budgetSession: false },
+      currentSession: createCouncilSession(world.week, [motion], false),
     },
   }
 }
@@ -5393,7 +5474,7 @@ export function predictCouncillorVote(councillor: Councillor, motion: CouncilMot
   if (committedVote) return committedVote.vote === 'aye' ? 'aye' : committedVote.vote === 'nay' ? 'nay' : 'undecided'
   const whip = motion.partyWhipDirection[councillor.partyId] ?? 'free'
   const personalLeans = supportBand(councillor.personalValues, motion)
-  const minorityPressure = world.minorityGovernment ? 0.1 : 0
+  const minorityPressure = world.government?.kind === 'minority' ? 0.1 : 0
 
   if (whip === 'aye' && personalLeans === 'support') return 'aye'
   if (whip === 'nay' && personalLeans === 'oppose') return 'nay'
@@ -5421,7 +5502,7 @@ export function queueCustomMotion(world: World, input: CustomMotionInput): World
       politician: {
         ...pm.politician,
         influence: pm.politician.influence - cost,
-        careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier }],
+        careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier, rank: pm.politician.careerRank }],
       },
       queuedMotion: input,
     },
@@ -5488,17 +5569,13 @@ export function resolveCouncilSession(world: World): World {
       } else {
         baseVote = whip
       }
-      const governingIds = new Set<string>()
-      if (world.isGoverning) {
-        governingIds.add(world.playerPartyId)
-        if (world.coalitionPartnerId) governingIds.add(world.coalitionPartnerId)
-      }
+      const governingIds = governingPartyIds(world)
       const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
       const sameParty = cllr.partyId === pol.partyId
       const rebellionChance = (
         cllr.rebellionTendency
         + (motion.contestedness === 'divisive' ? 0.10 : motion.contestedness === 'contested' ? 0.04 : 0.01)
-        + (world.minorityGovernment ? 0.05 : 0)
+        + (world.government?.kind === 'minority' ? 0.05 : 0)
         + (motion.costSignal * 0.05)
       ) * (governingBudgetWhip ? 0.45 : 1) * (sameParty ? 0.35 : 1)
       if (rng() < rebellionChance && whip !== 'free') baseVote = whip === 'aye' ? 'nay' : 'aye'
@@ -5642,7 +5719,7 @@ export function resolveCouncilSession(world: World): World {
       proposedBudget,
       nextBudgetWeek,
       budgetHistory,
-      currentSession: { ...session, motions: resolvedMotions, resolved: true },
+      currentSession: { ...session, motions: resolvedMotions, resolved: true, phase: 'resolved' },
       sessionHistory: [...pm.sessionHistory, { week: world.week, motionsPassed: passedCount, motionsFailed: failedCount }],
       legislationHistory: [...legislationHistory, ...resolvedMotions].slice(-40),
       nextSessionWeek: nextOrdinaryWeek,
@@ -5659,14 +5736,39 @@ export function shouldTriggerCouncilSession(world: World): boolean {
   return world.week >= pm.nextSessionWeek || world.week >= pm.nextBudgetWeek
 }
 
+function formedPlayerGovernment(world: World, kind: GovernmentState['kind'], partnerPartyIds: string[] = []): GovernmentState {
+  return {
+    status: 'formed',
+    kind,
+    leadPartyId: world.playerPartyId,
+    partnerPartyIds,
+    formedWeek: world.week,
+    electionNumber: world.electionsHeld,
+  }
+}
+
+function formedNpcGovernment(
+  world: World,
+  leadPartyId: string,
+  kind: GovernmentState['kind'],
+  partnerPartyIds: string[] = [],
+): GovernmentState {
+  return {
+    status: 'formed',
+    kind,
+    leadPartyId,
+    partnerPartyIds,
+    formedWeek: world.week,
+    electionNumber: world.electionsHeld,
+  }
+}
+
 export function formCoalitionGovernment(world: World, partnerId: string): World {
   return {
     ...world,
-    isGoverning: true,
-    coalitionPartnerId: partnerId,
-    minorityGovernment: false,
-    needsCoalition: false,
-    currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+    government: formedPlayerGovernment(world, 'coalition', [partnerId]),
+    electoralPacts: world.electoralPacts ?? [],
+    pactTrust: world.pactTrust ?? {},
     newsFeed: [`Week ${world.week}: A coalition administration is formed with ${world.parties.find((party) => party.id === partnerId)?.name ?? 'a partner'}.`, ...world.newsFeed].slice(0, 30),
   }
 }
@@ -5674,11 +5776,9 @@ export function formCoalitionGovernment(world: World, partnerId: string): World 
 export function formMinorityGovernment(world: World): World {
   return {
     ...world,
-    isGoverning: true,
-    minorityGovernment: true,
-    coalitionPartnerId: undefined,
-    needsCoalition: false,
-    currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+    government: formedPlayerGovernment(world, 'minority'),
+    electoralPacts: world.electoralPacts ?? [],
+    pactTrust: world.pactTrust ?? {},
     newsFeed: [`Week ${world.week}: A minority administration takes office.`, ...world.newsFeed].slice(0, 30),
   }
 }
@@ -5686,19 +5786,20 @@ export function formMinorityGovernment(world: World): World {
 export function formNpcOpposition(world: World): World {
   const largest = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)[0]
   const majority = world.stats.councilMajority
+  const pactFields = {
+    electoralPacts: world.electoralPacts ?? [],
+    pactTrust: world.pactTrust ?? {},
+  }
   if (!largest) {
-    return { ...world, needsCoalition: false, isGoverning: false, minorityGovernment: false, coalitionPartnerId: undefined }
+    return { ...world, ...pactFields, government: undefined }
   }
 
   if (largest.partyId === world.playerPartyId) {
     if (largest.seatsWon >= majority) {
       return {
         ...world,
-        isGoverning: true,
-        minorityGovernment: false,
-        coalitionPartnerId: undefined,
-        needsCoalition: false,
-        currentMayorParty: world.parties.find((party) => party.id === world.playerPartyId)?.name ?? world.currentMayorParty,
+        ...pactFields,
+        government: formedPlayerGovernment(world, 'majority'),
         newsFeed: [`Week ${world.week}: Party leadership forms a majority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
       }
     }
@@ -5727,12 +5828,8 @@ export function formNpcOpposition(world: World): World {
   if (largest.seatsWon >= majority) {
     return {
       ...world,
-      needsCoalition: false,
-      isGoverning: false,
-      minorityGovernment: false,
-      coalitionPartnerId: undefined,
-      currentMayorParty: largest.partyName,
-      currentMayorLeader: largest.leader,
+      ...pactFields,
+      government: formedNpcGovernment(world, largest.partyId, 'majority'),
       newsFeed: [`Week ${world.week}: ${largest.partyName} forms a majority administration. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
     }
   }
@@ -5749,19 +5846,20 @@ export function formNpcOpposition(world: World): World {
   const canCoalition = partner && largest.seatsWon + partner.result.seatsWon >= majority && partner.compat >= 50
   return {
     ...world,
-    needsCoalition: false,
-    isGoverning: false,
-    minorityGovernment: false,
-    coalitionPartnerId: undefined,
-    currentMayorParty: largest.partyName,
-    currentMayorLeader: largest.leader,
+    ...pactFields,
+    government: formedNpcGovernment(
+      world,
+      largest.partyId,
+      canCoalition ? 'coalition' : 'minority',
+      canCoalition ? [partner.result.partyId] : [],
+    ),
     newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${canCoalition ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
   }
 }
 
 export function playerCanNegotiateCoalition(world: World): boolean {
-  const tier = world.politicianMode?.politician.careerTier
-  return tier === 'party-leader' || tier === 'mayor'
+  const rank = world.politicianMode?.politician.careerRank
+  return rank === 'party-leader'
 }
 
 export function applyRelationshipAction(
@@ -5871,7 +5969,7 @@ export function lobbyCouncillor(world: World, councillorId: string, motionId: st
 // ─── Career Progression ─────────────────────────────────────────────────────
 
 export interface CareerRequirements {
-  tier: CareerTier
+  rank: CareerRank
   label: string
   requirements: { label: string; met: boolean; current: number; needed: number }[]
   eligible: boolean
@@ -5880,46 +5978,37 @@ export interface CareerRequirements {
 export function getCareerRequirements(world: World): CareerRequirements | null {
   if (!world.politicianMode) return null
   const pol = world.politicianMode.politician
-  const nextTier = getNextTier(pol.careerTier)
-  if (!nextTier) return null
+  const nextRank = getNextRank(pol.careerRank)
+  if (!nextRank) return null
 
-  const reqs = getRequirementsForTier(nextTier, pol)
+  const reqs = getRequirementsForRank(nextRank, pol)
   const eligible = reqs.every((r) => r.met)
-  return { tier: nextTier, label: TIER_LABELS[nextTier], requirements: reqs, eligible }
+  return { rank: nextRank, label: RANK_LABELS[nextRank], requirements: reqs, eligible }
 }
 
-function getNextTier(current: CareerTier): CareerTier | null {
-  const order: CareerTier[] = ['backbencher', 'committee-chair', 'deputy-leader', 'party-leader', 'mayor']
+function getNextRank(current: CareerRank): CareerRank | null {
+  const order: CareerRank[] = ['backbencher', 'committee-chair', 'party-leader']
   const idx = order.indexOf(current)
   return idx < order.length - 1 ? order[idx + 1] : null
 }
 
-const TIER_LABELS: Record<CareerTier, string> = {
+const RANK_LABELS: Record<CareerRank, string> = {
   'backbencher': 'Backbencher',
   'committee-chair': 'Committee Chair',
-  'deputy-leader': 'Deputy Leader',
   'party-leader': 'Party Leader',
-  'mayor': 'Mayor',
 }
 
-export function getTierLabel(tier: CareerTier): string {
-  return TIER_LABELS[tier]
+export function getTierLabel(tier: CareerRank): string {
+  return RANK_LABELS[tier]
 }
 
-function getRequirementsForTier(tier: CareerTier, pol: PoliticianState): Array<{ label: string; met: boolean; current: number; needed: number }> {
-  switch (tier) {
+function getRequirementsForRank(rank: CareerRank, pol: PoliticianState): Array<{ label: string; met: boolean; current: number; needed: number }> {
+  switch (rank) {
     case 'committee-chair':
       return [
         { label: 'Terms served', met: pol.termsServed >= 1, current: pol.termsServed, needed: 1 },
         { label: 'Motions passed', met: pol.motionsPassed >= 2, current: pol.motionsPassed, needed: 2 },
         { label: 'Influence', met: pol.influence >= 20, current: pol.influence, needed: 20 },
-      ]
-    case 'deputy-leader':
-      return [
-        { label: 'Terms served', met: pol.termsServed >= 2, current: pol.termsServed, needed: 2 },
-        { label: 'Motions passed', met: pol.motionsPassed >= 5, current: pol.motionsPassed, needed: 5 },
-        { label: 'Party loyalty', met: pol.partyLoyalty >= 60, current: pol.partyLoyalty, needed: 60 },
-        { label: 'Influence', met: pol.influence >= 40, current: pol.influence, needed: 40 },
       ]
     case 'party-leader':
       return [
@@ -5927,13 +6016,6 @@ function getRequirementsForTier(tier: CareerTier, pol: PoliticianState): Array<{
         { label: 'Influence', met: pol.influence >= 65, current: pol.influence, needed: 65 },
         { label: 'Reputation', met: pol.reputation >= 60, current: pol.reputation, needed: 60 },
         { label: 'Allies', met: pol.relationships.filter((r) => r.type === 'ally').length >= 3, current: pol.relationships.filter((r) => r.type === 'ally').length, needed: 3 },
-      ]
-    case 'mayor':
-      return [
-        { label: 'Terms served', met: pol.termsServed >= 4, current: pol.termsServed, needed: 4 },
-        { label: 'Motions passed', met: pol.motionsPassed >= 10, current: pol.motionsPassed, needed: 10 },
-        { label: 'Influence', met: pol.influence >= 80, current: pol.influence, needed: 80 },
-        { label: 'Reputation', met: pol.reputation >= 75, current: pol.reputation, needed: 75 },
       ]
     default:
       return []
@@ -5944,22 +6026,23 @@ export function promoteCareer(world: World): World {
   if (!world.politicianMode) return world
   const pm = world.politicianMode
   const pol = pm.politician
-  const nextTier = getNextTier(pol.careerTier)
-  if (!nextTier) return world
+  const nextRank = getNextRank(pol.careerRank)
+  if (!nextRank) return world
 
-  const reqs = getRequirementsForTier(nextTier, pol)
+  const reqs = getRequirementsForRank(nextRank, pol)
   if (!reqs.every((r) => r.met)) return world
 
   const promotedPol: PoliticianState = {
     ...pol,
-    careerTier: nextTier,
-    careerHistory: [...pol.careerHistory, { week: world.week, description: `Promoted to ${TIER_LABELS[nextTier]}`, tier: nextTier }],
+    careerRank: nextRank,
+    careerTier: nextRank,
+    careerHistory: [...pol.careerHistory, { week: world.week, description: `Promoted to ${RANK_LABELS[nextRank]}`, tier: nextRank, rank: nextRank }],
     influence: pol.influence + 10,
   }
 
   return {
     ...world,
     politicianMode: { ...pm, politician: promotedPol },
-    newsFeed: [`Week ${world.week}: Cllr. ${pol.name} becomes ${TIER_LABELS[nextTier]}!`, ...world.newsFeed].slice(0, 30),
+    newsFeed: [`Week ${world.week}: Cllr. ${pol.name} becomes ${RANK_LABELS[nextRank]}!`, ...world.newsFeed].slice(0, 30),
   }
 }

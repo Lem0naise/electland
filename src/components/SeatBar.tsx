@@ -2,15 +2,13 @@ import { memo } from 'react'
 import { electedSeatCounts, governingStatusLabel } from '../lib/sim'
 import type { World } from '../types/sim'
 
-export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboard }: {
+export const SeatBar = memo(function SeatBar({ world, onOpenStats }: {
   world: World
   onOpenStats: () => void
-  onOpenDashboard: () => void
 }) {
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
-  const isGoverning = world.isGoverning
   const govLabel = governingStatusLabel(world)
   const seatCounts = electedSeatCounts(world)
 
@@ -38,7 +36,6 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
   const leading = partiesBySeats[0]
   const hasMajority = (leading?.seatsWon ?? 0) >= majority
 
-  const isPoliticianMode = Boolean(world.politicianMode)
   const pol = world.politicianMode?.politician
 
   return (
@@ -53,7 +50,7 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
         </div>
 
         <div className="seat-bar-info">
-          {isPoliticianMode && pol && (
+          {pol && (
             <span className="seat-bar-pol-status">
               {pol.isIncumbent ? 'Seated' : 'Campaigning'} · {pol.careerTier.replace('-', ' ')}
               {pol.isIncumbent && ` · ${pol.influence} influence`}
@@ -69,11 +66,6 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats, onOpenDashboa
               : `Hung council · ${majority} seats for a majority`}
           </span>
           <div className="seat-bar-actions">
-            {isGoverning && !isPoliticianMode && (
-              <button type="button" className="seat-bar-action-btn is-gov" onClick={onOpenDashboard}>
-                {'\uD83C\uDFDB'} Govern
-              </button>
-            )}
             <button type="button" className="seat-bar-action-btn is-stats" onClick={onOpenStats}>
               {'\uD83D\uDCCA'} Stats
             </button>
