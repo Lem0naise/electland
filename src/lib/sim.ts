@@ -2199,11 +2199,11 @@ function estimateStandDownGain(
   ward: Constituency,
   standDownPartyId: string,
   beneficiaryPartyId: string,
-): { gainPp: number; beforeShare: number; afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean } {
+): { gainPp: number; beforeShare: number; afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean; leaderShareAfter: number } {
   const standDownShare = ward.results.find((r) => r.partyId === standDownPartyId)?.voteShare ?? 0
   const beforeShare = ward.results.find((r) => r.partyId === beneficiaryPartyId)?.voteShare ?? 0
   if (standDownShare <= 0 && beforeShare <= 0) {
-    return { gainPp: 0, beforeShare: 0, afterShare: 0, wouldLead: false, flipsToBeneficiary: false }
+    return { gainPp: 0, beforeShare: 0, afterShare: 0, wouldLead: false, flipsToBeneficiary: false, leaderShareAfter: ward.results[0]?.voteShare ?? 0 }
   }
 
   const rawGain = standDownShare * 0.25
@@ -2234,7 +2234,7 @@ function estimateStandDownGain(
   const wouldLead = bestId === beneficiaryPartyId
   const flipsToBeneficiary = wouldLead && ward.leadingPartyId !== beneficiaryPartyId
 
-  return { gainPp, beforeShare, afterShare, wouldLead, flipsToBeneficiary }
+  return { gainPp, beforeShare, afterShare, wouldLead, flipsToBeneficiary, leaderShareAfter: bestShare }
 }
 
 function evaluateAllianceAcceptance(
@@ -2257,6 +2257,8 @@ function evaluateAllianceAcceptance(
           (pact.partyBId === initiatorId && e.wardB === initiatorWardId)) return STANDING_DOWN_SCORE
       if ((pact.partyAId === targetId && e.wardA === targetWardId) ||
           (pact.partyBId === targetId && e.wardB === targetWardId)) return STANDING_DOWN_SCORE
+      if ((pact.partyAId === targetId && (e.wardA === initiatorWardId || e.wardB === initiatorWardId)) ||
+          (pact.partyBId === targetId && (e.wardA === initiatorWardId || e.wardB === initiatorWardId))) return STANDING_DOWN_SCORE
     }
   }
 
@@ -2279,7 +2281,7 @@ function evaluateAllianceAcceptance(
   const repKey = [initiatorId, targetId].sort().join('_')
   const repPenalty = (world.allianceReputation[repKey] ?? 0) * 0.15
 
-  const gainScore = allyGain.gainPp / 20
+  const gainScore = (allyGain.gainPp * competitivenessFactor(allyGain)) / 20
   const flipBonus = allyGain.flipsToBeneficiary ? 0.20 : allyGain.wouldLead && !allyGain.flipsToBeneficiary ? 0.05 : 0
   const allyCost = Math.min(1, targetShareInTarget / 25) * 0.45
   const closeSecondCost =
@@ -3942,6 +3944,16 @@ export function coalitionCompatibility(playerValues: PoliticalValues, partnerVal
   return Math.max(0, Math.min(100, Math.round(100 - (dist / COALITION_IDEOLOGY_SCALE) * 100)))
 }
 
+function competitivenessFactor(
+  gain: { afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean; leaderShareAfter: number },
+): number {
+  if (gain.flipsToBeneficiary) return 3.0
+  if (gain.wouldLead) return 2.0
+  if (gain.leaderShareAfter <= 0) return 0
+  const ratio = gain.afterShare / gain.leaderShareAfter
+  return Math.min(1.5, ratio * ratio * 1.5)
+}
+
 export interface PactSuggestion {
   ourWardId: string
   ourWardName: string
@@ -3970,18 +3982,22 @@ export function suggestPacts(world: World, allyPartyId: string, totalSacrifice =
 
   const playerCommitted = new Set<string>()
   const allyCommitted = new Set<string>()
+  const allyInvolvedInAnyPact = new Set<string>()
   for (const p of world.alliancePacts) {
     if (p.broken) continue
     for (const e of p.entries) {
       if (p.partyAId === world.playerPartyId) playerCommitted.add(e.wardA)
       if (p.partyBId === world.playerPartyId && !e.isUnilateral) playerCommitted.add(e.wardB)
-      if (p.partyAId === allyPartyId) allyCommitted.add(e.wardA)
-      if (p.partyBId === allyPartyId && !e.isUnilateral) allyCommitted.add(e.wardB)
+      if (p.partyAId === allyPartyId) { allyCommitted.add(e.wardA); allyInvolvedInAnyPact.add(e.wardA) }
+      if (p.partyBId === allyPartyId && !e.isUnilateral) { allyCommitted.add(e.wardB); allyInvolvedInAnyPact.add(e.wardB) }
+      if (p.partyBId === allyPartyId) allyInvolvedInAnyPact.add(e.wardA)
+      if (p.partyAId === allyPartyId) allyInvolvedInAnyPact.add(e.wardB)
     }
   }
 
   for (const ourWard of world.constituencies) {
     if (playerCommitted.has(ourWard.id)) continue
+    if (allyInvolvedInAnyPact.has(ourWard.id)) continue
     const playerShare = ourWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
 
     for (const theirWard of world.constituencies) {
@@ -3991,9 +4007,11 @@ export function suggestPacts(world: World, allyPartyId: string, totalSacrifice =
 
       const allyGain = estimateStandDownGain(ourWard, world.playerPartyId, allyPartyId)
       const playerGain = estimateStandDownGain(theirWard, allyPartyId, world.playerPartyId)
-      let score = allyGain.gainPp + playerGain.gainPp
-      if (allyGain.flipsToBeneficiary) score += 3
-      if (playerGain.flipsToBeneficiary) score += 3
+
+      if (allyGain.afterShare < 10 || allyGain.afterShare < allyGain.leaderShareAfter * 0.4) continue
+
+      const score = allyGain.gainPp * competitivenessFactor(allyGain)
+        + playerGain.gainPp * competitivenessFactor(playerGain)
 
       if (score <= 0.05 && allyGain.gainPp <= 0 && playerGain.gainPp <= 0) continue
 
@@ -4073,9 +4091,11 @@ export function reciprocalWards(world: World, allyPartyId: string, allyWardId: s
 
     const allyGain = estimateStandDownGain(ourWard, world.playerPartyId, allyPartyId)
     const playerGain = estimateStandDownGain(theirWard, allyPartyId, world.playerPartyId)
-    let score = allyGain.gainPp + playerGain.gainPp
-    if (allyGain.flipsToBeneficiary) score += 3
-    if (playerGain.flipsToBeneficiary) score += 3
+
+    if (allyGain.afterShare < 10 || allyGain.afterShare < allyGain.leaderShareAfter * 0.4) continue
+
+    const score = allyGain.gainPp * competitivenessFactor(allyGain)
+      + playerGain.gainPp * competitivenessFactor(playerGain)
 
     if (score <= 0.02 && allyGain.gainPp <= 0 && playerGain.gainPp <= 0) continue
 

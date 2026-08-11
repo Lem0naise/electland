@@ -442,6 +442,8 @@ function App() {
   }
 
   const electionIn = world?.weeksUntilElection ?? 0
+  const hasWeeklyAuto = Boolean(world?.politicianMode?.autoCampaigns[0])
+  const actionAvailable = (world?.playerActionPoints ?? 0) >= 1
 
   return (
     <div className="newspaper-shell">

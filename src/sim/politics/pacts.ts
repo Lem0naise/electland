@@ -89,6 +89,16 @@ function withRecalculatedResults(world: World): World {
   return { ...updated, stats: rebuildStats(updated) }
 }
 
+function competitivenessFactor(
+  gain: { afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean; leaderShareAfter: number },
+): number {
+  if (gain.flipsToBeneficiary) return 3.0
+  if (gain.wouldLead) return 2.0
+  if (gain.leaderShareAfter <= 0) return 0
+  const ratio = gain.afterShare / gain.leaderShareAfter
+  return Math.min(1.5, ratio * ratio * 1.5)
+}
+
 function partyRankInWard(ward: Constituency, partyId: string): number {
   const idx = ward.results.findIndex((result) => result.partyId === partyId)
   return idx < 0 ? 99 : idx + 1
@@ -98,11 +108,11 @@ function estimateStandDownGain(
   ward: Constituency,
   standDownPartyId: string,
   beneficiaryPartyId: string,
-): { gainPp: number; beforeShare: number; afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean } {
+): { gainPp: number; beforeShare: number; afterShare: number; wouldLead: boolean; flipsToBeneficiary: boolean; leaderShareAfter: number } {
   const standDownShare = ward.results.find((result) => result.partyId === standDownPartyId)?.voteShare ?? 0
   const beforeShare = ward.results.find((result) => result.partyId === beneficiaryPartyId)?.voteShare ?? 0
   if (standDownShare <= 0 && beforeShare <= 0) {
-    return { gainPp: 0, beforeShare: 0, afterShare: 0, wouldLead: false, flipsToBeneficiary: false }
+    return { gainPp: 0, beforeShare: 0, afterShare: 0, wouldLead: false, flipsToBeneficiary: false, leaderShareAfter: ward.results[0]?.voteShare ?? 0 }
   }
 
   const rawGain = standDownShare * 0.25
@@ -132,7 +142,7 @@ function estimateStandDownGain(
   }
   const wouldLead = bestId === beneficiaryPartyId
   const flipsToBeneficiary = wouldLead && ward.leadingPartyId !== beneficiaryPartyId
-  return { gainPp, beforeShare, afterShare, wouldLead, flipsToBeneficiary }
+  return { gainPp, beforeShare, afterShare, wouldLead, flipsToBeneficiary, leaderShareAfter: bestShare }
 }
 
 function evaluateCommitmentAcceptance(
@@ -173,7 +183,8 @@ function evaluateCommitmentAcceptance(
   )
   const repPenalty = (world.pactTrust[pactTrustKey(standingDownPartyId, beneficiaryPartyId)] ?? 0) * 0.15
 
-  const gainScore = beneficiaryGain.gainPp / 20
+  const stratWeight = competitivenessFactor(beneficiaryGain)
+  const gainScore = (beneficiaryGain.gainPp * stratWeight) / 20
   const flipBonus = beneficiaryGain.flipsToBeneficiary
     ? 0.20
     : beneficiaryGain.wouldLead && !beneficiaryGain.flipsToBeneficiary
