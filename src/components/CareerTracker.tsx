@@ -1,33 +1,48 @@
 import { getCareerRequirements, getTierLabel, type CareerRequirements } from '../lib/sim'
-import type { CareerTier, World } from '../types/sim'
+import type { CareerRank, World } from '../types/sim'
+import { isPlayerMayor } from '../sim/politics/career'
 
-const TIER_ORDER: CareerTier[] = ['backbencher', 'committee-chair', 'deputy-leader', 'party-leader', 'mayor']
+const RANK_ORDER: CareerRank[] = ['backbencher', 'committee-chair', 'party-leader']
 
 export function CareerTracker({ world, onPromote }: { world: World; onPromote: () => void }) {
   const pm = world.politicianMode
   if (!pm) return null
 
   const pol = pm.politician
-  const currentIdx = TIER_ORDER.indexOf(pol.careerTier)
+  const currentIdx = RANK_ORDER.indexOf(pol.careerRank)
   const nextReqs: CareerRequirements | null = getCareerRequirements(world)
+  const isMayor = isPlayerMayor(world)
 
   return (
     <div className="career-tracker">
       <div className="career-tier-bar">
-        {TIER_ORDER.map((tier, i) => (
-          <div key={tier} className={`career-tier-step${i <= currentIdx ? ' achieved' : ''}${i === currentIdx ? ' current' : ''}`}>
+        {RANK_ORDER.map((rank, i) => (
+          <div key={rank} className={`career-tier-step${i <= currentIdx ? ' achieved' : ''}${i === currentIdx ? ' current' : ''}`}>
             <span className="tier-dot" />
-            <span className="tier-label">{getTierLabel(tier)}</span>
+            <span className="tier-label">{getTierLabel(rank)}</span>
           </div>
         ))}
       </div>
 
       <div className="career-current">
-        <strong>{getTierLabel(pol.careerTier)}</strong>
+        <strong>{getTierLabel(pol.careerRank)}</strong>
         <span className="career-terms">{pol.termsServed} term{pol.termsServed !== 1 ? 's' : ''} served</span>
       </div>
 
-      {nextReqs && (
+      {isMayor && (
+        <div className="career-mayor-badge">
+          Mayor of {world.townName}
+          {world.victory?.mayorFirstAchievedWeek != null && (
+            <span className="career-mayor-since"> (since week {world.victory.mayorFirstAchievedWeek})</span>
+          )}
+        </div>
+      )}
+
+      {!isMayor && pol.careerRank === 'party-leader' && (
+        <div className="career-objective">Lead a governing administration to become Mayor.</div>
+      )}
+
+      {!isMayor && pol.careerRank !== 'party-leader' && nextReqs && (
         <div className="career-next">
           <div className="career-next-title">Next: {nextReqs.label}</div>
           <div className="career-reqs">
@@ -41,14 +56,10 @@ export function CareerTracker({ world, onPromote }: { world: World; onPromote: (
           </div>
           {nextReqs.eligible && (
             <button type="button" className="ink-button career-promote-btn" onClick={onPromote}>
-              Accept Promotion
+              {pol.careerRank === 'committee-chair' ? 'Launch Leadership Challenge' : 'Accept Promotion'}
             </button>
           )}
         </div>
-      )}
-
-      {!nextReqs && (
-        <div className="career-max">You have reached the highest office.</div>
       )}
     </div>
   )

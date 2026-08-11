@@ -7,9 +7,7 @@ import { MapFigure } from './components/MapFigure'
 import { StatisticsModal } from './components/StatisticsModal'
 import { CoalitionModal } from './components/CoalitionModal'
 import { BudgetModal } from './components/BudgetModal'
-import { GovernmentDashboard } from './components/GovernmentDashboard'
 import { ElectionNightModal } from './components/ElectionNightModal'
-import { GovernanceModal } from './components/GovernanceModal'
 import { ActionFlash } from './components/ActionFlash'
 import { PactsPanel } from './components/PactsPanel'
 import { WardPactNegotiator } from './components/WardPactNegotiator'
@@ -40,8 +38,6 @@ import {
   queueCustomMotion,
   queueRepealMotion,
   estimateTilePreference,
-  formCoalitionGovernment,
-  formMinorityGovernment,
   formNpcOpposition,
   generateCouncilSession,
   generateGovernanceDecisions,
@@ -49,7 +45,6 @@ import {
   governingStatusLabel,
   MOTION_PROPOSAL_INFLUENCE_COST,
   playerCanNegotiateCoalition,
-  playerPartyIsGoverning,
   recalculateWardAggregates,
   redistributeSnapshot,
   regenerateCellPaths,
@@ -60,6 +55,11 @@ import {
   simulateWeek,
   type PoliticianActionResult,
 } from './lib/sim'
+import {
+  formCoalitionGovernment,
+  formMinorityGovernment,
+  isPlayerPartyGovernmentLead,
+} from './sim/politics/government'
 import type {
   ActionResult,
   CampaignAction,
@@ -105,11 +105,9 @@ function App() {
   const [lastActionResult, setLastActionResult] = useState<ActionResult | null>(null)
   const [lastPolResult, setLastPolResult] = useState<PoliticianActionResult | null>(null)
   const [showElectionNight, setShowElectionNight] = useState(false)
-  const [showGovernance, setShowGovernance] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [showCoalitionModal, setShowCoalitionModal] = useState(false)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
-  const [showGovDashboard, setShowGovDashboard] = useState(false)
   const [polElectionOutcome, setPolElectionOutcome] = useState<'won' | 'lost' | null>(null)
   const [showCouncilChamber, setShowCouncilChamber] = useState(false)
   const [showMotionComposer, setShowMotionComposer] = useState(false)
@@ -192,22 +190,15 @@ function App() {
   }, [world?.seed])
 
   useEffect(() => {
-    if (world?.isGoverning && world.governanceDecisions.some((d) => !d.resolved)) {
-      setShowGovernance(true)
-    }
-  }, [world?.isGoverning, world?.governanceDecisions])
-
-  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (showStatsModal) { setShowStatsModal(false); return }
       if (showBudgetModal) { setShowBudgetModal(false); return }
-      if (showGovDashboard) { setShowGovDashboard(false); return }
       if (menuOpen && world) { setMenuOpen(false); return }
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [showStatsModal, showBudgetModal, showGovDashboard, menuOpen, world])
+  }, [showStatsModal, showBudgetModal, menuOpen, world])
 
   const handleSetupStart = useCallback((seed?: number, playerPartyIdArg?: string, edits?: PartyEdit[], playerName?: string) => {
     const needsRegeneration = seed !== undefined
@@ -216,7 +207,6 @@ function App() {
       setPreviousNationalResults(null)
       setWorld(nextWorld)
       setShowElectionNight(false)
-      setShowGovernance(false)
       setLastActionResult(null)
       const polWardId = nextWorld.politicianMode?.politician.wardId
       const firstWardId = polWardId ?? nextWorld.constituencies[0]?.id ?? ''
@@ -304,7 +294,6 @@ function App() {
     setPreviousNationalResults(data.previousNationalResults)
     setConstituencyCount(data.constituencyCount)
     setShowElectionNight(false)
-    setShowGovernance(false)
     setLastActionResult(null)
     const wardId = data.world.politicianMode?.politician.wardId || data.world.constituencies[0]?.id || ''
     setSelectedConstituencyId(wardId)
@@ -356,10 +345,10 @@ function App() {
   }
 
   const resolveHungCouncil = (w: World) => {
-    if (!w.needsCoalition) return w
+    if (w.government?.status !== 'forming') return w
     if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w)) {
       const next = formNpcOpposition(w)
-      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', next.isGoverning ? 'success' : 'neutral'))
+      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', isPlayerPartyGovernmentLead(next) ? 'success' : 'neutral'))
       return next
     }
     setShowCoalitionModal(true)
@@ -367,47 +356,15 @@ function App() {
   }
 
   const afterPersonalElection = (w: World) => {
-    if (w.needsCoalition) {
+    if (w.government?.status === 'forming') {
       setWorld(resolveHungCouncil(w))
       return
     }
-    if (!w.isGoverning && w.nationalResults.some((r) => r.seatsWon >= w.stats.councilMajority && r.partyId !== w.playerPartyId)) {
+    if (!isPlayerPartyGovernmentLead(w) && w.nationalResults.some((r) => r.seatsWon >= w.stats.councilMajority && r.partyId !== w.playerPartyId)) {
       const next = formNpcOpposition(w)
       setWorld(next)
       setLastActionResult(newsToast(next.newsFeed[0] ?? 'Another party governs.', 'neutral'))
     }
-  }
-
-  const handleGovernanceDecision = (decisionId: string, choiceIndex: number) => {
-    if (!world) return
-    const decision = world.governanceDecisions.find((d) => d.id === decisionId)
-    const choice = decision?.choices[choiceIndex]
-    const newsFeedLine = `Week ${world.week}: Council decision — ${decision?.headline ?? 'decision made'} — you chose "${choice?.label ?? '?'}".`
-    const newRecord = decision && choice ? { week: world.week, headline: decision.headline, choice: choice.label } : null
-    setWorld((prev) => prev ? {
-      ...prev,
-      governanceDecisions: prev.governanceDecisions.map((d) =>
-        d.id === decisionId ? { ...d, resolved: true, chosenIndex: choiceIndex } : d,
-      ),
-      parties: prev.parties.map((p) => {
-        if (p.id === world.playerPartyId && choice) {
-          return { ...p, baseUtility: Math.min(1.2, p.baseUtility + choice.effect.playerUtilityDelta) }
-        }
-        if (prev.coalitionPartnerId && p.id === prev.coalitionPartnerId && choice) {
-          const blocBonus = Object.values(choice.effect.blocEffects).reduce((sum, v) => sum + v, 0) / Math.max(1, Object.keys(choice.effect.blocEffects).length)
-          return { ...p, baseUtility: Math.min(1.2, p.baseUtility + blocBonus * 0.3) }
-        }
-        return p
-      }),
-      newsFeed: [newsFeedLine, ...prev.newsFeed].slice(0, 30),
-      councilHistory: newRecord ? [...(prev.councilHistory ?? []), newRecord] : (prev.councilHistory ?? []),
-    } : prev)
-    const nextDecisions = world.governanceDecisions.map((d) =>
-      d.id === decisionId ? { ...d, resolved: true, chosenIndex: choiceIndex } : d,
-    )
-    const stillPending = nextDecisions.filter((d) => !d.resolved)
-    if (stillPending.length === 0) setShowGovernance(false)
-    setLastActionResult(newsToast(newsFeedLine, 'success'))
   }
 
   const focusTile = (tileId: string) => {
@@ -505,7 +462,6 @@ function App() {
               setPreviousNationalResults(null)
               setWorld(nextWorld)
               setShowElectionNight(false)
-              setShowGovernance(false)
               setLastActionResult(null)
               setSelectedConstituencyId(nextWorld.constituencies[0]?.id ?? '')
               setSelectedBlocId(dominantBlocId(nextWorld.constituencies[0]?.blocMix ?? {}))
@@ -556,7 +512,7 @@ function App() {
           {world ? (
             <>
               <div className="seat-bar-row">
-                <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} onOpenDashboard={() => setShowGovDashboard(true)} />
+                <SeatBar world={world} onOpenStats={() => setShowStatsModal(true)} />
               </div>
 
               <section className={`panel map-panel${mapFocus ? ' is-focused' : ''}`}>
@@ -663,7 +619,7 @@ function App() {
                   )}
                   {activeWorkspaceTab === 'ward' && (() => {
                     const pol = world.politicianMode?.politician
-                    const isLeader = pol ? ['party-leader', 'mayor'].includes(pol.careerTier) : false
+                    const isLeader = pol?.careerRank === 'party-leader'
                     const isOwnWard = Boolean(pol?.wardId && selectedConstituencyId && pol.wardId === selectedConstituencyId)
                     const canNegotiateWard = Boolean(selectedConstituencyId && (isOwnWard || isLeader))
                     let pactLockHint: string | null = null
@@ -711,7 +667,7 @@ function App() {
                         setLastActionResult(newsToast(next.newsFeed[0] ?? 'Promotion accepted.', 'success'))
                       }} /></section>
                       <section className="panel"><div className="panel-kicker">{world.politicianMode.politician.isIncumbent ? 'Council colleagues' : 'Political contacts'}</div><RelationshipsPanel world={world} onRelationshipAction={handleRelationshipAction} lastResult={lastPolResult} /></section>
-                      {['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier) && (
+                      {world.politicianMode.politician.careerRank === 'party-leader' && (
                         <section className="panel">
                           <div className="panel-kicker">Electoral pacts</div>
                           <PactsPanel
@@ -742,7 +698,7 @@ function App() {
                     const weeksToOrdinary = Math.max(0, pm.nextSessionWeek - world.week)
                     const weeksToBudget = Math.max(0, pm.nextBudgetWeek - world.week)
                     const budgetSoon = weeksToBudget <= 4 || (sessionLive && pm.currentSession?.budgetSession)
-                    const governing = playerPartyIsGoverning(world)
+                    const governing = isPlayerPartyGovernmentLead(world)
                     return (
                       <>
                         <CouncilComposition world={world} onChangeWard={() => setShowWardSwitchModal(true)} />
@@ -851,11 +807,10 @@ function App() {
               const won = w.politicianMode.politician.isIncumbent
               setPolElectionOutcome(won ? 'won' : 'lost')
               setWorld({ ...w, electionNightActive: false })
-            } else if (w.isGoverning) {
+            } else if (isPlayerPartyGovernmentLead(w)) {
               const decisions = generateGovernanceDecisions(2)
               setWorld({ ...w, governanceDecisions: decisions, electionNightActive: false })
-              setShowGovernance(true)
-            } else if (w.needsCoalition) {
+            } else if (w.government?.status === 'forming') {
               const resolved = resolveHungCouncil(w)
               setWorld({ ...resolved, electionNightActive: false })
             } else {
@@ -871,22 +826,20 @@ function App() {
           onFormCoalition={(partnerId, decisions) => {
             setWorld((prev) => {
               if (!prev) return prev
-              const next = { ...formCoalitionGovernment(prev, partnerId), governanceDecisions: decisions }
+              const next = { ...formCoalitionGovernment(prev, prev.playerPartyId, [partnerId]), governanceDecisions: decisions }
               setLastActionResult(newsToast(next.newsFeed[0] ?? 'Coalition formed.', 'success'))
               return next
             })
             setShowCoalitionModal(false)
-            setShowGovernance(true)
           }}
           onFormMinority={(decisions) => {
             setWorld((prev) => {
               if (!prev) return prev
-              const next = { ...formMinorityGovernment(prev), governanceDecisions: decisions }
+              const next = { ...formMinorityGovernment(prev, prev.playerPartyId), governanceDecisions: decisions }
               setLastActionResult(newsToast(next.newsFeed[0] ?? 'Minority government formed.', 'success'))
               return next
             })
             setShowCoalitionModal(false)
-            setShowGovernance(true)
           }}
           onOpposition={() => {
             setWorld((prev) => {
@@ -897,15 +850,6 @@ function App() {
             })
             setShowCoalitionModal(false)
           }}
-        />
-      )}
-
-      {showGovernance && world && (
-        <GovernanceModal
-          world={world}
-          decisions={world.governanceDecisions}
-          onDecide={handleGovernanceDecision}
-          onClose={() => setShowGovernance(false)}
         />
       )}
 
@@ -927,7 +871,7 @@ function App() {
                   budgetProposal: b,
                 })
               }
-              if (prev.politicianMode && playerPartyIsGoverning(prev) && (budgetEditorMode === 'propose' || budgetEditorMode === null)) {
+              if (prev.politicianMode && isPlayerPartyGovernmentLead(prev) && (budgetEditorMode === 'propose' || budgetEditorMode === null)) {
                 return {
                   ...prev,
                   politicianMode: { ...prev.politicianMode, proposedBudget: b },
@@ -940,18 +884,6 @@ function App() {
             setShowBudgetModal(false)
           }}
           onClose={() => { setBudgetEditorMode(null); setShowBudgetModal(false) }}
-        />
-      )}
-
-      {showGovDashboard && world && (
-        <GovernmentDashboard
-          world={world}
-          onOpenBudget={() => {
-            setShowGovDashboard(false)
-            setBudgetEditorMode(world.politicianMode && playerPartyIsGoverning(world) ? 'propose' : null)
-            setShowBudgetModal(true)
-          }}
-          onClose={() => setShowGovDashboard(false)}
         />
       )}
 

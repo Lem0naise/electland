@@ -358,8 +358,8 @@ export function ElectionNightModal({ world, onReveal, onClose }: {
             <button className="ink-button" type="button" onClick={onClose}>
               {playerWonThisElection
                 ? 'Govern the town'
-                : world.needsCoalition
-                  ? (world.politicianMode && !['party-leader', 'mayor'].includes(world.politicianMode.politician.careerTier)
+                : world.government?.status === 'forming'
+                  ? (world.politicianMode && world.politicianMode.politician.careerRank !== 'party-leader'
                     ? 'See who forms government'
                     : 'Form Government')
                   : 'Campaign continues'}
