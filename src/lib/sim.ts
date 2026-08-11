@@ -3552,17 +3552,17 @@ export function simulateWeek(world: World): World {
         let infGain = 0
         let autoToast: string | undefined
         switch (weeklyType) {
-          case 'door_knock': approvalGain = 0.05 + autoRng() * 0.04; break
+          case 'door_knock': approvalGain = 0.05 + autoRng() * 0.04; repGain = 3 + Math.floor(autoRng() * 3); break
           case 'hold_surgery': approvalGain = 0.04 + autoRng() * 0.03; repGain = 2; break
-          case 'leaflet_drop': repGain = 4 + Math.floor(autoRng() * 3); approvalGain = 0.02; break
+          case 'leaflet_drop': approvalGain = 0.05 + autoRng() * 0.04; repGain = 3 + Math.floor(autoRng() * 3); break
           case 'local_media': if (autoRng() < 0.2) { approvalGain = -0.04; repGain = -3 } else { approvalGain = 0.06; repGain = 5 } break
           case 'call_party_support': {
-            if (autoPol.partyLoyalty >= 30 && autoPol.wardId) {
+            if (autoPol.partyLoyalty >= 40 && autoPol.wardId) {
               const wardBoostAmount = (0.08 + autoRng() * 0.04) * (autoPol.partyLoyalty / 100)
               autoParties = autoParties.map((party) => party.id === world.playerPartyId
                 ? { ...party, wardBoosts: { ...party.wardBoosts, [autoPol.wardId]: clamp((party.wardBoosts[autoPol.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
                 : party)
-              autoPol = { ...autoPol, partyLoyalty: clamp(autoPol.partyLoyalty + 3, 0, 100) }
+              autoPol = { ...autoPol, partyLoyalty: clamp(autoPol.partyLoyalty - 5, 0, 100) }
             }
             break
           }
@@ -3592,7 +3592,7 @@ export function simulateWeek(world: World): World {
               })
               autoPol = {
                 ...autoPol,
-                partyLoyalty: clamp(autoPol.partyLoyalty + 2, 0, 100),
+                partyLoyalty: clamp(autoPol.partyLoyalty + 5, 0, 100),
                 relationships,
               }
               autoToast = `Weekly action completed: campaigned for ${autoTarget.candidateName} in ${autoTarget.wardName}.`
@@ -4744,36 +4744,35 @@ export function getColleagueCampaignTargets(world: World): ColleagueCampaignTarg
 export function getPoliticianActions(world: World): PoliticianActionMeta[] {
   if (!world.politicianMode) return []
   const pol = world.politicianMode.politician
-  const usedAttendEvent = world.actionsThisWeek.some((a) => a.action.label === 'Attend local event')
+  const usedAttendEvent = world.actionsThisWeek.some((a) => a.action.label === 'Gain influence in council' || a.action.label === 'Attend local event')
   const hasLocalRoots = pol.traits.some((t) => t.id === 'local-roots')
   const hasChampion = pol.traits.some((t) => t.id === 'peoples-champion')
   const hasMediaSavvy = pol.traits.some((t) => t.id === 'media-savvy')
   const colleagueTargets = getColleagueCampaignTargets(world)
 
   const actions: PoliticianActionMeta[] = [
-    { type: 'door_knock', label: 'Door-knock streets', description: 'Knock on doors to build personal support.', apCost: 1, category: 'grassroots', expectedEffect: '+5–9% approval', traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined },
-    { type: 'leaflet_drop', label: 'Leaflet drop', description: 'Distribute leaflets for name recognition.', apCost: 1, category: 'communications', expectedEffect: '+4–7 reputation, +2% approval' },
+    { type: 'door_knock', label: 'Door-knock streets', description: 'Knock on doors and distribute leaflets to build support and recognition.', apCost: 1, category: 'grassroots', expectedEffect: '+5–9% approval, +3–5 rep', traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined },
     { type: 'local_media', label: 'Local media', description: 'Appear on local radio or newspaper.', apCost: 1, category: 'communications', expectedEffect: '+6–10% approval, +5–9 rep', riskDescription: hasMediaSavvy ? '10% gaffe risk' : '20% gaffe risk', traitBonus: hasMediaSavvy ? 'Media Savvy: halved risk' : undefined },
-    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward.', apCost: 1, category: 'political', expectedEffect: 'Ward boost + loyalty' },
-    { type: 'smear_opponent', label: 'Smear opponent', description: 'Attack the leading rival candidate.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
+    { type: 'call_party_support', label: 'Call in party support', description: 'Request HQ resources for your ward. Requires loyalty ≥ 40; spends 5 loyalty.', apCost: 1, category: 'political', expectedEffect: 'Ward boost (costs 5 loyalty)', riskDescription: pol.partyLoyalty < 40 ? 'Loyalty too low' : undefined },
+    { type: 'smear_opponent', label: 'Attack opponent', description: 'Attack the leading rival candidate publicly.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
     { type: 'shift_personal_policy', label: 'Set personal position', description: 'Move your own public position without changing the party platform.', apCost: 1, category: 'political', expectedEffect: 'Personal ward fit shifts', riskDescription: world.week < pol.personalPolicyNextWeek ? `Available again in week ${pol.personalPolicyNextWeek}` : 'May reduce party loyalty if you diverge' },
   ]
   if (colleagueTargets.length > 0) {
-    actions.splice(4, 0, {
+    actions.splice(3, 0, {
       type: 'help_colleague',
       label: 'Campaign for a colleague',
-      description: 'Knock doors in another ward to boost a same-party candidate.',
+      description: 'Knock doors in another ward to boost a same-party candidate. Gains loyalty.',
       apCost: 1,
       category: 'political',
-      expectedEffect: 'Ward boost for colleague + loyalty',
+      expectedEffect: 'Ward boost for colleague, +5 loyalty',
       traitBonus: hasLocalRoots ? 'Local Roots: +20%' : undefined,
     })
   }
   if (pol.isIncumbent) {
-    actions.splice(1, 0, { type: 'hold_surgery', label: 'Hold surgery', description: 'Meet constituents face-to-face as their councillor.', apCost: 1, category: 'grassroots', expectedEffect: '+4–7% approval, +2 rep', traitBonus: hasChampion ? "People's Champion: +30%" : undefined })
-  }
-  if (!usedAttendEvent) {
-    actions.push({ type: 'attend_event', label: 'Attend local event', description: 'Show up at a community event and build local connections.', apCost: 1, category: 'grassroots', expectedEffect: '+1 influence' })
+    actions.push({ type: 'hold_surgery', label: 'Hold surgery', description: 'Meet constituents face-to-face as their councillor.', apCost: 1, category: 'incumbent', expectedEffect: '+4–7% approval, +2 rep', traitBonus: hasChampion ? "People's Champion: +30%" : undefined })
+    if (!usedAttendEvent) {
+      actions.push({ type: 'attend_event', label: 'Gain influence in council', description: 'Attend a council function and build your political network.', apCost: 1, category: 'incumbent', expectedEffect: '+1 influence' })
+    }
   }
   return actions
 }
@@ -4781,9 +4780,10 @@ export function getPoliticianActions(world: World): PoliticianActionMeta[] {
 export function getPoliticianActionsByCategory(world: World): Array<{ category: ActionCategory; label: string; actions: PoliticianActionMeta[] }> {
   const all = getPoliticianActions(world)
   const groups: Array<{ category: ActionCategory; label: string; actions: PoliticianActionMeta[] }> = [
-    { category: 'grassroots', label: 'Ground Game', actions: all.filter((a) => a.category === 'grassroots') },
-    { category: 'communications', label: 'Outreach', actions: all.filter((a) => a.category === 'communications') },
-    { category: 'political', label: 'Power Plays', actions: all.filter((a) => a.category === 'political') },
+    { category: 'incumbent', label: 'Incumbent Actions', actions: all.filter((a) => a.category === 'incumbent') },
+    { category: 'grassroots', label: 'Campaigning', actions: all.filter((a) => a.category === 'grassroots') },
+    { category: 'communications', label: 'Communications', actions: all.filter((a) => a.category === 'communications') },
+    { category: 'political', label: 'Political', actions: all.filter((a) => a.category === 'political') },
   ]
   return groups.filter((g) => g.actions.length > 0)
 }
@@ -4813,7 +4813,8 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
     case 'door_knock': {
       const localRootsBonus = pol.traits.some((t) => t.id === 'local-roots') ? 1.2 : 1.0
       approvalDelta = (0.05 + rng() * 0.04) * localRootsBonus
-      description = `You knocked on doors across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
+      reputationDelta = 3 + Math.floor(rng() * 3)
+      description = `You knocked on doors and dropped leaflets across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
       break
     }
     case 'hold_surgery': {
@@ -4824,9 +4825,9 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       break
     }
     case 'leaflet_drop': {
-      reputationDelta = 4 + Math.floor(rng() * 3)
-      approvalDelta = 0.02
-      description = 'Leaflets distributed across the ward. Your name recognition improved.'
+      reputationDelta = 3 + Math.floor(rng() * 3)
+      approvalDelta = (0.05 + rng() * 0.04)
+      description = `You knocked on doors and dropped leaflets across ${world.constituencies.find((c) => c.id === pol.wardId)?.name ?? 'your ward'}. Constituents appreciated the personal touch.`
       break
     }
     case 'local_media': {
@@ -4844,19 +4845,19 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
       break
     }
     case 'call_party_support': {
-      const loyaltyFactor = pol.partyLoyalty / 100
-      const wardBoostAmount = (0.08 + rng() * 0.04) * loyaltyFactor
-      if (pol.partyLoyalty < 30) {
+      if (pol.partyLoyalty < 40) {
         outcome = 'neutral'
         description = 'Party HQ declined your request. Your loyalty score is too low for them to invest resources.'
         break
       }
+      const loyaltyFactor = pol.partyLoyalty / 100
+      const wardBoostAmount = (0.08 + rng() * 0.04) * loyaltyFactor
       const updatedParties = world.parties.map((p) =>
         p.id === world.playerPartyId
           ? { ...p, wardBoosts: { ...p.wardBoosts, [pol.wardId]: clamp((p.wardBoosts[pol.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
           : p,
       )
-      loyaltyDelta = 3
+      loyaltyDelta = -5
       description = pol.partyLoyalty < 60
         ? 'Party HQ sent limited resources — your loyalty record has them cautious.'
         : 'Party HQ sent activists and resources to your ward. The campaign feels stronger.'
@@ -4887,7 +4888,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
           ? { ...p, wardBoosts: { ...p.wardBoosts, [target.wardId]: clamp((p.wardBoosts[target.wardId] ?? 0) + wardBoostAmount, 0, 0.45) } }
           : p,
       )
-      loyaltyDelta = 2
+      loyaltyDelta = 5
       const relationships = pol.relationships.map((relationship) => {
         if (!target.councillorId || relationship.targetId !== target.councillorId) return relationship
         const strength = clamp(relationship.strength + 6, -100, 100)
@@ -4924,7 +4925,7 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
     }
     case 'attend_event': {
       influenceDelta = 1
-      description = 'You attended the community fair and strengthened your local political network.'
+      description = 'You worked the room at a council function and strengthened your political network.'
       break
     }
     case 'smear_opponent': {

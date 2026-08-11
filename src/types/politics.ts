@@ -138,7 +138,7 @@ export interface PoliticianState {
   rebellions: number
 }
 
-export type ActionCategory = 'grassroots' | 'communications' | 'political'
+export type ActionCategory = 'grassroots' | 'communications' | 'political' | 'incumbent'
 
 export interface PoliticianActionMeta {
   type: PoliticianActionType

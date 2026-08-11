@@ -2490,16 +2490,28 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .pol-action-fire:disabled { cursor: not-allowed; }
 .pol-action-name { font-size: 0.8rem; font-weight: 700; color: var(--ink); }
 .pol-action-cost { font-size: 0.68rem; color: var(--ink-soft); }
-.pol-auto-toggle {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.6rem;
-  color: var(--ink-soft);
+.pol-auto-btn {
+  margin-left: auto;
+  border: 1px solid var(--ink-faint);
+  background: transparent;
+  color: var(--ink-faint);
+  padding: 2px 7px;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s ease;
 }
-.pol-auto-toggle input { width: 12px; height: 12px; margin: 0; }
-.auto-label { text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.pol-auto-btn:hover { border-color: var(--ink-soft); color: var(--ink-soft); }
+.pol-auto-btn.active {
+  background: var(--safe);
+  border-color: var(--safe);
+  color: #fff;
+}
+.pol-auto-btn.active:hover { opacity: 0.85; }
 .pol-action-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 3px; font-size: 0.66rem; }
 .pol-action-effect { color: var(--safe); font-weight: 600; }
 .pol-action-risk { color: var(--danger, #c0392b); font-weight: 600; }
@@ -2610,6 +2622,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 .rel-history-item { display: block; font-size: 0.66rem; color: var(--ink-soft); padding: 1px 0; }
 .rel-actions { display: flex; gap: 5px; margin-top: 6px; }
 .rel-actions button { border: 1px solid var(--ink-faint); background: var(--paper-warm); color: var(--ink); padding: 4px 6px; font: inherit; font-size: 0.63rem; cursor: pointer; }
+.rel-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .rel-actions .rel-antagonise { color: var(--danger, #c0392b); }
 .rel-action-result { margin: 6px 0 0; padding: 5px 6px; border-left: 3px solid var(--ink-faint); background: var(--paper-warm); color: var(--ink-mid); font-size: 0.68rem; }
 .rel-action-result.success { border-color: var(--safe); }

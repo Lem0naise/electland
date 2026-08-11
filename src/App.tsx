@@ -488,13 +488,7 @@ function App() {
               <span className="countdown-number">{electionIn === 0 ? 'NOW' : electionIn}</span>
               <span className="countdown-label">{electionIn === 0 ? 'Election' : 'weeks to election'}</span>
             </div>
-            <div className="topbar-ap-block" aria-label={actionAvailable ? 'Weekly action available' : 'Weekly action used'}>
-              <span className="ap-label-small">This week</span>
-              <span className={`action-week-status${actionAvailable ? ' is-available' : ' is-used'}`}>
-                {actionAvailable ? 'Action available' : 'Action used'}
-              </span>
-              {hasWeeklyAuto && <span className="ap-count-small">Weekly auto set</span>}
-            </div>
+      
             <div className="topbar-actions">
               <details className="command-overflow">
                 <summary aria-label="Open game utilities">•••</summary>
