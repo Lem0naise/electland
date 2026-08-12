@@ -55,6 +55,7 @@ import {
   createCaretakerGovernment,
   governmentLeadParty,
   isPlayerPartyGovernmentLead,
+  stampGovernmentLabel,
 } from '../sim/politics/government'
 
 const MAP_WIDTH = 920
@@ -2342,9 +2343,10 @@ function npcPactPairScore(initShare: number, targShare: number): number {
   return initWeakness * 0.5 + targWeakness * 0.5
 }
 
-function runAICampaigns(world: World, rng: () => number): { parties: PartyDefinition[]; newsFeedLines: string[]; aiPactResults: Array<{ description: string; outcome: 'success' | 'backfire' }> } {
+function runAICampaigns(world: World, rng: () => number): { parties: PartyDefinition[]; newsFeedLines: string[]; aiPactResults: Array<{ description: string; outcome: 'success' | 'backfire' }>; pactBreakToasts: Array<{ message: string; outcome: 'neutral' }> } {
   const newsFeedLines: string[] = []
   const aiPactResults: Array<{ description: string; outcome: 'success' | 'backfire' }> = []
+  const pactBreakToasts: Array<{ message: string; outcome: 'neutral' }> = []
   const updatedParties = world.parties.map((party) => {
     if (party.id === world.playerPartyId) return party
     let ap = party.aiActionPoints
@@ -2623,17 +2625,16 @@ function runAICampaigns(world: World, rng: () => number): { parties: PartyDefini
           const partyName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
           newsFeedLines.push(`${partyName} breaks their alliance pact — they no longer need it.`)
         }
+        if (pact.partyAId === world.playerPartyId || pact.partyBId === world.playerPartyId) {
+          const breakerName = world.parties.find((p) => p.id === breakReason)?.name ?? '?'
+          pactBreakToasts.push({ message: `${breakerName} has broken their pact with you.`, outcome: 'neutral' })
+        }
       }
     }
-    for (const pact of world.alliancePacts) {
-      if (pact.broken) continue
-      if (world.week > pact.expiresWeek + 24) {
-        pact.broken = true
-      }
-    }
+    
   }
 
-  return { parties: updatedParties, newsFeedLines, aiPactResults }
+  return { parties: updatedParties, newsFeedLines, aiPactResults, pactBreakToasts }
 }
 
 // ─── Apply player campaign action ────────────────────────────────────────────
@@ -2964,6 +2965,7 @@ export function applyCampaignAction(world: World, action: CampaignAction): { wor
       if (!action.wardId || !action.targetPartyId) break
       const pact = world.alliancePacts.find((p) => p.id === action.wardId)
       if (!pact) break
+      if (pact.partyAId !== world.playerPartyId && pact.partyBId !== world.playerPartyId) break
       brokenPactId = pact.id
       const allyName = world.parties.find((p) => p.id === action.targetPartyId)?.name ?? action.targetPartyId
       const repKey = [world.playerPartyId, action.targetPartyId].sort().join('_')
@@ -3112,6 +3114,7 @@ export function generateWorld(options: WorldOptions): World {
     policyShiftUsedThisCycle: false,
     alliancePacts: [] as AlliancePact[],
     allianceReputation: {} as Record<string, number>,
+    simToasts: [],
     budget: getDefaultBudget(),
     councilHistory: [] as CouncilDecisionRecord[],
   }
@@ -3271,7 +3274,7 @@ export function simulateWeek(world: World): World {
 
   // Run AI campaigns
   const aiResults = runAICampaigns(provisionalWithCampaigns, rng)
-  const { parties: partiesAfterAI, newsFeedLines: aiNews } = aiResults
+  const { parties: partiesAfterAI, newsFeedLines: aiNews, pactBreakToasts } = aiResults
   const provisionalWithAI = updateTacticalPressure({ ...provisionalWithCampaigns, parties: partiesAfterAI })
 
   const results = calculateResults(provisionalWithAI as World)
@@ -3689,7 +3692,7 @@ export function simulateWeek(world: World): World {
   }
 
   const stats = buildStats(merged)
-  return {
+  const weekResult: World = {
     ...merged,
     stats,
     politicianMode,
@@ -3698,7 +3701,9 @@ export function simulateWeek(world: World): World {
     maxActionPoints: 1,
     activeCampaigns: [],
     pendingActionToast,
+    simToasts: pactBreakToasts,
   }
+  return stampGovernmentLabel(weekResult)
 }
 
 // ─── Redistricting / ward recalculation ────────────────────────────────────
@@ -5313,9 +5318,11 @@ function buildPartyWhips(world: World, motion: Pick<CouncilMotion, 'ideologyLean
   }
   const playerPartyNPCs = pm.councillors.filter((councillor) => councillor.partyId === pm.politician.partyId)
   if (playerPartyNPCs.length === 0) directions[pm.politician.partyId] = 'free'
-  const whipIssuer = playerPartyNPCs.length > 0
-    ? playerPartyNPCs.reduce((a, b) => b.influence > a.influence ? b : a)
-    : undefined
+  const whipIssuer = pm.politician.careerRank === 'party-leader'
+    ? { id: pm.politician.id, name: pm.politician.name }
+    : playerPartyNPCs.length > 0
+      ? playerPartyNPCs.reduce((a, b) => b.influence > a.influence ? b : a)
+      : undefined
   return { directions, whipIssuer }
 }
 
@@ -5592,6 +5599,8 @@ export function resolveCouncilSession(world: World): World {
       const governingIds = governingPartyIds(world)
       const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
       const sameParty = cllr.partyId === pol.partyId
+      const playerIsLeader = pol.careerRank === 'party-leader'
+      if (sameParty && playerIsLeader && motion.playerVote) baseVote = motion.playerVote
       const rebellionChance = (
         cllr.rebellionTendency
         + (motion.contestedness === 'divisive' ? 0.10 : motion.contestedness === 'contested' ? 0.04 : 0.01)
@@ -5599,10 +5608,12 @@ export function resolveCouncilSession(world: World): World {
         + (motion.costSignal * 0.05)
       ) * (governingBudgetWhip ? 0.45 : 1) * (sameParty ? 0.35 : 1)
       if (rng() < rebellionChance && whip !== 'free') baseVote = whip === 'aye' ? 'nay' : 'aye'
-      const relationship = pol.relationships.find((r) => r.targetId === cllr.id)
-      const followThreshold = sameParty ? 30 : 40
-      const followChance = sameParty ? 0.40 : 0.18
-      if (relationship && relationship.strength > followThreshold && rng() < followChance) baseVote = motion.playerVote ?? baseVote
+      if (!sameParty || !playerIsLeader) {
+        const relationship = pol.relationships.find((r) => r.targetId === cllr.id)
+        const followThreshold = sameParty ? 30 : 40
+        const followChance = sameParty ? 0.40 : 0.18
+        if (relationship && relationship.strength > followThreshold && rng() < followChance) baseVote = motion.playerVote ?? baseVote
+      }
       votes.push({ councillorId: cllr.id, councillorName: cllr.name, partyId: cllr.partyId, vote: baseVote })
     }
     if (motion.playerVote) votes.push({ councillorId: pol.id, councillorName: pol.name, partyId: pol.partyId, vote: motion.playerVote })
@@ -5784,23 +5795,25 @@ function formedNpcGovernment(
 }
 
 export function formCoalitionGovernment(world: World, partnerId: string): World {
-  return {
+  const next = {
     ...world,
     government: formedPlayerGovernment(world, 'coalition', [partnerId]),
     electoralPacts: world.electoralPacts ?? [],
     pactTrust: world.pactTrust ?? {},
     newsFeed: [`Week ${world.week}: A coalition administration is formed with ${world.parties.find((party) => party.id === partnerId)?.name ?? 'a partner'}.`, ...world.newsFeed].slice(0, 30),
   }
+  return stampGovernmentLabel(next)
 }
 
 export function formMinorityGovernment(world: World): World {
-  return {
+  const next = {
     ...world,
     government: formedPlayerGovernment(world, 'minority'),
     electoralPacts: world.electoralPacts ?? [],
     pactTrust: world.pactTrust ?? {},
     newsFeed: [`Week ${world.week}: A minority administration takes office.`, ...world.newsFeed].slice(0, 30),
   }
+  return stampGovernmentLabel(next)
 }
 
 export function formNpcOpposition(world: World): World {
@@ -5816,12 +5829,12 @@ export function formNpcOpposition(world: World): World {
 
   if (largest.partyId === world.playerPartyId) {
     if (largest.seatsWon >= majority) {
-      return {
+      return stampGovernmentLabel({
         ...world,
         ...pactFields,
         government: formedPlayerGovernment(world, 'majority'),
         newsFeed: [`Week ${world.week}: Party leadership forms a majority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
-      }
+      })
     }
     const partner = [...world.nationalResults]
       .filter((result) => result.partyId !== world.playerPartyId)
@@ -5846,12 +5859,12 @@ export function formNpcOpposition(world: World): World {
   }
 
   if (largest.seatsWon >= majority) {
-    return {
+    return stampGovernmentLabel({
       ...world,
       ...pactFields,
       government: formedNpcGovernment(world, largest.partyId, 'majority'),
       newsFeed: [`Week ${world.week}: ${largest.partyName} forms a majority administration. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
-    }
+    })
   }
 
   const partner = [...world.nationalResults]
@@ -5864,7 +5877,7 @@ export function formNpcOpposition(world: World): World {
     })
     .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)[0]
   const canCoalition = partner && largest.seatsWon + partner.result.seatsWon >= majority && partner.compat >= 50
-  return {
+  return stampGovernmentLabel({
     ...world,
     ...pactFields,
     government: formedNpcGovernment(
@@ -5874,7 +5887,7 @@ export function formNpcOpposition(world: World): World {
       canCoalition ? [partner.result.partyId] : [],
     ),
     newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${canCoalition ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
-  }
+  })
 }
 
 export function playerCanNegotiateCoalition(world: World): boolean {

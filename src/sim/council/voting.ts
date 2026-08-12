@@ -112,6 +112,19 @@ export function buildPartyWhips(world: World, motion: CouncilMotion): Record<str
 export function findWhipIssuer(world: World, partyId: string): Councillor | undefined {
   const pm = world.politicianMode
   if (!pm) return undefined
+  if (partyId === pm.politician.partyId && pm.politician.careerRank === 'party-leader') {
+    return {
+      id: pm.politician.id,
+      name: pm.politician.name,
+      partyId: pm.politician.partyId,
+      partyColour: world.parties.find((p) => p.id === pm.politician.partyId)?.colour ?? '#888',
+      wardId: pm.politician.wardId,
+      wardName: world.constituencies.find((c) => c.id === pm.politician.wardId)?.name ?? '',
+      personalValues: pm.politician.personalValues,
+      rebellionTendency: 0,
+      influence: pm.politician.influence,
+    }
+  }
   const partyCouncillors = pm.councillors.filter((councillor) => councillor.partyId === partyId)
   if (partyCouncillors.length === 0) return undefined
   return partyCouncillors.reduce((best, current) => (current.influence > best.influence ? current : best))
@@ -146,6 +159,12 @@ export function calculateNpcVote(
   const governingIds = getGoverningPartyIds(world)
   const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
   const sameParty = cllr.partyId === pm.politician.partyId
+
+  const playerIsLeader = pm.politician.careerRank === 'party-leader'
+  if (sameParty && playerIsLeader && motion.playerVote) {
+    baseVote = motion.playerVote
+  }
+
   const rebellionChance = (
     cllr.rebellionTendency
     + (motion.contestedness === 'divisive' ? 0.10 : motion.contestedness === 'contested' ? 0.04 : 0.01)
@@ -158,10 +177,12 @@ export function calculateNpcVote(
   }
 
   const relationship = pm.politician.relationships.find((entry) => entry.targetId === cllr.id)
-  const followThreshold = sameParty ? 30 : 40
-  const followChance = sameParty ? 0.40 : 0.18
-  if (relationship && relationship.strength > followThreshold && rng() < followChance) {
-    baseVote = motion.playerVote ?? baseVote
+  if (!sameParty || !playerIsLeader) {
+    const followThreshold = sameParty ? 30 : 40
+    const followChance = sameParty ? 0.40 : 0.18
+    if (relationship && relationship.strength > followThreshold && rng() < followChance) {
+      baseVote = motion.playerVote ?? baseVote
+    }
   }
 
   return baseVote

@@ -7,6 +7,9 @@ export function PactsPanel({ world, onAction, onAcceptNpcProposal, onRejectNpcPr
   onRejectNpcProposal: () => void
 }) {
   const actionAvailable = world.playerActionPoints >= 1
+  const playerPacts = world.alliancePacts.filter(
+    (p) => !p.broken && (p.partyAId === world.playerPartyId || p.partyBId === world.playerPartyId),
+  )
 
   return (
     <div className="pacts-panel">
@@ -29,24 +32,20 @@ export function PactsPanel({ world, onAction, onAcceptNpcProposal, onRejectNpcPr
         </div>
       )}
 
-      {world.alliancePacts.length > 0 ? (
+      {playerPacts.length > 0 ? (
         <div className="pacts-active">
           <div className="panel-kicker">Active pacts</div>
-          {world.alliancePacts.map((pact) => {
+          {playerPacts.map((pact) => {
             const otherId = pact.partyAId === world.playerPartyId ? pact.partyBId : pact.partyAId
             const other = world.parties.find((party) => party.id === otherId)
-            const broken = pact.broken
+            const isPartyA = pact.partyAId === world.playerPartyId
             return (
-              <div key={pact.id} className={`pacts-row${broken ? ' is-broken' : ''}`}>
-                <span>
-                  {other?.name ?? 'Partner'}
-                  {broken ? ' (broken)' : ''}
-                  {pact.entries.length > 0 ? ` · ${pact.entries.length} ward${pact.entries.length !== 1 ? 's' : ''}` : ''}
-                </span>
-                {!broken && (
+              <div key={pact.id} className="pacts-row">
+                <div className="pacts-row-header">
+                  <strong style={{ color: other?.colour }}>{other?.name ?? 'Partner'}</strong>
                   <button
                     type="button"
-                    className="ink-button secondary"
+                    className="ink-button secondary small"
                     disabled={!actionAvailable}
                     onClick={() => onAction({
                       type: 'break_alliance',
@@ -59,6 +58,22 @@ export function PactsPanel({ world, onAction, onAcceptNpcProposal, onRejectNpcPr
                   >
                     Break
                   </button>
+                </div>
+                {pact.entries.length > 0 && (
+                  <ul className="pacts-ward-list">
+                    {pact.entries.map((entry) => {
+                      const playerStandsDown = isPartyA
+                      return (
+                        <li key={entry.id} className="pacts-ward-line">
+                          {playerStandsDown
+                            ? <>You stand down in <strong>{entry.wardAName}</strong>, they stand down in <strong>{entry.wardBName}</strong></>
+                            : <>They stand down in <strong>{entry.wardAName}</strong>, you stand down in <strong>{entry.wardBName}</strong></>
+                          }
+                          {entry.isUnilateral && <span className="pacts-unilateral"> (one-way)</span>}
+                        </li>
+                      )
+                    })}
+                  </ul>
                 )}
               </div>
             )

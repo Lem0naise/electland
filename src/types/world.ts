@@ -340,8 +340,14 @@ export interface World {
   councilHistory: CouncilDecisionRecord[]
   politicianMode?: PoliticianModeState
   pendingActionToast?: string
+  simToasts: SimToast[]
   government?: GovernmentState
   victory?: VictoryState
+}
+
+export interface SimToast {
+  message: string
+  outcome: 'success' | 'neutral' | 'backfire'
 }
 
 export interface CustomPartyDraft {

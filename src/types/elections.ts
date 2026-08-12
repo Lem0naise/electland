@@ -10,6 +10,7 @@ export interface ElectionSeatHistoryEntry {
   week: number
   electionNumber: number
   partySeats: Record<string, number>
+  governmentLabel?: string
 }
 
 export interface ElectionNightResult {

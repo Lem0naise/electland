@@ -253,6 +253,7 @@ export function makeWorld(overrides?: Partial<World>): World {
     pactTrust: {},
     alliancePacts: [],
     allianceReputation: {},
+    simToasts: [],
     budget: getDefaultBudget(),
     councilHistory: [],
     ...overrides,

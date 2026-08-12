@@ -347,6 +347,7 @@ function normalizeSave(data: SaveData): SaveData {
   if (!w.electionSeatHistory) w.electionSeatHistory = []
   if (!w.newsFeed) w.newsFeed = []
   if (w.pendingActionToast) w.pendingActionToast = undefined
+  if (!w.simToasts) w.simToasts = []
   if (!w.activeCampaigns) w.activeCampaigns = []
   else w.activeCampaigns = []
   w.maxActionPoints = 1

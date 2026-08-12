@@ -55,29 +55,55 @@ function leadPartyName(world: World, partyId: string): string {
 
 export function formMajorityGovernment(world: World, leadPartyId: string): World {
   const leadName = leadPartyName(world, leadPartyId)
-  return {
+  return stampGovernmentLabel({
     ...world,
     government: formedGovernment(world, 'majority', leadPartyId, []),
     newsFeed: [`Week ${world.week}: ${leadName} forms a majority administration.`, ...world.newsFeed].slice(0, 30),
-  }
+  })
 }
 
 export function formMinorityGovernment(world: World, leadPartyId: string): World {
   const leadName = leadPartyName(world, leadPartyId)
-  return {
+  return stampGovernmentLabel({
     ...world,
     government: formedGovernment(world, 'minority', leadPartyId, []),
     newsFeed: [`Week ${world.week}: ${leadName} forms a minority administration.`, ...world.newsFeed].slice(0, 30),
-  }
+  })
 }
 
 export function formCoalitionGovernment(world: World, leadPartyId: string, partnerIds: string[]): World {
   const leadName = leadPartyName(world, leadPartyId)
   const partnerNames = partnerIds.map((id) => leadPartyName(world, id)).join(', ')
-  return {
+  return stampGovernmentLabel({
     ...world,
     government: formedGovernment(world, 'coalition', leadPartyId, partnerIds),
     newsFeed: [`Week ${world.week}: ${leadName} forms a coalition with ${partnerNames}.`, ...world.newsFeed].slice(0, 30),
+  })
+}
+
+function buildGovernmentLabel(world: World): string | undefined {
+  const gov = world.government
+  if (!gov || gov.status !== 'formed') return undefined
+  const lead = world.parties.find((p) => p.id === gov.leadPartyId)
+  const name = lead?.name ?? gov.leadPartyId
+  const shortName = name.length > 12 ? name.slice(0, 10) + '…' : name
+  const suffix = gov.kind === 'majority' ? 'maj' : 'min'
+  return `${shortName} ${suffix}`
+}
+
+export function stampGovernmentLabel(world: World): World {
+  const history = world.electionSeatHistory
+  if (!history || history.length === 0) return world
+  const last = history[history.length - 1]
+  if (last.governmentLabel) return world
+  const label = buildGovernmentLabel(world)
+  if (!label) return world
+  return {
+    ...world,
+    electionSeatHistory: [
+      ...history.slice(0, -1),
+      { ...last, governmentLabel: label },
+    ],
   }
 }
 

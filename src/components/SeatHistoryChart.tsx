@@ -15,7 +15,7 @@ export const SeatHistoryChart = memo(function SeatHistoryChart({ world }: { worl
   const inkSoft = 'rgba(44, 31, 14, 0.45)'
   const grid = 'rgba(44, 31, 14, 0.1)'
 
-  const labels = history.map((entry) => `Election ${entry.electionNumber}`)
+  const labels = history.map((entry) => entry.governmentLabel ?? `Election ${entry.electionNumber}`)
   const partyIds = [...new Set(history.flatMap((entry) => Object.keys(entry.partySeats)))]
   const datasets = partyIds.map((partyId) => {
     const party = world.parties.find((entry) => entry.id === partyId)

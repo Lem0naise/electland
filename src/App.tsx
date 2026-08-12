@@ -8,6 +8,7 @@ import { StatisticsModal } from './components/StatisticsModal'
 import { CoalitionModal } from './components/CoalitionModal'
 import { BudgetModal } from './components/BudgetModal'
 import { ElectionNightModal } from './components/ElectionNightModal'
+import { VictoryModal } from './components/VictoryModal'
 import { ActionFlash } from './components/ActionFlash'
 import { PactsPanel } from './components/PactsPanel'
 import { WardPactNegotiator } from './components/WardPactNegotiator'
@@ -60,6 +61,8 @@ import {
   formMinorityGovernment,
   isPlayerPartyGovernmentLead,
 } from './sim/politics/government'
+import { reconcilePlayerOfficeAndVictory } from './sim/politics/career'
+import { shouldShowVictoryModal } from './game/selectors'
 import type {
   ActionResult,
   CampaignAction,
@@ -231,33 +234,21 @@ function App() {
   const advanceWeek = useCallback(() => {
     if (!world) return
     setPreviousNationalResults(world.nationalResults)
-    let nextWorld = simulateWeek(world)
+    let nextWorld = reconcilePlayerOfficeAndVictory(simulateWeek(world))
     if (shouldTriggerCouncilSession(nextWorld)) {
       nextWorld = generateCouncilSession(nextWorld)
       setShowCouncilChamber(true)
-      setActiveWorkspaceTab('council')
     }
-    const toast = nextWorld.pendingActionToast
-    setWorld({ ...nextWorld, pendingActionToast: undefined })
-    if (toast) {
+    const toasts = nextWorld.simToasts
+    const actionToast = nextWorld.pendingActionToast
+    setWorld({ ...nextWorld, pendingActionToast: undefined, simToasts: [] })
+    const bestToast = toasts[0] ?? (actionToast ? { message: actionToast, outcome: 'success' as const } : null)
+    if (bestToast) {
       setLastActionResult({
         action: { type: 'canvass', label: '', description: '', apCost: 0 },
-        outcome: 'success',
-        description: toast,
+        outcome: bestToast.outcome,
+        description: bestToast.message,
       })
-    } else {
-      const newPactLines = nextWorld.newsFeed.slice(0, 5).filter(
-        (l) => l.includes('form a pact') || l.includes('proposes a pact with you') || l.includes('breaks their alliance pact') || l.includes('abandons their pact'),
-      )
-      if (newPactLines.length > 0) {
-        const desc = newPactLines[0].replace(/^Week \d+: /, '')
-        const isBreak = newPactLines[0].includes('breaks')
-        setLastActionResult({
-          action: { type: isBreak ? 'break_alliance' : 'propose_alliance', label: '', description: '', apCost: 0 },
-          outcome: isBreak ? 'neutral' as const : 'success' as const,
-          description: desc,
-        })
-      }
     }
   }, [world])
 
@@ -347,7 +338,7 @@ function App() {
   const resolveHungCouncil = (w: World) => {
     if (w.government?.status !== 'forming') return w
     if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w)) {
-      const next = formNpcOpposition(w)
+      const next = reconcilePlayerOfficeAndVictory(formNpcOpposition(w))
       setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', isPlayerPartyGovernmentLead(next) ? 'success' : 'neutral'))
       return next
     }
@@ -361,7 +352,7 @@ function App() {
       return
     }
     if (!isPlayerPartyGovernmentLead(w) && w.nationalResults.some((r) => r.seatsWon >= w.stats.councilMajority && r.partyId !== w.playerPartyId)) {
-      const next = formNpcOpposition(w)
+      const next = reconcilePlayerOfficeAndVictory(formNpcOpposition(w))
       setWorld(next)
       setLastActionResult(newsToast(next.newsFeed[0] ?? 'Another party governs.', 'neutral'))
     }
@@ -654,7 +645,7 @@ function App() {
                         <small>Independent of the party platform · next change week {world.politicianMode.politician.personalPolicyNextWeek}</small>
                       </section>
                       <section className="panel"><div className="panel-kicker">Career</div><CareerTracker world={world} onPromote={() => {
-                        const next = promoteCareer(world)
+                        const next = reconcilePlayerOfficeAndVictory(promoteCareer(world))
                         setWorld(next)
                         setLastActionResult(newsToast(next.newsFeed[0] ?? 'Promotion accepted.', 'success'))
                       }} /></section>
@@ -818,7 +809,7 @@ function App() {
           onFormCoalition={(partnerId, decisions) => {
             setWorld((prev) => {
               if (!prev) return prev
-              const next = { ...formCoalitionGovernment(prev, prev.playerPartyId, [partnerId]), governanceDecisions: decisions }
+              const next = reconcilePlayerOfficeAndVictory({ ...formCoalitionGovernment(prev, prev.playerPartyId, [partnerId]), governanceDecisions: decisions })
               setLastActionResult(newsToast(next.newsFeed[0] ?? 'Coalition formed.', 'success'))
               return next
             })
@@ -827,7 +818,7 @@ function App() {
           onFormMinority={(decisions) => {
             setWorld((prev) => {
               if (!prev) return prev
-              const next = { ...formMinorityGovernment(prev, prev.playerPartyId), governanceDecisions: decisions }
+              const next = reconcilePlayerOfficeAndVictory({ ...formMinorityGovernment(prev, prev.playerPartyId), governanceDecisions: decisions })
               setLastActionResult(newsToast(next.newsFeed[0] ?? 'Minority government formed.', 'success'))
               return next
             })
@@ -836,7 +827,7 @@ function App() {
           onOpposition={() => {
             setWorld((prev) => {
               if (!prev) return prev
-              const next = formNpcOpposition(prev)
+              const next = reconcilePlayerOfficeAndVictory(formNpcOpposition(prev))
               setLastActionResult(newsToast(next.newsFeed[0] ?? 'You go into opposition.', 'neutral'))
               return next
             })
@@ -990,6 +981,17 @@ function App() {
             )}
           </div>
         </div>
+      )}
+      {world && shouldShowVictoryModal(world) && (
+        <VictoryModal
+          world={world}
+          onDismiss={() => {
+            setWorld((prev) => {
+              if (!prev?.victory) return prev
+              return { ...prev, victory: { ...prev.victory, victoryScreenSeen: true } }
+            })
+          }}
+        />
       )}
     </div>
   )
