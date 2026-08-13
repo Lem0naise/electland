@@ -197,3 +197,25 @@ export function motionPassed(votes: Array<{ vote: 'aye' | 'nay' | 'abstain' }>):
 export function supportBandForValues(values: PoliticalValues, motion: CouncilMotion) {
   return supportBand(values, motion)
 }
+
+export type PredictedStance = 'aye' | 'lean_aye' | 'undecided' | 'lean_nay' | 'nay'
+
+export function predictCouncillorVote(councillor: Councillor, motion: CouncilMotion, world: World): PredictedStance {
+  if (councillor.id === motion.proposerId) return 'aye'
+  const committedVote = motion.votes.find((vote) => vote.councillorId === councillor.id)
+  if (committedVote) return committedVote.vote === 'aye' ? 'aye' : committedVote.vote === 'nay' ? 'nay' : 'undecided'
+  const whip = motion.partyWhipDirection[councillor.partyId] ?? 'free'
+  const personalLeans = supportBand(councillor.personalValues, motion)
+  const rebellious = councillor.rebellionTendency + (world.government?.kind === 'minority' ? 0.1 : 0)
+  if (whip === 'aye') {
+    if (rebellious > 0.16 && personalLeans === 'oppose') return 'lean_aye'
+    return 'aye'
+  }
+  if (whip === 'nay') {
+    if (rebellious > 0.16 && personalLeans === 'support') return 'lean_nay'
+    return 'nay'
+  }
+  if (personalLeans === 'support') return rebellious > 0.14 ? 'lean_aye' : 'aye'
+  if (personalLeans === 'oppose') return rebellious > 0.14 ? 'lean_nay' : 'nay'
+  return 'undecided'
+}

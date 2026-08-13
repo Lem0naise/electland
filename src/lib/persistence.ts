@@ -291,6 +291,9 @@ function normalizeSave(data: SaveData): SaveData {
     if (typeof w.politicianMode.councilSessionInterval !== 'number' || w.politicianMode.councilSessionInterval < 8) {
       w.politicianMode.councilSessionInterval = 8
     }
+    if (w.politicianMode.nextOrdinaryKind !== 'member' && w.politicianMode.nextOrdinaryKind !== 'government') {
+      w.politicianMode.nextOrdinaryKind = 'government'
+    }
     if (typeof w.politicianMode.nextBudgetWeek !== 'number') {
       w.politicianMode.nextBudgetWeek = w.week + w.electionCycleWeeks
     }

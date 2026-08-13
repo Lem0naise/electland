@@ -77,6 +77,7 @@ export type PoliticianActionType =
   | 'attend_event'
   | 'smear_opponent'
   | 'shift_personal_policy'
+  | 'shift_party_policy'
   | 'propose_motion'
   | 'second_motion'
   | 'lobby_councillor'

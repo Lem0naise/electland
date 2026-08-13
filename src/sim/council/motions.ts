@@ -1,3 +1,4 @@
+import { POLICY_TEMPLATES, type PolicyTemplate } from '../../data/policyTemplates'
 import type { World } from '../../types/world'
 import type {
   CouncilMotion,
@@ -16,130 +17,30 @@ import { buildPartyWhips, findWhipIssuer } from './voting'
 export const MOTION_PROPOSAL_INFLUENCE_COST = 8
 export const BUDGET_AMENDMENT_INFLUENCE_COST = 10
 
-interface PolicyTemplate {
-  category: MotionCategory
-  headline: string
-  description: string
-  ideologyLean: Partial<PoliticalValues>
-  effects: PolicyEffect[]
-  costSignal: number
-  contestedness: MotionContestedness
+export { POLICY_TEMPLATES }
+export type { PolicyTemplate }
+
+function presentBlocIds(world: World): Set<string> {
+  return new Set(world.blocs.map((bloc) => bloc.id))
 }
 
-const POLICY_TEMPLATES: PolicyTemplate[] = [
-  {
-    category: 'services',
-    headline: 'Restore library opening hours',
-    description: 'Reopen branch libraries for evening access funded from reserves.',
-    ideologyLean: { services: 22 },
-    effects: [
-      { blocId: 'old_town_loyalists', utilityDelta: 0.10, salience: 1.1 },
-      { blocId: 'college_corner', utilityDelta: 0.08, salience: 1.0 },
-      { blocId: 'hill_street_households', utilityDelta: 0.06, salience: 0.9 },
-    ],
-    costSignal: 0.45,
-    contestedness: 'contested',
-  },
-  {
-    category: 'transport',
-    headline: 'Expand evening bus services',
-    description: 'Subsidise late buses linking outer wards to the town centre.',
-    ideologyLean: { services: 18, growth: 8 },
-    effects: [
-      { blocId: 'workshop_crews', utilityDelta: 0.09, salience: 1.0 },
-      { blocId: 'river_walkers', utilityDelta: 0.05, salience: 0.8 },
-      { blocId: 'market_regulars', utilityDelta: -0.03, salience: 0.7 },
-    ],
-    costSignal: 0.55,
-    contestedness: 'contested',
-  },
-  {
-    category: 'environment',
-    headline: 'Protect riverside habitats',
-    description: 'Designate a buffer zone along the towpath with tree-planting grants.',
-    ideologyLean: { change: 24 },
-    effects: [
-      { blocId: 'river_walkers', utilityDelta: 0.11, salience: 1.2 },
-      { blocId: 'college_corner', utilityDelta: 0.07, salience: 0.9 },
-      { blocId: 'workshop_crews', utilityDelta: -0.04, salience: 0.6 },
-    ],
-    costSignal: 0.35,
-    contestedness: 'broad',
-  },
-  {
-    category: 'planning',
-    headline: 'Fast-track town-centre flats',
-    description: 'Delegate approval for brownfield housing above existing retail units.',
-    ideologyLean: { growth: 20 },
-    effects: [
-      { blocId: 'market_regulars', utilityDelta: 0.08, salience: 1.0 },
-      { blocId: 'workshop_crews', utilityDelta: 0.06, salience: 0.8 },
-      { blocId: 'pondside_peacemakers', utilityDelta: -0.05, salience: 0.7 },
-    ],
-    costSignal: 0.50,
-    contestedness: 'contested',
-  },
-  {
-    category: 'housing',
-    headline: 'Accelerate social housing delivery',
-    description: 'Partner with registered providers to bring forward council-owned sites.',
-    ideologyLean: { services: 16, change: 12 },
-    effects: [
-      { blocId: 'hill_street_households', utilityDelta: 0.10, salience: 1.1 },
-      { blocId: 'college_corner', utilityDelta: 0.06, salience: 0.9 },
-      { blocId: 'old_town_loyalists', utilityDelta: -0.03, salience: 0.6 },
-    ],
-    costSignal: 0.60,
-    contestedness: 'divisive',
-  },
-  {
-    category: 'safety',
-    headline: 'Fund community warden patrols',
-    description: 'Expand evening warden coverage near licensed premises.',
-    ideologyLean: { services: 14, change: 10 },
-    effects: [
-      { blocId: 'pondside_peacemakers', utilityDelta: 0.09, salience: 1.0 },
-      { blocId: 'market_regulars', utilityDelta: 0.07, salience: 0.9 },
-      { blocId: 'college_corner', utilityDelta: -0.04, salience: 0.5 },
-    ],
-    costSignal: 0.40,
-    contestedness: 'broad',
-  },
-  {
-    category: 'economy',
-    headline: 'Launch high-street grants scheme',
-    description: 'Offer small business rate relief for independent traders on Market Square.',
-    ideologyLean: { growth: 18 },
-    effects: [
-      { blocId: 'market_regulars', utilityDelta: 0.10, salience: 1.1 },
-      { blocId: 'workshop_crews', utilityDelta: 0.05, salience: 0.8 },
-      { blocId: 'old_town_loyalists', utilityDelta: 0.03, salience: 0.7 },
-    ],
-    costSignal: 0.30,
-    contestedness: 'broad',
-  },
-  {
-    category: 'governance',
-    headline: 'Livestream scrutiny meetings',
-    description: 'Broadcast committee hearings online under a new transparency charter.',
-    ideologyLean: { change: 16 },
-    effects: [
-      { blocId: 'college_corner', utilityDelta: 0.07, salience: 0.9 },
-      { blocId: 'pondside_peacemakers', utilityDelta: 0.05, salience: 0.8 },
-    ],
-    costSignal: 0.20,
-    contestedness: 'broad',
-  },
-]
+export function effectsForTown(effects: PolicyEffect[], present: Set<string>): PolicyEffect[] {
+  return effects.filter((effect) => present.has(effect.blocId))
+}
 
-function pickTemplate(rng: () => number, recentHeadlines: string[]): PolicyTemplate {
-  const shuffled = [...POLICY_TEMPLATES].sort(() => rng() - 0.5)
-  for (const template of shuffled) {
-    if (!recentHeadlines.some((headline) => headline.toLowerCase() === template.headline.toLowerCase())) {
-      return template
-    }
-  }
-  return POLICY_TEMPLATES[0]
+function pickTemplate(rng: () => number, recentHeadlines: string[], present: Set<string>, category?: MotionCategory): PolicyTemplate {
+  const unused = POLICY_TEMPLATES.filter((template) =>
+    !recentHeadlines.some((headline) => headline.toLowerCase() === template.headline.toLowerCase()),
+  )
+  const byCategory = (list: PolicyTemplate[]) => (
+    category ? list.filter((template) => template.category === category) : list
+  )
+  const localized = (list: PolicyTemplate[]) => list.filter((template) => template.effects.some((effect) => present.has(effect.blocId)))
+  const pool = localized(byCategory(unused))
+  const fallback = localized(byCategory(POLICY_TEMPLATES))
+  const candidates = pool.length > 0 ? pool : fallback.length > 0 ? fallback : byCategory(POLICY_TEMPLATES)
+  const choices = candidates.length > 0 ? candidates : POLICY_TEMPLATES
+  return choices[Math.floor(rng() * choices.length)]
 }
 
 function findProposer(world: World, partyId: string): { id: string; name: string; partyId: string } {
@@ -173,13 +74,14 @@ function buildCouncilMotion(
   }
 }
 
-export function generateOrdinaryMotion(world: World, proposerPartyId: string): CouncilMotion {
+export function generateOrdinaryMotion(world: World, proposerPartyId: string, extraRecent: string[] = []): CouncilMotion {
   const pm = world.politicianMode!
-  const rng = createRng(world.seed + world.week * 3331 + proposerPartyId.length * 17)
-  const recent = (pm.legislationHistory ?? []).map((motion) => motion.headline)
-  const template = pickTemplate(rng, recent)
+  const rng = createRng(world.seed + world.week * 3331 + proposerPartyId.length * 17 + extraRecent.join('').length)
+  const recent = [...(pm.legislationHistory ?? []).map((motion) => motion.headline), ...extraRecent]
+  const present = presentBlocIds(world)
+  const template = pickTemplate(rng, recent, present)
   const proposer = findProposer(world, proposerPartyId)
-  const effects = template.effects
+  const effects = effectsForTown(template.effects, present)
   const blocImpact = blocImpactFromEffects(effects)
 
   return buildCouncilMotion(world, {
@@ -211,7 +113,8 @@ export function generateRepealMotion(world: World, targetEnactmentId: string, pr
     reversedLean[key] = 0
   }
 
-  const effects: PolicyEffect[] = target.effects.map((effect) => ({
+  const present = presentBlocIds(world)
+  const effects: PolicyEffect[] = effectsForTown(target.effects, present).map((effect) => ({
     blocId: effect.blocId,
     utilityDelta: -effect.utilityDelta,
     salience: effect.salience,
@@ -235,7 +138,14 @@ export function generateRepealMotion(world: World, targetEnactmentId: string, pr
   })
 }
 
-function motionFromInput(input: CustomMotionInput): Pick<
+function contestednessFromSignals(leanMagnitude: number, costSignal: number): MotionContestedness {
+  const score = leanMagnitude / 60 + costSignal
+  if (score < 0.85) return 'broad'
+  if (score < 1.35) return 'contested'
+  return 'divisive'
+}
+
+function motionFromInput(world: World, input: CustomMotionInput): Pick<
   CouncilMotion,
   'headline' | 'description' | 'category' | 'kind' | 'ideologyLean' | 'blocImpact' | 'effects' | 'costSignal' | 'contestedness' | 'targetMotionId' | 'budgetProposal'
 > {
@@ -245,12 +155,12 @@ function motionFromInput(input: CustomMotionInput): Pick<
     1,
   )
   const leanMagnitude = Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)
-  const contestedness: MotionContestedness = leanMagnitude / 60 + costSignal < 0.85
-    ? 'broad'
-    : leanMagnitude / 60 + costSignal < 1.35
-      ? 'contested'
-      : 'divisive'
-  const effects = categoryDefaultEffects(input.category, input.ideologyLean)
+  const contestedness = contestednessFromSignals(leanMagnitude, costSignal)
+  const present = presentBlocIds(world)
+  const template = input.templateId
+    ? POLICY_TEMPLATES.find((entry) => entry.id === input.templateId)
+    : POLICY_TEMPLATES.find((entry) => entry.headline.toLowerCase() === input.headline.toLowerCase())
+  const effects = effectsForTown(input.effects ?? template?.effects ?? categoryDefaultEffects(input.category, input.ideologyLean), present)
   return {
     headline: input.headline || 'Untitled Motion',
     description: input.description || '',
@@ -289,7 +199,7 @@ function categoryDefaultEffects(category: MotionCategory, lean: PoliticalValues)
 
 export function customMotionToCouncilMotion(world: World, input: CustomMotionInput, motionId: string): CouncilMotion {
   const pm = world.politicianMode!
-  const generated = motionFromInput(input)
+  const generated = motionFromInput(world, input)
   return buildCouncilMotion(world, {
     id: motionId,
     proposerId: pm.politician.id,
@@ -306,33 +216,90 @@ export function queueCustomMotion(world: World, input: CustomMotionInput): World
   if (pm.queuedMotion || pm.politician.influence < cost) return world
   return {
     ...world,
-    newsFeed: [`Week ${world.week}: You queued "${input.headline}" for the next council session (−${cost} influence).`, ...world.newsFeed].slice(0, 30),
+    newsFeed: [`Week ${world.week}: You queued "${input.headline}" for the next ${input.kind === 'budget' ? 'budget' : 'member'} session (−${cost} influence).`, ...world.newsFeed].slice(0, 30),
     politicianMode: {
       ...pm,
       politician: {
         ...pm.politician,
         influence: pm.politician.influence - cost,
-        careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier ?? 'backbencher' }],
+        careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier, rank: pm.politician.careerRank }],
       },
       queuedMotion: input,
     },
   }
 }
 
-export function queueRepealMotion(world: World, targetEnactmentId: string): World {
+export function queueRepealMotion(world: World, targetId: string, rationale?: string): World {
   const pm = world.politicianMode
   if (!pm || !pm.politician.isIncumbent) return world
-  const target = getRepealablePolicies(world).find((policy) => policy.id === targetEnactmentId)
-  if (!target) return world
+  const fromPolicy = getRepealablePolicies(world).find((policy) => policy.id === targetId || policy.originatingMotionId === targetId)
+  if (fromPolicy) {
+    return queueCustomMotion(world, {
+      headline: `Repeal: ${fromPolicy.headline}`,
+      description: rationale || `Repeal the enacted policy "${fromPolicy.headline}".`,
+      category: fromPolicy.category,
+      ideologyLean: roundPoliticalValues({ change: 0, growth: 0, services: 0 }),
+      kind: 'repeal',
+      targetMotionId: fromPolicy.originatingMotionId,
+      costSignal: 0.7,
+      effects: fromPolicy.effects.map((effect) => ({
+        ...effect,
+        utilityDelta: -effect.utilityDelta,
+      })),
+    })
+  }
+  const fromHistory = pm.legislationHistory.find((motion) => motion.id === targetId && motion.status === 'passed')
+  if (!fromHistory) return world
   return queueCustomMotion(world, {
-    headline: `Repeal: ${target.headline}`,
-    description: `Repeal the enacted policy "${target.headline}".`,
-    category: target.category,
-    ideologyLean: roundPoliticalValues({ change: 0, growth: 0, services: 0 }),
+    headline: `Repeal: ${fromHistory.headline}`,
+    description: rationale || `Repeal the previously passed motion "${fromHistory.headline}".`,
+    category: fromHistory.category,
+    ideologyLean: {
+      change: -(fromHistory.ideologyLean.change ?? 0),
+      growth: -(fromHistory.ideologyLean.growth ?? 0),
+      services: -(fromHistory.ideologyLean.services ?? 0),
+    },
     kind: 'repeal',
-    targetMotionId: target.originatingMotionId,
-    costSignal: 0.7,
+    targetMotionId: targetId,
+    costSignal: Math.min(1, (fromHistory.costSignal ?? 0.5) + 0.2),
+    effects: fromHistory.effects.map((effect) => ({
+      ...effect,
+      utilityDelta: -effect.utilityDelta,
+    })),
   })
 }
 
-export { POLICY_TEMPLATES }
+export function suggestTemplateMotion(
+  world: World,
+  recentHeadlines: string[] = [],
+  category?: MotionCategory,
+  salt = 0,
+): CustomMotionInput & { contestedness: MotionContestedness } {
+  const rng = createRng(world.seed + world.week * 97 + salt * 131 + (category?.length ?? 0) * 11)
+  const present = presentBlocIds(world)
+  const template = pickTemplate(rng, recentHeadlines, present, category)
+  const effects = effectsForTown(template.effects, present)
+  return {
+    headline: template.headline,
+    description: template.description,
+    category: template.category,
+    ideologyLean: {
+      change: template.ideologyLean.change ?? 0,
+      growth: template.ideologyLean.growth ?? 0,
+      services: template.ideologyLean.services ?? 0,
+    },
+    kind: 'ordinary',
+    costSignal: template.costSignal,
+    effects,
+    templateId: template.id,
+    contestedness: template.contestedness,
+  }
+}
+
+export function templatesForCategory(category: MotionCategory, recentHeadlines: string[] = []): PolicyTemplate[] {
+  const unused = POLICY_TEMPLATES.filter((template) =>
+    template.category === category
+    && !recentHeadlines.some((headline) => headline.toLowerCase() === template.headline.toLowerCase()),
+  )
+  return unused.length > 0 ? unused : POLICY_TEMPLATES.filter((template) => template.category === category)
+}

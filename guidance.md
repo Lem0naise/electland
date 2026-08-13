@@ -271,20 +271,24 @@ If this order changes, add tests for the behavior affected. Do not rely on incid
 
 ### Vote calculation
 
-Voting remains probabilistic/softmax-based. Core score sources include:
-- local/ward fit;
-- organisation;
-- ideological fit;
-- events/currents;
-- momentum/base utility;
-- ward campaign effects;
-- tactical pressure;
-- incumbency;
-- player personal approval/position in the player's ward;
-- active policy reputation;
-- active pact stand-down/endorsement effects.
+Voting remains probabilistic/softmax-based. Each **tile** gets a raw utility per party (`scorePartyForTile`); softmax (`SOFTMAX_TEMP = 0.85`) turns those scores into vote shares; ward results are population-weighted tile sums. Scoring uses tile values, bloc mix, tags, and salience — not the ward average.
+
+Core score sources, roughly by typical magnitude:
+
+- **Where they live (dominant):** `wardFit` (bloc share × footing, up to ~1.8 on a seed bloc; custom player parties with no `seedBlocId` get a flat 0.15), `issueFit` (`-valueDistance(tile.values, party.values, tile.salience) / 7000`, typically 0 to −2, worse than −3 when badly mismatched), and `tagBonus` (+0.20 per matching `strategyTags`). There is no centrism bonus; extremism only hurts by being far from that tile.
+- **Party brand:** organisation, `baseUtility`, momentum, incumbency, issue currents.
+- **Campaigning (close races, not hostile turf):** `party.wardBoosts` (cap ~0.45–0.55) and `tile.campaignBoosts` (cap 0.4), both decaying ×0.78/week. Door-knock and local media do **not** write those boosts; they only raise `personalApproval` in the player's ward.
+- **Player personal position (home ward only):** `personalApproval × 0.4` plus a capped personal-vs-party issue-fit delta (±0.18). `personalValues` never enter other wards.
+
+`scorePolicyReputationForTile` and `electoralPacts` / `pactScoringEffect` are **not** wired into `estimateTilePreference`. Live scoring still uses legacy `alliancePacts` (stand-down / endorsement) and tile-boost writes from council/budget.
 
 Standing down should be represented as an explicit pact result, not as candidate deletion.
+
+### Ideology levers
+
+- `party.values` set party attractiveness in **every** ward. At setup via party edit. In play, only a **party leader** can move the platform (`shift_party_policy`: ±10 on one axis, 1 AP, once per election cycle). That does not change the leader's `personalValues`.
+- `personalValues` start copied from the party. Any seated councillor can **Set personal position** (`shift_personal_policy`: ±10, 4-week cooldown). That can hold the player's own seat; it does not move the party.
+- A backbencher or committee chair cannot moderate an extreme party. To elect more colleagues they should campaign for colleagues (`wardBoosts` on another same-party ward), strike own-ward stand-down pacts, and target wards that already lean their way. Campaigning will not outrun a large location/ideology hole. Moving the platform requires becoming party leader.
 
 ### Election result invariants
 

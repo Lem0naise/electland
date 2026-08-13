@@ -34,12 +34,9 @@ import {
   type CareerRank,
   type GovernmentState,
   type ElectoralPact,
-  type CouncilMotion,
   type CouncilMotionVote,
   type Councillor,
-  type MotionCategory,
   type ActionCategory,
-  type CustomMotionInput,
   type PoliticianActionMeta,
   type PoliticianActionType,
   type PoliticianModeState,
@@ -57,6 +54,23 @@ import {
   isPlayerPartyGovernmentLead,
   stampGovernmentLabel,
 } from '../sim/politics/government'
+import { scorePolicyReputationForTile } from '../sim/council/legislation'
+import { predictCouncillorVote } from '../sim/council/voting'
+export type { PredictedStance } from '../sim/council/voting'
+export { predictCouncillorVote }
+
+export {
+  generateCouncilSession,
+  resolveCouncilSession,
+  shouldTriggerCouncilSession,
+  ordinarySessionKind,
+} from '../sim/council/agenda'
+export {
+  queueCustomMotion,
+  queueRepealMotion,
+  MOTION_PROPOSAL_INFLUENCE_COST,
+  BUDGET_AMENDMENT_INFLUENCE_COST,
+} from '../sim/council/motions'
 
 const MAP_WIDTH = 920
 const MAP_HEIGHT = 640
@@ -1950,7 +1964,8 @@ function scorePartyForTile(world: World, seat: Constituency | undefined, tile: P
     const personalIssueFit = -valueDistance(tile.values, world.politicianMode.politician.personalValues, tile.salience) / ISSUE_FIT_SCALE
     personalBonus += clamp((personalIssueFit - issueFit) * 0.22, -0.18, 0.18)
   }
-  return wardFit + focus + organization + tagBonus + issueFit + eventBonus + party.baseUtility + party.momentum + wardBoost + tileBoost + incumbencyBonus + personalBonus
+  const policyReputation = scorePolicyReputationForTile(world, tile, party.id)
+  return wardFit + focus + organization + tagBonus + issueFit + eventBonus + party.baseUtility + party.momentum + wardBoost + tileBoost + incumbencyBonus + personalBonus + policyReputation
 }
 
 function allianceModifier(world: World, tile: PopulationTile, party: PartyDefinition): { standingDown: boolean; endorsementBonus: number } {
@@ -3607,6 +3622,7 @@ export function simulateWeek(world: World): World {
           case 'smear_opponent': if (autoRng() < 0.3) { approvalGain = -0.06 } else { approvalGain = 0.04 } break
           case 'attend_event': infGain = 1; break
           case 'shift_personal_policy': break
+          case 'shift_party_policy': break
           default: approvalGain = 0.02; infGain = 1; break
         }
         autoPol = {
@@ -4476,15 +4492,6 @@ export function budgetIdeologyLean(budget: Budget): PoliticalValues {
   }
 }
 
-function consecutiveBudgetFailures(history: Array<{ week: number; passed: boolean }>) {
-  let count = 0
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    if (history[i].passed) break
-    count += 1
-  }
-  return count
-}
-
 // ─── Single-Politician Mode ────────────────────────────────────────────
 
 const TRAIT_POOL: PoliticianTrait[] = [
@@ -4565,6 +4572,7 @@ export function initializePoliticianMode(world: World, wardId = '', playerName?:
     sessionHistory: [],
     nextSessionWeek: world.week + 8,
     councilSessionInterval: 8,
+    nextOrdinaryKind: 'government',
     nextBudgetWeek: world.week + world.electionCycleWeeks,
     budgetHistory: [],
     budgetEvents: [],
@@ -4782,6 +4790,17 @@ export function getPoliticianActions(world: World): PoliticianActionMeta[] {
     { type: 'smear_opponent', label: 'Attack opponent', description: 'Attack the leading rival candidate publicly.', apCost: 1, category: 'political', expectedEffect: '+4–7% approval', riskDescription: '30% backfire risk' },
     { type: 'shift_personal_policy', label: 'Set personal position', description: 'Move your own public position without changing the party platform.', apCost: 1, category: 'political', expectedEffect: 'Personal ward fit shifts', riskDescription: world.week < pol.personalPolicyNextWeek ? `Available again in week ${pol.personalPolicyNextWeek}` : 'May reduce party loyalty if you diverge' },
   ]
+  if (pol.careerRank === 'party-leader') {
+    actions.push({
+      type: 'shift_party_policy',
+      label: 'Set party platform',
+      description: 'Move the party platform on one issue. Applies in every ward. One shift per election cycle.',
+      apCost: 1,
+      category: 'political',
+      expectedEffect: 'Party ideology shifts in all wards',
+      riskDescription: world.policyShiftUsedThisCycle ? 'Already used this cycle' : 'Does not change your personal position',
+    })
+  }
   if (colleagueTargets.length > 0) {
     actions.splice(3, 0, {
       type: 'help_colleague',
@@ -4999,6 +5018,46 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
         result: { action, outcome, description, loyaltyDelta },
       }
     }
+    case 'shift_party_policy': {
+      if (pol.careerRank !== 'party-leader') {
+        return { world, result: { action, outcome: 'neutral', description: 'Only the party leader can move the party platform.' } }
+      }
+      if (world.policyShiftUsedThisCycle) {
+        return { world, result: { action, outcome: 'neutral', description: 'The party has already shifted its platform this cycle.' } }
+      }
+      const axis = action.policyAxis
+      const direction = action.policyDirection
+      if (!axis || !direction) {
+        return { world, result: { action, outcome: 'neutral', description: 'Choose an issue axis and direction first.' } }
+      }
+      const playerParty = world.parties.find((party) => party.id === world.playerPartyId)
+      if (!playerParty) {
+        return { world, result: { action, outcome: 'neutral', description: 'Your party could not be found.' } }
+      }
+      const newValues = { ...playerParty.values, [axis]: clamp(playerParty.values[axis] + direction * 10, -100, 100) }
+      const axisLabel = axis === 'change' ? 'reform' : axis === 'growth' ? 'business' : 'public services'
+      description = `The party shifted its platform to a more ${direction > 0 ? 'ambitious' : 'cautious'} position on ${axisLabel}. Your personal position is unchanged.`
+      const newPol = {
+        ...pol,
+        careerHistory: [...pol.careerHistory, { week: world.week, description: `Set party platform on ${axisLabel}`, tier: pol.careerTier, rank: pol.careerRank }],
+      }
+      return {
+        world: {
+          ...world,
+          playerActionPoints: 0,
+          policyShiftUsedThisCycle: true,
+          parties: world.parties.map((party) =>
+            party.id === world.playerPartyId
+              ? { ...party, values: newValues, strategyTags: strategyTagsForValues(newValues) }
+              : party,
+          ),
+          actionsThisWeek: [...world.actionsThisWeek, { action: { type: 'canvass', label: action.label, description: action.description, apCost: action.apCost, wardId: pol.wardId }, outcome, description, wardName: world.constituencies.find((c) => c.id === pol.wardId)?.name }],
+          politicianMode: { ...pm, politician: newPol },
+          newsFeed: [`Week ${world.week}: ${description}`, ...world.newsFeed].slice(0, 30),
+        },
+        result: { action, outcome, description },
+      }
+    }
     default:
       description = 'Action not recognised.'
       outcome = 'neutral'
@@ -5027,349 +5086,8 @@ export function applyPoliticianAction(world: World, action: PoliticianAction): {
 
 // ─── Council Chamber System ─────────────────────────────────────────────────
 
-export const MOTION_PROPOSAL_INFLUENCE_COST = 8
-export const BUDGET_AMENDMENT_INFLUENCE_COST = 10
 
-type GeneratedMotion = Omit<CouncilMotion, 'id' | 'proposerId' | 'proposerName' | 'proposerPartyId' | 'status' | 'votes' | 'partyWhipDirection' | 'playerVote' | 'whipIssuerId' | 'whipIssuerName' | 'effects'>
 
-const LOCATIONS = [
-  'High Street', 'Market Square', 'the industrial estate', 'Riverside Path',
-  'the school grounds', 'the old library site', 'Station Road', 'Church Lane',
-  'the recreation ground', 'Oak Park', 'the town centre', 'Mill Lane',
-  'the allotments', 'Harbour Road', 'the canal towpath', 'Victoria Gardens',
-  'the bus station forecourt', 'Queensway', 'the civic quarter',
-]
-
-const POLICY_AREAS: Array<{ category: MotionCategory; interventions: string[]; subjects: string[]; mechanisms: string[]; beneficiaries: string[]; tradeOffs: string[] }> = [
-  {
-    category: 'planning',
-    interventions: ['approve', 'refuse', 'fast-track', 'call in', 'impose conditions on'],
-    subjects: ['a mixed-use housing scheme', 'warehouse expansion', 'town-centre flats', 'a care home', 'student housing', 'a drive-through', 'office conversion'],
-    mechanisms: ['through the planning committee', 'via a neighbourhood plan amendment', 'with a Section 106 package', 'under temporary permission'],
-    beneficiaries: ['first-time buyers', 'local traders', 'construction jobs', 'conservation groups'],
-    tradeOffs: ['higher traffic', 'loss of green space', 'pressure on school places', 'heritage objections'],
-  },
-  {
-    category: 'housing',
-    interventions: ['require', 'fund', 'pause', 'accelerate', 'cap rents on'],
-    subjects: ['social housing delivery', 'empty-home enforcement', 'temporary accommodation', 'shared-ownership stock', 'hostel provision'],
-    mechanisms: ['with a housing company partnership', 'through council borrowing', 'via registered providers', 'with landlord licensing'],
-    beneficiaries: ['waiting-list households', 'young renters', 'rough sleepers', 'key workers'],
-    tradeOffs: ['higher borrowing costs', 'landlord resistance', 'delayed private schemes', 'concentrated placements'],
-  },
-  {
-    category: 'transport',
-    interventions: ['introduce', 'expand', 'cut', 'reroute', 'subsidise'],
-    subjects: ['evening buses', 'controlled parking', 'cycle lanes', 'school streets', 'taxi ranks'],
-    mechanisms: ['through a traffic regulation order', 'with DfT grant match-funding', 'via a bus service improvement plan', 'in a 12-month trial'],
-    beneficiaries: ['commuters', 'shoppers', 'disabled passengers', 'cyclists'],
-    tradeOffs: ['business disruption', 'displacement parking', 'higher fares elsewhere', 'roadworks delays'],
-  },
-  {
-    category: 'services',
-    interventions: ['increase funding for', 'reduce hours at', 'outsource', 'restore', 'merge'],
-    subjects: ['libraries', 'youth clubs', 'bin collections', 'leisure centres', 'social care visits', 'community centres'],
-    mechanisms: ['from reserves', 'by reallocating the neighbourhood fund', 'with a private contractor', 'under a shared-service deal'],
-    beneficiaries: ['older residents', 'families', 'volunteers', 'shift workers'],
-    tradeOffs: ['staff reductions', 'longer wait times', 'uneven coverage', 'higher fees'],
-  },
-  {
-    category: 'environment',
-    interventions: ['ban', 'charge for', 'plant', 'protect', 'mandate'],
-    subjects: ['single-use plastics', 'idling vehicles', 'street trees', 'riverside habitats', 'solar panels on civic roofs'],
-    mechanisms: ['with a borough-wide by-law', 'through a clean-air zone', 'via a community grant scheme', 'with utility partnerships'],
-    beneficiaries: ['walkers', 'schools', 'wildlife groups', 'public-health advocates'],
-    tradeOffs: ['business compliance costs', 'delivery disruption', 'maintenance bills', 'rural access concerns'],
-  },
-  {
-    category: 'safety',
-    interventions: ['fund', 'deploy', 'consult on', 'restrict', 'review'],
-    subjects: ['CCTV coverage', 'warden patrols', 'night-time licensing', 'alley gating', 'ASB hotspot responses'],
-    mechanisms: ['with police partnership money', 'through the community safety fund', 'via a public space protection order', 'in a six-month pilot'],
-    beneficiaries: ['town-centre traders', 'night workers', 'residents near venues', 'young people'],
-    tradeOffs: ['civil liberties concerns', 'displacement of nuisance', 'overtime costs', 'licensing disputes'],
-  },
-  {
-    category: 'economy',
-    interventions: ['create', 'waive', 'invest in', 'market', 'support'],
-    subjects: ['a business rates relief scheme', 'market stall rents', 'high-street grants', 'skills apprenticeships', 'visitor events'],
-    mechanisms: ['from the growth fund', 'with Chamber of Commerce co-funding', 'through a BID levy', 'via a town deal package'],
-    beneficiaries: ['independent shops', 'start-ups', 'hospitality workers', 'town-centre landlords'],
-    tradeOffs: ['foregone tax income', 'subsidy dependency', 'uneven ward benefit', 'event disruption'],
-  },
-  {
-    category: 'budget',
-    interventions: ['raise', 'freeze', 'sell', 'ring-fence', 'borrow for'],
-    subjects: ['council tax', 'the former depot site', 'capital maintenance', 'the neighbourhood fund', 'digital transformation'],
-    mechanisms: ['in the medium-term financial plan', 'through asset disposal', 'with prudential borrowing', 'by cutting discretionary grants'],
-    beneficiaries: ['front-line services', 'council taxpayers', 'capital programmes', 'partner charities'],
-    tradeOffs: ['service reductions', 'higher household bills', 'one-off receipts', 'future debt servicing'],
-  },
-  {
-    category: 'governance',
-    interventions: ['reform', 'livestream', 'establish', 'audit', 'open'],
-    subjects: ['scrutiny committees', 'public question time', 'a citizens assembly', 'councillor allowances', 'procurement rules'],
-    mechanisms: ['via standing-order changes', 'with an independent review', 'through a transparency charter', 'under a new code of conduct'],
-    beneficiaries: ['engaged residents', 'opposition groups', 'whistleblowers', 'parish councils'],
-    tradeOffs: ['slower decisions', 'officer workload', 'political theatre', 'legal challenge risk'],
-  },
-]
-
-function pickFrom<T>(arr: T[], rng: () => number): T {
-  return arr[Math.floor(rng() * arr.length) % arr.length]
-}
-
-function motionLeanToValues(lean: Partial<PoliticalValues>): PoliticalValues {
-  return { change: lean.change ?? 0, growth: lean.growth ?? 0, services: lean.services ?? 0 }
-}
-
-function ideologyDistanceToMotion(values: PoliticalValues, lean: Partial<PoliticalValues>) {
-  return valueDistance(values, motionLeanToValues(lean), { change: 1, growth: 1, services: 1 })
-}
-
-function contestednessFromSignals(leanMagnitude: number, costSignal: number): CouncilMotion['contestedness'] {
-  const score = leanMagnitude / 60 + costSignal
-  if (score < 0.85) return 'broad'
-  if (score < 1.35) return 'contested'
-  return 'divisive'
-}
-
-function leanForArea(category: MotionCategory, intervention: string, rng: () => number): Partial<PoliticalValues> {
-  const base: Partial<PoliticalValues> = {}
-  const swing = () => Math.round((rng() * 36) - 10)
-  if (category === 'environment' || category === 'governance') base.change = 18 + swing()
-  if (category === 'planning' || category === 'economy' || category === 'housing') base.growth = 16 + swing()
-  if (category === 'services' || category === 'safety' || category === 'budget') base.services = 16 + swing()
-  if (intervention.includes('cut') || intervention.includes('sell') || intervention.includes('freeze') || intervention.includes('waive')) {
-    base.services = (base.services ?? 0) - 28
-    base.growth = (base.growth ?? 0) + 14
-  }
-  if (intervention.includes('raise') || intervention.includes('charge') || intervention.includes('ban') || intervention.includes('require')) {
-    base.change = (base.change ?? 0) + 16
-    base.growth = (base.growth ?? 0) - 14
-  }
-  if (rng() < 0.45) {
-    const secondary = VALUE_KEYS[Math.floor(rng() * VALUE_KEYS.length)]
-    base[secondary] = (base[secondary] ?? 0) + Math.round((rng() * 30) - 15)
-  }
-  return base
-}
-
-function blocImpactForCategory(category: MotionCategory, ideologyLean: Partial<PoliticalValues>, costSignal: number) {
-  const categoryBlocMap: Record<MotionCategory, string[]> = {
-    environment: ['river_walkers', 'college_corner'],
-    services: ['hill_street_households', 'old_town_loyalists'],
-    planning: ['workshop_crews', 'market_regulars'],
-    housing: ['hill_street_households', 'college_corner'],
-    transport: ['workshop_crews', 'river_walkers'],
-    safety: ['pondside_peacemakers', 'market_regulars'],
-    economy: ['market_regulars', 'workshop_crews'],
-    budget: ['old_town_loyalists', 'market_regulars'],
-    governance: ['pondside_peacemakers', 'college_corner'],
-  }
-  const magnitude = Math.abs(ideologyLean.change ?? 0) + Math.abs(ideologyLean.growth ?? 0) + Math.abs(ideologyLean.services ?? 0)
-  const sign = (ideologyLean.services ?? 0) >= 0 ? 1 : -1
-  return Object.fromEntries((categoryBlocMap[category] ?? ['pondside_peacemakers']).map((bloc, index) => [
-    bloc,
-    Math.round((magnitude * 0.08 + costSignal * 8) * (index === 0 ? sign : -sign * 0.6)),
-  ]))
-}
-
-function generateProceduralMotion(rng: () => number, recentHeadlines: string[] = [], preferredCategory?: MotionCategory): GeneratedMotion {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const area = preferredCategory
-      ? POLICY_AREAS.find((entry) => entry.category === preferredCategory) ?? pickFrom(POLICY_AREAS, rng)
-      : pickFrom(POLICY_AREAS, rng)
-    const intervention = pickFrom(area.interventions, rng)
-    const subject = pickFrom(area.subjects, rng)
-    const location = pickFrom(LOCATIONS, rng)
-    const mechanism = pickFrom(area.mechanisms, rng)
-    const beneficiary = pickFrom(area.beneficiaries, rng)
-    const tradeOff = pickFrom(area.tradeOffs, rng)
-    const costSignal = clamp(0.2 + rng() * 0.7 + (intervention.includes('raise') || intervention.includes('ban') || intervention.includes('sell') || intervention.includes('cut') ? 0.15 : 0), 0, 1)
-    const ideologyLean = leanForArea(area.category, intervention, rng)
-    const leanMagnitude = Math.abs(ideologyLean.change ?? 0) + Math.abs(ideologyLean.growth ?? 0) + Math.abs(ideologyLean.services ?? 0)
-    const contestedness = contestednessFromSignals(leanMagnitude, costSignal)
-    const headline = `${intervention[0].toUpperCase()}${intervention.slice(1)} ${subject} around ${location}`
-    if (recentHeadlines.some((entry) => entry.toLowerCase() === headline.toLowerCase())) continue
-    const description = `Council is asked to ${intervention} ${subject} ${mechanism}, aiming to help ${beneficiary}. Officers warn of ${tradeOff}.`
-    return {
-      headline,
-      description,
-      category: area.category,
-      kind: 'ordinary',
-      ideologyLean,
-      blocImpact: blocImpactForCategory(area.category, ideologyLean, costSignal),
-      costSignal,
-      contestedness,
-    }
-  }
-  return {
-    headline: 'Review neighbourhood service standards',
-    description: 'A routine review of service standards with limited fiscal impact.',
-    category: 'services',
-    kind: 'ordinary',
-    ideologyLean: { services: 6 },
-    blocImpact: { hill_street_households: 4 },
-    costSignal: 0.2,
-    contestedness: 'broad',
-  }
-}
-
-export function listMotionPromptOptions(category: MotionCategory) {
-  const area = POLICY_AREAS.find((entry) => entry.category === category) ?? POLICY_AREAS[0]
-  return {
-    interventions: area.interventions,
-    subjects: area.subjects,
-    locations: LOCATIONS,
-    mechanisms: area.mechanisms,
-    beneficiaries: area.beneficiaries,
-    tradeOffs: area.tradeOffs,
-  }
-}
-
-export function assembleMotionDraft(parts: {
-  category: MotionCategory
-  intervention: string
-  subject: string
-  location: string
-  seedSalt?: number
-}): CustomMotionInput & { contestedness: CouncilMotion['contestedness'] } {
-  const area = POLICY_AREAS.find((entry) => entry.category === parts.category) ?? POLICY_AREAS[0]
-  const rng = createRng((parts.seedSalt ?? 1) + parts.intervention.length * 17 + parts.subject.length * 31)
-  const mechanism = pickFrom(area.mechanisms, rng)
-  const beneficiary = pickFrom(area.beneficiaries, rng)
-  const tradeOff = pickFrom(area.tradeOffs, rng)
-  const ideologyLean = roundPoliticalValues(motionLeanToValues(leanForArea(parts.category, parts.intervention, rng)))
-  const costSignal = clamp(0.25 + (parts.intervention.includes('raise') || parts.intervention.includes('ban') || parts.intervention.includes('cut') ? 0.2 : 0.1), 0, 1)
-  const leanMagnitude = Math.abs(ideologyLean.change) + Math.abs(ideologyLean.growth) + Math.abs(ideologyLean.services)
-  return {
-    headline: `${parts.intervention[0].toUpperCase()}${parts.intervention.slice(1)} ${parts.subject} around ${parts.location}`.slice(0, 80),
-    description: `Council is asked to ${parts.intervention} ${parts.subject} ${mechanism}, aiming to help ${beneficiary}. Officers warn of ${tradeOff}.`.slice(0, 150),
-    category: parts.category,
-    ideologyLean,
-    kind: 'ordinary',
-    costSignal,
-    contestedness: contestednessFromSignals(leanMagnitude, costSignal),
-  }
-}
-
-export function suggestCustomMotion(seedSalt: number, recentHeadlines: string[] = [], category?: MotionCategory): CustomMotionInput & { contestedness: CouncilMotion['contestedness'] } {
-  const generated = generateProceduralMotion(createRng(seedSalt), recentHeadlines, category)
-  return {
-    headline: generated.headline.slice(0, 80),
-    description: generated.description.slice(0, 150),
-    category: generated.category,
-    ideologyLean: roundPoliticalValues(motionLeanToValues(generated.ideologyLean)),
-    kind: 'ordinary',
-    costSignal: generated.costSignal,
-    contestedness: generated.contestedness,
-  }
-}
-
-export function previewMotionContestedness(ideologyLean: PoliticalValues, costSignal = 0.4): CouncilMotion['contestedness'] {
-  const leanMagnitude = Math.abs(ideologyLean.change) + Math.abs(ideologyLean.growth) + Math.abs(ideologyLean.services)
-  return contestednessFromSignals(leanMagnitude, costSignal)
-}
-
-function supportBand(
-  values: PoliticalValues,
-  motion: Pick<CouncilMotion, 'ideologyLean' | 'category' | 'costSignal' | 'contestedness'> | { ideologyLean: Partial<PoliticalValues>; category: MotionCategory; costSignal?: number; contestedness?: CouncilMotion['contestedness'] },
-) {
-  const technicalAllowance = motion.contestedness === 'broad' ? 400 : 0
-  const costPenalty = (motion.costSignal ?? 0.4) * 4200
-  const distance = Math.max(0, ideologyDistanceToMotion(values, motion.ideologyLean) - technicalAllowance + costPenalty)
-  const supportCut = motion.contestedness === 'broad' ? 2200 : motion.contestedness === 'divisive' ? 900 : 1400
-  const opposeCut = motion.contestedness === 'broad' ? 7000 : motion.contestedness === 'divisive' ? 3200 : 4800
-  if (distance <= supportCut) return 'support' as const
-  if (distance >= opposeCut) return 'oppose' as const
-  return 'mixed' as const
-}
-
-function governingPartyIds(world: World): Set<string> {
-  const gov = world.government
-  if (!gov || gov.status !== 'formed') return new Set()
-  return new Set([gov.leadPartyId, ...gov.partnerPartyIds])
-}
-
-function createCouncilSession(week: number, motions: CouncilMotion[], budgetSession: boolean) {
-  return {
-    week,
-    motions,
-    activeMotionIndex: 0,
-    phase: 'voting' as const,
-    resolved: false,
-    budgetSession,
-  }
-}
-
-function buildPartyWhips(world: World, motion: Pick<CouncilMotion, 'ideologyLean' | 'category' | 'costSignal' | 'contestedness' | 'kind'>, pm: PoliticianModeState) {
-  const directions: Record<string, 'aye' | 'nay' | 'free'> = {}
-  const governingIds = governingPartyIds(world)
-  for (const party of world.parties) {
-    const band = supportBand(party.values, motion)
-    let direction: 'aye' | 'nay' | 'free' = band === 'support' ? 'aye' : band === 'oppose' ? 'nay' : 'free'
-    if (motion.contestedness === 'divisive' && band === 'support' && (motion.costSignal ?? 0) > 0.7 && rngLike(world, party.id) > 0.55) {
-      direction = 'free'
-    }
-    if (governingIds.has(party.id) && motion.kind === 'budget') direction = 'aye'
-    if (world.government?.kind === 'minority' && !governingIds.has(party.id) && band === 'mixed') direction = 'free'
-    directions[party.id] = direction
-  }
-  const playerPartyNPCs = pm.councillors.filter((councillor) => councillor.partyId === pm.politician.partyId)
-  if (playerPartyNPCs.length === 0) directions[pm.politician.partyId] = 'free'
-  const whipIssuer = pm.politician.careerRank === 'party-leader'
-    ? { id: pm.politician.id, name: pm.politician.name }
-    : playerPartyNPCs.length > 0
-      ? playerPartyNPCs.reduce((a, b) => b.influence > a.influence ? b : a)
-      : undefined
-  return { directions, whipIssuer }
-}
-
-function rngLike(world: World, salt: string) {
-  const key = `${world.seed}-${world.week}-${salt}`
-  const roll = [...key].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0)
-  return (Math.abs(roll) % 10000) / 10000
-}
-
-function motionFromInput(input: CustomMotionInput): GeneratedMotion {
-  const costSignal = input.costSignal ?? clamp((Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)) / 120, 0.2, 1)
-  const leanMagnitude = Math.abs(input.ideologyLean.change) + Math.abs(input.ideologyLean.growth) + Math.abs(input.ideologyLean.services)
-  return {
-    headline: input.headline || 'Untitled Motion',
-    description: input.description || '',
-    category: input.category,
-    kind: input.kind ?? (input.targetMotionId ? 'repeal' : 'ordinary'),
-    ideologyLean: input.ideologyLean,
-    blocImpact: blocImpactForCategory(input.category, input.ideologyLean, costSignal),
-    costSignal,
-    contestedness: contestednessFromSignals(leanMagnitude, costSignal),
-    targetMotionId: input.targetMotionId,
-    budgetProposal: input.budgetProposal,
-  }
-}
-
-function buildMotionRecord(world: World, pm: PoliticianModeState, generated: GeneratedMotion, proposer: { id: string; name: string; partyId?: string }, id: string, playerVote?: 'aye' | 'nay' | 'abstain'): CouncilMotion {
-  const { directions, whipIssuer } = buildPartyWhips(world, generated, pm)
-  const proposerPartyId = proposer.partyId
-    ?? (proposer.id === pm.politician.id
-      ? pm.politician.partyId
-      : pm.councillors.find((councillor) => councillor.id === proposer.id)?.partyId ?? pm.politician.partyId)
-  return {
-    ...generated,
-    id,
-    proposerId: proposer.id,
-    proposerName: proposer.name,
-    proposerPartyId,
-    effects: [],
-    status: 'voting',
-    votes: [],
-    partyWhipDirection: directions,
-    playerVote,
-    whipIssuerId: whipIssuer?.id,
-    whipIssuerName: whipIssuer?.name,
-  }
-}
 
 export function playerPartyIsGoverning(world: World) {
   return isPlayerPartyGovernmentLead(world)
@@ -5413,146 +5131,18 @@ export function electedSeatCounts(world: World): Record<string, number> {
   return counts
 }
 
-export function generateCouncilSession(world: World): World {
-  if (!world.politicianMode) return world
-  const pm = world.politicianMode
-  if (!pm.politician.isIncumbent) return world
 
-  const budgetDue = world.week >= pm.nextBudgetWeek
-  const ordinaryDue = world.week >= pm.nextSessionWeek
-  if (budgetDue && ordinaryDue) {
-    return generateCouncilSession({
-      ...world,
-      politicianMode: { ...pm, nextBudgetWeek: world.week + 1 },
-    })
-  }
-
-  const isBudgetSession = budgetDue && !ordinaryDue
-  const rng = createRng(world.seed + world.week * 3331 + (isBudgetSession ? 17 : 0))
-
-  if (isBudgetSession) {
-    const amendment = pm.queuedMotion?.kind === 'budget' && pm.queuedMotion.budgetProposal ? pm.queuedMotion : undefined
-    const proposed = normalizeBudget(amendment?.budgetProposal ?? pm.proposedBudget ?? world.budget)
-    const lean = budgetIdeologyLean(proposed)
-    const isAmendment = Boolean(amendment)
-    const generated: GeneratedMotion = {
-      headline: amendment ? amendment.headline : 'Adopt the council budget',
-      description: amendment
-        ? amendment.description
-        : 'Approve the governing administration\'s balanced service allocations for the coming year.',
-      category: 'budget',
-      kind: 'budget',
-      ideologyLean: lean,
-      blocImpact: Object.fromEntries(proposed.categories.flatMap((category) => category.blocs.map((bloc) => [bloc, Math.round((category.funding - 50) / 5)]))),
-      costSignal: isAmendment ? 0.55 : 0.35,
-      contestedness: isAmendment ? 'contested' : 'broad',
-      budgetProposal: proposed,
-    }
-    const proposer = amendment || playerPartyIsGoverning(world)
-      ? pm.politician
-      : [...pm.councillors].sort((a, b) => b.influence - a.influence)[0] ?? pm.politician
-    const motion = buildMotionRecord(world, pm, generated, proposer, `budget_${world.week}`, proposer.id === pm.politician.id ? 'aye' : undefined)
-    return {
-      ...world,
-      politicianMode: {
-        ...pm,
-        queuedMotion: amendment ? undefined : pm.queuedMotion,
-        proposedBudget: amendment ? proposed : pm.proposedBudget,
-        currentSession: createCouncilSession(world.week, [motion], true),
-      },
-    }
-  }
-
-  const queuedMotion = pm.queuedMotion
-  const recent = pm.legislationHistory.map((motion) => motion.headline)
-  const generated = queuedMotion ? motionFromInput(queuedMotion) : generateProceduralMotion(rng, recent)
-  const { directions } = buildPartyWhips(world, generated, pm)
-  const ayePartyIds = new Set(Object.entries(directions).filter(([, d]) => d === 'aye').map(([id]) => id))
-  const ayeCouncillors = pm.councillors.filter((c) => ayePartyIds.has(c.partyId))
-  let proposer: { id: string; name: string }
-  if (queuedMotion) {
-    proposer = pm.politician
-  } else if (ayeCouncillors.length > 0) {
-    proposer = pickFrom(ayeCouncillors, rng)
-  } else {
-    proposer = [...pm.councillors].sort((a, b) => ideologyDistanceToMotion(a.personalValues, generated.ideologyLean) - ideologyDistanceToMotion(b.personalValues, generated.ideologyLean))[0] ?? pm.politician
-  }
-  const motion = buildMotionRecord(world, pm, generated, proposer, `motion_${world.week}_0`, queuedMotion ? 'aye' : undefined)
-  if (!ayePartyIds.has(proposer.id === pm.politician.id ? pm.politician.partyId : (pm.councillors.find((c) => c.id === proposer.id)?.partyId ?? '')) && proposer.id !== pm.politician.id) {
-    const partyId = pm.councillors.find((c) => c.id === proposer.id)?.partyId
-    if (partyId) motion.partyWhipDirection[partyId] = 'aye'
-  }
-
+export function focusCouncilMotion(world: World, index: number): World {
+  if (!world.politicianMode?.currentSession) return world
+  const session = world.politicianMode.currentSession
+  if (index < 0 || index >= session.motions.length) return world
   return {
     ...world,
     politicianMode: {
-      ...pm,
-      queuedMotion: undefined,
-      currentSession: createCouncilSession(world.week, [motion], false),
+      ...world.politicianMode,
+      currentSession: { ...session, activeMotionIndex: index },
     },
   }
-}
-
-export type PredictedStance = 'aye' | 'lean_aye' | 'undecided' | 'lean_nay' | 'nay'
-
-export function predictCouncillorVote(councillor: Councillor, motion: CouncilMotion, world: World): PredictedStance {
-  if (councillor.id === motion.proposerId) return 'aye'
-  const committedVote = motion.votes.find((vote) => vote.councillorId === councillor.id)
-  if (committedVote) return committedVote.vote === 'aye' ? 'aye' : committedVote.vote === 'nay' ? 'nay' : 'undecided'
-  const whip = motion.partyWhipDirection[councillor.partyId] ?? 'free'
-  const personalLeans = supportBand(councillor.personalValues, motion)
-  const minorityPressure = world.government?.kind === 'minority' ? 0.1 : 0
-
-  if (whip === 'aye' && personalLeans === 'support') return 'aye'
-  if (whip === 'nay' && personalLeans === 'oppose') return 'nay'
-  if (whip === 'aye' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.35 ? 'lean_aye' : 'aye'
-  if (whip === 'nay' && personalLeans === 'mixed') return councillor.rebellionTendency > 0.35 ? 'lean_nay' : 'nay'
-  if (whip === 'aye' && personalLeans === 'oppose') return councillor.rebellionTendency + minorityPressure > 0.30 ? 'lean_nay' : 'lean_aye'
-  if (whip === 'nay' && personalLeans === 'support') return councillor.rebellionTendency + minorityPressure > 0.30 ? 'lean_aye' : 'lean_nay'
-  if (whip === 'free') {
-    if (personalLeans === 'support') return motion.contestedness === 'broad' ? 'aye' : 'lean_aye'
-    if (personalLeans === 'oppose') return motion.contestedness === 'broad' ? 'nay' : 'lean_nay'
-    return 'undecided'
-  }
-  return 'undecided'
-}
-
-export function queueCustomMotion(world: World, input: CustomMotionInput): World {
-  const pm = world.politicianMode
-  const cost = input.kind === 'budget' ? BUDGET_AMENDMENT_INFLUENCE_COST : MOTION_PROPOSAL_INFLUENCE_COST
-  if (!pm || pm.queuedMotion || pm.politician.influence < cost) return world
-  return {
-    ...world,
-    newsFeed: [`Week ${world.week}: You queued "${input.headline}" for the next council session (−${cost} influence).`, ...world.newsFeed].slice(0, 30),
-    politicianMode: {
-      ...pm,
-      politician: {
-        ...pm.politician,
-        influence: pm.politician.influence - cost,
-        careerHistory: [...pm.politician.careerHistory, { week: world.week, description: `Queued motion: ${input.headline}`, tier: pm.politician.careerTier, rank: pm.politician.careerRank }],
-      },
-      queuedMotion: input,
-    },
-  }
-}
-
-export function queueRepealMotion(world: World, targetMotionId: string, rationale: string): World {
-  const pm = world.politicianMode
-  const target = pm?.legislationHistory.find((motion) => motion.id === targetMotionId && motion.status === 'passed')
-  if (!pm || !target || !pm.politician.isIncumbent) return world
-  return queueCustomMotion(world, {
-    headline: `Repeal: ${target.headline}`,
-    description: rationale || `Repeal the previously passed motion "${target.headline}".`,
-    category: target.category,
-    ideologyLean: {
-      change: -(target.ideologyLean.change ?? 0),
-      growth: -(target.ideologyLean.growth ?? 0),
-      services: -(target.ideologyLean.services ?? 0),
-    },
-    kind: 'repeal',
-    targetMotionId,
-    costSignal: Math.min(1, (target.costSignal ?? 0.5) + 0.2),
-  })
 }
 
 export function castPlayerVote(world: World, motionId: string, vote: 'aye' | 'nay' | 'abstain'): World {
@@ -5560,212 +5150,12 @@ export function castPlayerVote(world: World, motionId: string, vote: 'aye' | 'na
   const pm = world.politicianMode
   const session = pm.currentSession!
   const motions = session.motions.map((m) => m.id !== motionId ? m : { ...m, playerVote: vote })
-  return { ...world, politicianMode: { ...pm, currentSession: { ...session, motions } } }
+  const current = motions.findIndex((motion) => motion.id === motionId)
+  const nextUnvoted = motions.findIndex((motion, index) => index > current && motion.playerVote == null)
+  const activeMotionIndex = nextUnvoted >= 0 ? nextUnvoted : session.activeMotionIndex
+  return { ...world, politicianMode: { ...pm, currentSession: { ...session, motions, activeMotionIndex } } }
 }
 
-export function resolveCouncilSession(world: World): World {
-  if (!world.politicianMode?.currentSession) return world
-  const pm = world.politicianMode
-  const session = pm.currentSession!
-  const rng = createRng(world.seed + world.week * 4441)
-  let pol = pm.politician
-  let nextBudget = world.budget
-  let proposedBudget = pm.proposedBudget
-  let nextBudgetWeek = pm.nextBudgetWeek
-  let budgetHistory = pm.budgetHistory
-
-  const resolvedMotions = session.motions.map((motion) => {
-    const votes: CouncilMotionVote[] = []
-    for (const cllr of pm.councillors) {
-      if (cllr.id === motion.proposerId) {
-        votes.push({ councillorId: cllr.id, councillorName: cllr.name, partyId: cllr.partyId, vote: 'aye' })
-        continue
-      }
-      const committedVote = motion.votes.find((vote) => vote.councillorId === cllr.id)
-      if (committedVote) {
-        votes.push(committedVote)
-        continue
-      }
-      const whip = motion.partyWhipDirection[cllr.partyId] ?? 'free'
-      let baseVote: 'aye' | 'nay' | 'abstain'
-      if (whip === 'free') {
-        const personalBand = supportBand(cllr.personalValues, motion)
-        if (personalBand === 'support') baseVote = motion.contestedness === 'broad' ? (rng() < 0.82 ? 'aye' : 'abstain') : rng() < 0.62 ? 'aye' : (rng() < 0.55 ? 'abstain' : 'nay')
-        else if (personalBand === 'oppose') baseVote = motion.contestedness === 'broad' ? (rng() < 0.82 ? 'nay' : 'abstain') : rng() < 0.68 ? 'nay' : (rng() < 0.55 ? 'abstain' : 'aye')
-        else baseVote = rng() < 0.42 ? 'abstain' : (rng() < 0.42 ? 'aye' : 'nay')
-      } else {
-        baseVote = whip
-      }
-      const governingIds = governingPartyIds(world)
-      const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
-      const sameParty = cllr.partyId === pol.partyId
-      const playerIsLeader = pol.careerRank === 'party-leader'
-      if (sameParty && playerIsLeader && motion.playerVote) baseVote = motion.playerVote
-      const rebellionChance = (
-        cllr.rebellionTendency
-        + (motion.contestedness === 'divisive' ? 0.10 : motion.contestedness === 'contested' ? 0.04 : 0.01)
-        + (world.government?.kind === 'minority' ? 0.05 : 0)
-        + (motion.costSignal * 0.05)
-      ) * (governingBudgetWhip ? 0.45 : 1) * (sameParty ? 0.35 : 1)
-      if (rng() < rebellionChance && whip !== 'free') baseVote = whip === 'aye' ? 'nay' : 'aye'
-      if (!sameParty || !playerIsLeader) {
-        const relationship = pol.relationships.find((r) => r.targetId === cllr.id)
-        const followThreshold = sameParty ? 30 : 40
-        const followChance = sameParty ? 0.40 : 0.18
-        if (relationship && relationship.strength > followThreshold && rng() < followChance) baseVote = motion.playerVote ?? baseVote
-      }
-      votes.push({ councillorId: cllr.id, councillorName: cllr.name, partyId: cllr.partyId, vote: baseVote })
-    }
-    if (motion.playerVote) votes.push({ councillorId: pol.id, councillorName: pol.name, partyId: pol.partyId, vote: motion.playerVote })
-    const ayes = votes.filter((v) => v.vote === 'aye').length
-    const nays = votes.filter((v) => v.vote === 'nay').length
-    const passed = ayes > nays
-    return { ...motion, votes, status: (passed ? 'passed' : 'failed') as CouncilMotion['status'] }
-  })
-
-  let motionsPassed = pol.motionsPassed
-  let motionsProposed = pol.motionsProposed
-  let loyaltyChange = 0
-  let rebellionCount = 0
-  let reputationChange = 0
-  let influenceChange = 0
-  let legislationHistory = [...pm.legislationHistory]
-  let imposedCompromiseBudget = false
-
-  for (const m of resolvedMotions) {
-    if (m.proposerId === pol.id) motionsProposed++
-    if (m.proposerId === pol.id && m.status === 'passed') motionsPassed++
-    if (m.playerVote) {
-      const whip = m.partyWhipDirection[pol.partyId]
-      const rebelled = whip !== 'free' && m.playerVote !== whip
-      if (rebelled) {
-        rebellionCount++
-        loyaltyChange -= (12 - (pol.traits.some((t) => t.id === 'maverick') ? 4 : 0))
-        reputationChange += 4
-        influenceChange += 2
-      } else if (whip !== 'free') loyaltyChange += 2
-      if (m.playerVote === 'aye' && m.status === 'passed') influenceChange += 1
-    }
-    if (m.status === 'passed' && m.kind === 'budget' && m.budgetProposal) {
-      nextBudget = normalizeBudget(m.budgetProposal)
-      proposedBudget = undefined
-      nextBudgetWeek = world.week + world.electionCycleWeeks
-      budgetHistory = [...budgetHistory, { week: world.week, passed: true }]
-    } else if (m.kind === 'budget' && m.status === 'failed') {
-      proposedBudget = undefined
-      budgetHistory = [...budgetHistory, { week: world.week, passed: false }]
-      if (consecutiveBudgetFailures(budgetHistory) >= 3) {
-        nextBudget = normalizeBudget(world.budget)
-        nextBudgetWeek = world.week + world.electionCycleWeeks
-        imposedCompromiseBudget = true
-        budgetHistory = [...budgetHistory, { week: world.week, passed: true }]
-      } else {
-        nextBudgetWeek = world.week + pm.councilSessionInterval
-      }
-    }
-    if (m.status === 'passed' && m.kind === 'repeal' && m.targetMotionId) {
-      legislationHistory = legislationHistory.map((entry) => entry.id === m.targetMotionId
-        ? { ...entry, status: 'repealed', repealedById: m.id }
-        : entry)
-    }
-  }
-
-  if (pol.traits.some((t) => t.id === 'policy-wonk')) influenceChange += 2
-  pol = {
-    ...pol,
-    motionsPassed,
-    motionsProposed,
-    rebellions: pol.rebellions + rebellionCount,
-    partyLoyalty: clamp(pol.partyLoyalty + loyaltyChange, 0, 100),
-    reputation: clamp(pol.reputation + reputationChange, 0, 100),
-    influence: clamp(pol.influence + influenceChange, 0, 100),
-  }
-
-  const networkerBonus = pol.traits.some((t) => t.id === 'networker') ? 2 : 0
-  const updatedRelationships = pol.relationships.map((rel) => {
-    let strengthDelta = networkerBonus
-    const history = [...rel.history]
-    const sameParty = rel.partyId === pol.partyId
-    for (const m of resolvedMotions) {
-      if (!m.playerVote) continue
-      const cllrVote = m.votes.find((v) => v.councillorId === rel.targetId)
-      if (!cllrVote) continue
-      const isProposer = m.proposerId === rel.targetId
-      if (cllrVote.vote === m.playerVote) {
-        const agreeBonus = isProposer && m.playerVote === 'aye' ? (m.kind === 'repeal' ? 12 : 10) : 5
-        strengthDelta += sameParty ? agreeBonus + 2 : agreeBonus
-        if (history.length < 5) history.push(`${isProposer && m.playerVote === 'aye' ? 'Supported their motion' : 'Agreed on'}: ${m.headline}`)
-      } else if (m.playerVote !== 'abstain' && cllrVote.vote !== 'abstain') {
-        strengthDelta -= isProposer ? (m.kind === 'repeal' ? 10 : 8) : 4
-        if (history.length < 5) history.push(`${isProposer ? 'Opposed their motion' : 'Disagreed on'}: ${m.headline}`)
-      }
-    }
-    const newStrength = clamp(rel.strength + strengthDelta, -100, 100)
-    const newType: Relationship['type'] = newStrength > 40 ? 'ally' : newStrength < -30 ? 'rival' : rel.type === 'mentor' ? 'mentor' : 'neutral'
-    return { ...rel, strength: newStrength, type: newType, history: history.slice(-8) }
-  })
-  pol = { ...pol, relationships: updatedRelationships }
-
-  const passedCount = resolvedMotions.filter((m) => m.status === 'passed').length
-  const failedCount = resolvedMotions.filter((m) => m.status === 'failed').length
-  let updatedTiles = world.tiles
-  const passedMotions = resolvedMotions.filter((m) => m.status === 'passed')
-  if (passedMotions.length > 0 || nextBudget !== world.budget) {
-    updatedTiles = world.tiles.map((tile) => {
-      let approvalBoost = 0
-      for (const motion of passedMotions) {
-        for (const [blocId, impact] of Object.entries(motion.blocImpact)) {
-          const blocWeight = tile.blocMix[blocId] ?? 0
-          if (blocWeight > 0.1) approvalBoost += (impact / 100) * blocWeight * 0.02
-        }
-      }
-      for (const category of nextBudget.categories) {
-        const under = category.funding < 35
-        const over = category.funding > 65
-        if (!under && !over) continue
-        const weight = category.blocs.reduce((sum, bloc) => sum + (tile.blocMix[bloc] ?? 0), 0)
-        if (weight > 0.08) approvalBoost += (over ? 0.01 : -0.01) * weight
-      }
-      if (approvalBoost === 0) return tile
-      const existingBoost = tile.campaignBoosts?.[world.playerPartyId] ?? 0
-      return { ...tile, campaignBoosts: { ...tile.campaignBoosts, [world.playerPartyId]: clamp(existingBoost + approvalBoost, 0, 0.4) } }
-    })
-  }
-
-  const councilNews = resolvedMotions.map((m) => {
-    if (m.kind === 'budget' && m.status === 'failed' && imposedCompromiseBudget) {
-      return `Week ${world.week}: After three failed votes, officers impose a compromise budget.`
-    }
-    return `Week ${world.week}: Council ${m.status === 'passed' ? 'passes' : 'rejects'} "${m.headline}".`
-  })
-  const nextOrdinaryWeek = world.week + pm.councilSessionInterval
-  return {
-    ...world,
-    budget: nextBudget,
-    tiles: updatedTiles,
-    newsFeed: [...councilNews, ...world.newsFeed].slice(0, 30),
-    politicianMode: {
-      ...pm,
-      politician: pol,
-      proposedBudget,
-      nextBudgetWeek,
-      budgetHistory,
-      currentSession: { ...session, motions: resolvedMotions, resolved: true, phase: 'resolved' },
-      sessionHistory: [...pm.sessionHistory, { week: world.week, motionsPassed: passedCount, motionsFailed: failedCount }],
-      legislationHistory: [...legislationHistory, ...resolvedMotions].slice(-40),
-      nextSessionWeek: nextOrdinaryWeek,
-    },
-  }
-}
-
-export function shouldTriggerCouncilSession(world: World): boolean {
-  if (!world.politicianMode) return false
-  if (!world.politicianMode.politician.isIncumbent) return false
-  if (world.politicianMode.currentSession && !world.politicianMode.currentSession.resolved) return false
-  if (world.electionNightActive) return false
-  const pm = world.politicianMode
-  return world.week >= pm.nextSessionWeek || world.week >= pm.nextBudgetWeek
-}
 
 function formedPlayerGovernment(world: World, kind: GovernmentState['kind'], partnerPartyIds: string[] = []): GovernmentState {
   return {

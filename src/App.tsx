@@ -40,7 +40,9 @@ import {
   queueRepealMotion,
   estimateTilePreference,
   formNpcOpposition,
+  focusCouncilMotion,
   generateCouncilSession,
+  ordinarySessionKind,
   generateGovernanceDecisions,
   generateWorld,
   governingStatusLabel,
@@ -680,6 +682,7 @@ function App() {
                     const sessionLive = seated && pm.currentSession && !pm.currentSession.resolved
                     const weeksToOrdinary = Math.max(0, pm.nextSessionWeek - world.week)
                     const weeksToBudget = Math.max(0, pm.nextBudgetWeek - world.week)
+                    const nextOrdinary = ordinarySessionKind(pm)
                     const budgetSoon = weeksToBudget <= 4 || (sessionLive && pm.currentSession?.budgetSession)
                     const governing = isPlayerPartyGovernmentLead(world)
                     return (
@@ -698,17 +701,21 @@ function App() {
                               <p className="council-gov-status">{governingStatusLabel(world)}</p>
                               <h3>
                                 {sessionLive
-                                  ? (pm.currentSession?.budgetSession ? 'Budget session is ready' : 'A council session is ready')
+                                  ? (pm.currentSession?.budgetSession || pm.currentSession?.kind === 'budget'
+                                    ? 'Budget session is ready'
+                                    : pm.currentSession?.kind === 'member'
+                                      ? 'Member session is ready'
+                                      : 'Government session is ready')
                                   : weeksToOrdinary <= weeksToBudget
-                                    ? `Next ordinary session: week ${pm.nextSessionWeek}`
+                                    ? `Next ${nextOrdinary} session: week ${pm.nextSessionWeek}`
                                     : `Next budget session: week ${pm.nextBudgetWeek}`}
                               </h3>
                               <p>
                                 {sessionLive
-                                  ? (pm.currentSession?.budgetSession
+                                  ? (pm.currentSession?.budgetSession || pm.currentSession?.kind === 'budget'
                                     ? 'Review the budget proposal, lobby colleagues, and cast your vote.'
                                     : 'Review the motion, lobby colleagues, and cast your vote.')
-                                  : `Next ordinary: ${weeksToOrdinary} week${weeksToOrdinary === 1 ? '' : 's'} · next budget: ${weeksToBudget} week${weeksToBudget === 1 ? '' : 's'}.`}
+                                  : `Next ${nextOrdinary}: ${weeksToOrdinary} week${weeksToOrdinary === 1 ? '' : 's'} · next budget: ${weeksToBudget} week${weeksToBudget === 1 ? '' : 's'}.`}
                               </p>
                               <p className="council-influence-note">Influence: {pm.politician.influence} · proposing costs {MOTION_PROPOSAL_INFLUENCE_COST}</p>
                               {sessionLive && <button type="button" className="ink-button" onClick={() => setShowCouncilChamber(true)}>Open Council Chamber</button>}
@@ -738,12 +745,19 @@ function App() {
                               {(!pm.currentSession || pm.currentSession.resolved) && !pm.queuedMotion && pm.politician.influence < MOTION_PROPOSAL_INFLUENCE_COST && (
                                 <p className="council-influence-note">Need {MOTION_PROPOSAL_INFLUENCE_COST} influence to queue a motion (you have {pm.politician.influence}).</p>
                               )}
-                              {pm.queuedMotion && <p className="council-queued-motion">Queued for next session: <strong>{pm.queuedMotion.headline}</strong> · remaining influence {pm.politician.influence}</p>}
+                              {pm.queuedMotion && (
+                                <p className="council-queued-motion">
+                                  Queued for next {pm.queuedMotion.kind === 'budget' ? 'budget' : 'member'} session: <strong>{pm.queuedMotion.headline}</strong>
+                                  {pm.queuedMotion.kind !== 'budget' && nextOrdinary === 'government' ? ' (after government business)' : ''}
+                                  {' '}· remaining influence {pm.politician.influence}
+                                </p>
+                              )}
                             </>
                           )}
                         </section>
                         <section className={`panel${seated ? '' : ' is-locked'}`}>
                           <CouncilLegislationRegister
+                            world={world}
                             motions={pm.legislationHistory}
                             canRepeal={seated && !pm.queuedMotion && pm.politician.influence >= MOTION_PROPOSAL_INFLUENCE_COST && (!pm.currentSession || pm.currentSession.resolved)}
                             onRepeal={(motionId) => {
@@ -875,6 +889,9 @@ function App() {
           world={world}
           onVote={(motionId, vote) => {
             setWorld(castPlayerVote(world, motionId, vote))
+          }}
+          onSelectMotion={(index) => {
+            setWorld(focusCouncilMotion(world, index))
           }}
           onResolve={() => {
             if (world.politicianMode?.currentSession?.resolved) {

@@ -85,9 +85,15 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
             {group.actions.map((action) => {
               const canAfford = actionAvailable
               const isAuto = weekly === action.type
-              const isPolicyAction = action.type === 'shift_personal_policy'
+              const isPersonalPolicy = action.type === 'shift_personal_policy'
+              const isPartyPolicy = action.type === 'shift_party_policy'
+              const isPolicyAction = isPersonalPolicy || isPartyPolicy
               const isColleagueAction = action.type === 'help_colleague'
-              const canSetPolicy = canAfford && world.week >= pol.personalPolicyNextWeek
+              const partyValues = world.parties.find((party) => party.id === pol.partyId)?.values ?? pol.personalValues
+              const pickerValues = isPartyPolicy ? partyValues : pol.personalValues
+              const canSetPolicy = isPartyPolicy
+                ? canAfford && !world.policyShiftUsedThisCycle
+                : canAfford && world.week >= pol.personalPolicyNextWeek
               const canFireColleague = canAfford && Boolean(effectiveColleagueWardId)
               const showPicker = isColleagueAction && (showColleaguePicker || !effectiveColleagueWardId)
               return (
@@ -152,9 +158,9 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
                       <label>
                         Axis
                         <select value={policyAxis} onChange={(event) => setPolicyAxis(event.target.value as PoliticalValueKey)} disabled={!canSetPolicy}>
-                          <option value="change">Reform · {formatAxis(pol.personalValues.change)}</option>
-                          <option value="growth">Business · {formatAxis(pol.personalValues.growth)}</option>
-                          <option value="services">Services · {formatAxis(pol.personalValues.services)}</option>
+                          <option value="change">Reform · {formatAxis(pickerValues.change)}</option>
+                          <option value="growth">Business · {formatAxis(pickerValues.growth)}</option>
+                          <option value="services">Services · {formatAxis(pickerValues.services)}</option>
                         </select>
                       </label>
                       <label>

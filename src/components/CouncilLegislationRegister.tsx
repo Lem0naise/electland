@@ -1,9 +1,11 @@
-import type { CouncilMotion } from '../types/sim'
+import type { CouncilMotion, World } from '../types/sim'
+import { formatStakesLine, describeMotionStakes } from '../sim/council/presentation'
 
-export function CouncilLegislationRegister({ motions, canRepeal, onRepeal }: {
+export function CouncilLegislationRegister({ motions, canRepeal, onRepeal, world }: {
   motions: CouncilMotion[]
   canRepeal?: boolean
   onRepeal?: (motionId: string) => void
+  world?: World
 }) {
   const active = motions.filter((motion) => motion.status === 'passed').reverse()
   const repealed = motions.filter((motion) => motion.status === 'repealed').reverse()
@@ -24,7 +26,7 @@ export function CouncilLegislationRegister({ motions, canRepeal, onRepeal }: {
             <div key={motion.id} className="active-legislation-row">
               <span className="active-legislation-category">{motion.category}</span>
               <strong>{motion.headline}</strong>
-              <small>Passed {tally(motion)}</small>
+              <small>Passed {tally(motion)}{world ? ` · ${formatStakesLine(describeMotionStakes(world, motion))}` : ''}</small>
               {canRepeal && onRepeal && motion.kind !== 'budget' && (
                 <button type="button" className="legislation-repeal-btn" onClick={() => onRepeal(motion.id)}>
                   Repeal

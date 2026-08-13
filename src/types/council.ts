@@ -83,6 +83,9 @@ export interface CouncilMotion {
   budgetProposal?: Budget
 }
 
+export type CouncilSessionKind = 'government' | 'member' | 'budget'
+export type OrdinarySessionKind = 'government' | 'member'
+
 export interface CouncilSession {
   week: number
   motions: CouncilMotion[]
@@ -90,6 +93,7 @@ export interface CouncilSession {
   phase: 'agenda' | 'lobbying' | 'voting' | 'resolved'
   resolved: boolean
   budgetSession?: boolean
+  kind?: CouncilSessionKind
 }
 
 export interface Councillor {
@@ -113,6 +117,8 @@ export interface CustomMotionInput {
   targetMotionId?: string
   costSignal?: number
   budgetProposal?: Budget
+  effects?: PolicyEffect[]
+  templateId?: string
 }
 
 export interface PoliticianModeState {
@@ -122,6 +128,7 @@ export interface PoliticianModeState {
   sessionHistory: Array<{ week: number; motionsPassed: number; motionsFailed: number }>
   nextSessionWeek: number
   councilSessionInterval: number
+  nextOrdinaryKind?: OrdinarySessionKind
   nextBudgetWeek: number
   proposedBudget?: Budget
   /** @deprecated Use budgetEvents */

@@ -1,5 +1,12 @@
 import type { World } from '../../types/world'
-import type { CouncilMotion, CouncilMotionVote, CouncilSession } from '../../types/council'
+import type {
+  CouncilMotion,
+  CouncilMotionVote,
+  CouncilSession,
+  CouncilSessionKind,
+  OrdinarySessionKind,
+  PoliticianModeState,
+} from '../../types/council'
 import type { Relationship } from '../../types/politics'
 import { createRng } from '../core/random'
 import { clamp } from '../core/math'
@@ -107,19 +114,35 @@ function buildBudgetMotion(world: World, motionId: string): CouncilMotion {
   return { ...draft, partyWhipDirection: whips, whipIssuerId: whipIssuer?.id, whipIssuerName: whipIssuer?.name }
 }
 
-function buildMemberMotion(world: World, motionId: string): CouncilMotion {
+function queuedMemberMotion(pm: PoliticianModeState) {
+  if (!pm.queuedMotion || pm.queuedMotion.kind === 'budget') return undefined
+  return pm.queuedMotion
+}
+
+function pickMemberProposerParty(world: World): string {
   const pm = world.politicianMode!
-  if (pm.queuedMotion) {
-    const motion = customMotionToCouncilMotion(world, pm.queuedMotion, motionId)
-    if (pm.queuedMotion.kind === 'repeal' && pm.queuedMotion.targetMotionId) {
-      const enactment = getActivePolicies(world).find((policy) => policy.originatingMotionId === pm.queuedMotion!.targetMotionId)
+  const govLeadId = getGovernmentLeadPartyId(world)
+  const rng = createRng(world.seed + world.week * 3331 + 91)
+  const others = pm.councillors.filter((entry) => entry.partyId !== govLeadId)
+  const pool = others.length > 0 ? others : pm.councillors
+  if (pool.length === 0) return pm.politician.partyId
+  return pool[Math.floor(rng() * pool.length)].partyId
+}
+
+function buildMemberMotion(world: World, motionId: string, extraRecent: string[] = []): CouncilMotion {
+  const pm = world.politicianMode!
+  const queued = queuedMemberMotion(pm)
+  if (queued) {
+    const motion = customMotionToCouncilMotion(world, queued, motionId)
+    if (queued.kind === 'repeal' && queued.targetMotionId) {
+      const enactment = getActivePolicies(world).find((policy) => policy.originatingMotionId === queued.targetMotionId)
       if (enactment) {
         return generateRepealMotion(world, enactment.id, pm.politician.partyId)
       }
     }
     return attachPlayerVote(motion, 'aye')
   }
-  return generateOrdinaryMotion(world, pm.politician.partyId)
+  return generateOrdinaryMotion(world, pickMemberProposerParty(world), extraRecent)
 }
 
 function buildGovernmentMotion(world: World, motionId: string): CouncilMotion {
@@ -129,14 +152,26 @@ function buildGovernmentMotion(world: World, motionId: string): CouncilMotion {
   return { ...motion, id: motionId }
 }
 
-function createSession(world: World, motions: CouncilMotion[], budgetSession: boolean): CouncilSession {
+export function ordinarySessionKind(pm: PoliticianModeState): OrdinarySessionKind {
+  return pm.nextOrdinaryKind === 'member' ? 'member' : 'government'
+}
+
+function advanceOrdinaryKind(session: CouncilSession, current: OrdinarySessionKind): OrdinarySessionKind {
+  if (session.kind === 'budget' || session.budgetSession) return current
+  if (session.kind === 'member') return 'government'
+  if (session.kind === 'government') return 'member'
+  return current === 'government' ? 'member' : 'government'
+}
+
+function createSession(world: World, motions: CouncilMotion[], kind: CouncilSessionKind): CouncilSession {
   return {
     week: world.week,
     motions,
     activeMotionIndex: 0,
     phase: 'agenda',
     resolved: false,
-    budgetSession,
+    budgetSession: kind === 'budget',
+    kind,
   }
 }
 
@@ -144,7 +179,6 @@ export function generateBudgetSession(world: World): World {
   if (!world.politicianMode?.politician.isIncumbent) return world
   const pm = world.politicianMode
   const budgetMotion = buildBudgetMotion(world, `budget_${world.week}`)
-  const memberMotion = buildMemberMotion(world, `motion_${world.week}_1`)
   const clearQueuedBudget = pm.queuedMotion?.kind === 'budget' ? undefined : pm.queuedMotion
   return {
     ...world,
@@ -152,7 +186,7 @@ export function generateBudgetSession(world: World): World {
       ...pm,
       queuedMotion: clearQueuedBudget,
       proposedBudget: budgetMotion.budgetProposal ?? pm.proposedBudget,
-      currentSession: createSession(world, [budgetMotion, memberMotion], true),
+      currentSession: createSession(world, [budgetMotion], 'budget'),
     },
   }
 }
@@ -175,9 +209,21 @@ export function generateCouncilSession(world: World): World {
     return generateBudgetSession(world)
   }
 
+  const kind = ordinarySessionKind(pm)
+  if (kind === 'member') {
+    const hadQueuedMember = Boolean(queuedMemberMotion(pm))
+    const memberMotion = buildMemberMotion(world, `motion_${world.week}_1`)
+    return {
+      ...world,
+      politicianMode: {
+        ...pm,
+        queuedMotion: hadQueuedMember ? undefined : pm.queuedMotion,
+        currentSession: createSession(world, [memberMotion], 'member'),
+      },
+    }
+  }
+
   const govMotion = buildGovernmentMotion(world, `motion_${world.week}_0`)
-  const hadQueuedMotion = Boolean(pm.queuedMotion)
-  const memberMotion = buildMemberMotion(world, `motion_${world.week}_1`)
   const directions = buildPartyWhips(world, govMotion)
   const proposerPartyId = govMotion.proposerPartyId
   if (directions[proposerPartyId] !== 'aye') {
@@ -188,8 +234,7 @@ export function generateCouncilSession(world: World): World {
     ...world,
     politicianMode: {
       ...pm,
-      queuedMotion: hadQueuedMotion ? undefined : pm.queuedMotion,
-      currentSession: createSession(world, [govMotion, memberMotion], false),
+      currentSession: createSession(world, [govMotion], 'government'),
     },
   }
 }
@@ -373,6 +418,7 @@ export function resolveCouncilSession(world: World): World {
       sessionHistory: [...pm.sessionHistory, { week: world.week, motionsPassed: passedCount, motionsFailed: failedCount }],
       legislationHistory: [...legislationHistory, ...resolvedMotions].slice(-40),
       nextSessionWeek: world.week + pm.councilSessionInterval,
+      nextOrdinaryKind: advanceOrdinaryKind(session, ordinarySessionKind(pm)),
     },
   }
 }

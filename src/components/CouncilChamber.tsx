@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import {
-  assembleMotionDraft,
-  listMotionPromptOptions,
   MOTION_PROPOSAL_INFLUENCE_COST,
   predictCouncillorVote,
-  previewMotionContestedness,
-  suggestCustomMotion,
 } from '../lib/sim'
 import type { PredictedStance } from '../lib/sim'
 import { formatAxis } from '../lib/format'
+import {
+  describeMotionStakes,
+  explainCouncillorStance,
+  explainPartyWhip,
+  formatStakesLine,
+} from '../sim/council/presentation'
+import { suggestTemplateMotion, templatesForCategory } from '../sim/council/motions'
+import type { PolicyTemplate } from '../data/policyTemplates'
 import type { Councillor, CouncilMotion, CustomMotionInput, MotionCategory, PoliticalValues, World } from '../types/sim'
 
 const CONTESTEDNESS_LABEL: Record<CouncilMotion['contestedness'], string> = {
@@ -17,32 +21,70 @@ const CONTESTEDNESS_LABEL: Record<CouncilMotion['contestedness'], string> = {
   divisive: 'Divisive',
 }
 
-export function CouncilChamber({ world, onVote, onResolve, onLobby }: {
+export function CouncilChamber({ world, onVote, onResolve, onLobby, onSelectMotion }: {
   world: World
   onVote: (motionId: string, vote: 'aye' | 'nay' | 'abstain') => void
   onResolve: () => void
   onLobby?: (councillorId: string, motionId: string, desiredVote: 'aye' | 'nay') => void
+  onSelectMotion?: (index: number) => void
 }) {
   const pm = world.politicianMode
   if (!pm?.currentSession) return null
-
   const session = pm.currentSession
-  const motion = session.motions[session.motions.length - 1]
+  const viewIndex = session.activeMotionIndex
+  const motion = session.motions[viewIndex] ?? session.motions[0]
   const allVoted = session.motions.every((m) => m.playerVote || m.status === 'passed' || m.status === 'failed')
   const isResolved = session.resolved
   const playerPartyId = world.playerPartyId
+  const agendaLabel = (index: number, item: CouncilMotion) => {
+    if (item.kind === 'budget' || session.kind === 'budget' || session.budgetSession) {
+      return index === 0 && (item.kind === 'budget' || session.kind === 'budget') ? 'Budget' : 'Member business'
+    }
+    if (session.kind === 'member') return 'Member business'
+    if (session.kind === 'government') return 'Government business'
+    return index === 0 ? 'Government business' : 'Member business'
+  }
+  const sessionKicker = agendaLabel(viewIndex, motion)
+  const canSelect = (index: number) => {
+    if (isResolved) return true
+    if (index <= 0) return true
+    return session.motions.slice(0, index).every((item) => item.playerVote != null)
+  }
 
   return (
     <div className="modal-backdrop">
       <div className="modal council-chamber-modal" role="dialog" aria-modal="true">
-        <h2>{session.budgetSession ? 'Budget Session' : 'Council Session'} — Week {session.week}</h2>
+        <h2>{session.kind === 'budget' || session.budgetSession ? 'Budget Session' : 'Council Session'} — Week {session.week}</h2>
         <p className="council-subtitle">
           {isResolved
             ? 'Session concluded.'
-            : session.budgetSession
-              ? 'Debate the budget proposal, lobby councillors, then cast your vote.'
-              : 'Debate the motion, lobby councillors, then cast your vote.'}
+            : session.kind === 'budget' || session.budgetSession
+              ? 'Vote the government budget. Lobby before you cast your vote.'
+              : session.kind === 'member'
+                ? 'Member business. Lobby before you cast your vote.'
+                : 'Government business. Lobby before you cast your vote.'}
         </p>
+        {session.motions.length === 1 && (
+          <p className="council-session-kicker">{sessionKicker}</p>
+        )}
+
+        {session.motions.length > 1 && (
+          <div className="council-agenda-tabs" role="tablist">
+            {session.motions.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                className={`council-agenda-tab${index === viewIndex ? ' is-active' : ''}`}
+                disabled={!canSelect(index)}
+                onClick={() => onSelectMotion?.(index)}
+              >
+                <span className="council-agenda-kicker">{agendaLabel(index, item)}</span>
+                <span className="council-agenda-title">{item.headline}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <MotionCard
           motion={motion}
@@ -52,7 +94,7 @@ export function CouncilChamber({ world, onVote, onResolve, onLobby }: {
           world={world}
         />
 
-        <PartyWhipRow motion={motion} parties={world.parties} playerPartyId={playerPartyId} />
+        <PartyWhipRow motion={motion} parties={world.parties} playerPartyId={playerPartyId} world={world} />
 
         {!isResolved && !motion.playerVote && (
           <CouncillorStanceGrid
@@ -98,16 +140,47 @@ export function CouncilChamber({ world, onVote, onResolve, onLobby }: {
   )
 }
 
+function MotionStakesBlock({ world, motion }: { world: World; motion: CouncilMotion }) {
+  const stakes = describeMotionStakes(world, motion)
+  return (
+    <div className={`motion-stakes cost-${stakes.cost}`}>
+      {stakes.helps.length > 0 && <p><strong>Helps:</strong> {stakes.helps.join(', ')}</p>}
+      {stakes.hurts.length > 0 && <p><strong>Hurts:</strong> {stakes.hurts.join(', ')}</p>}
+      {stakes.budgetLines.length > 0 && <p><strong>Budget:</strong> {stakes.budgetLines.join('; ')}</p>}
+      <p><strong>Council cost:</strong> {stakes.costLabel}</p>
+      <p><strong>Lean:</strong> {stakes.lean}</p>
+    </div>
+  )
+}
+
 function FinalVoteGrid({ motion, parties }: { motion: CouncilMotion; parties: Array<{ id: string; name: string; colour: string }> }) {
   const groups: Array<{ vote: 'aye' | 'nay' | 'abstain'; label: string }> = [
     { vote: 'aye', label: 'Aye' },
     { vote: 'nay', label: 'Nay' },
     { vote: 'abstain', label: 'Abstain' },
   ]
+  const partyTallies = parties.map((party) => {
+    const votes = motion.votes.filter((entry) => entry.partyId === party.id)
+    return {
+      party,
+      aye: votes.filter((entry) => entry.vote === 'aye').length,
+      nay: votes.filter((entry) => entry.vote === 'nay').length,
+    }
+  }).filter((row) => row.aye + row.nay > 0)
 
   return (
     <section className="final-vote-section">
       <h4>How councillors voted</h4>
+      {partyTallies.length > 0 && (
+        <div className="final-party-tallies">
+          {partyTallies.map(({ party, aye, nay }) => (
+            <span key={party.id} className="final-party-tally">
+              <span className="final-vote-dot" style={{ background: party.colour }} />
+              {party.name}: {aye} Aye / {nay} Nay
+            </span>
+          ))}
+        </div>
+      )}
       <div className="final-vote-columns">
         {groups.map(({ vote, label }) => {
           const rows = motion.votes.filter((entry) => entry.vote === vote)
@@ -124,7 +197,7 @@ function FinalVoteGrid({ motion, parties }: { motion: CouncilMotion; parties: Ar
                       <span className="final-vote-dot" style={{ background: party?.colour ?? '#888' }} />
                       <span className="final-vote-name">{entry.councillorName}</span>
                       <span className="final-vote-party">{party?.name ?? entry.partyId}</span>
-                      {rebelled && <span className="final-vote-note">rebelled</span>}
+                      {rebelled && <span className="final-vote-note">broke whip</span>}
                       {entry.councillorId === motion.proposerId && <span className="final-vote-note">proposer</span>}
                     </div>
                   )
@@ -139,7 +212,12 @@ function FinalVoteGrid({ motion, parties }: { motion: CouncilMotion; parties: Ar
   )
 }
 
-function PartyWhipRow({ motion, parties, playerPartyId }: { motion: CouncilMotion; parties: Array<{ id: string; name: string; colour: string }>; playerPartyId: string }) {
+function PartyWhipRow({ motion, parties, playerPartyId, world }: {
+  motion: CouncilMotion
+  parties: Array<{ id: string; name: string; colour: string }>
+  playerPartyId: string
+  world: World
+}) {
   return (
     <div className="party-whip-row">
       {parties.map((party) => {
@@ -155,6 +233,7 @@ function PartyWhipRow({ motion, parties, playerPartyId }: { motion: CouncilMotio
             <span className="pwb-dot" style={{ background: party.colour }} />
             <span className="pwb-name">{party.name}</span>
             <span className="pwb-direction">{whipLabel}</span>
+            <span className="pwb-reason">{explainPartyWhip(world, party.id, motion)}</span>
           </span>
         )
       })}
@@ -207,9 +286,7 @@ function CouncillorStanceGrid({ motion, councillors, world, playerRelationships,
       <div className="stance-grid">
         {stances.map(({ councillor, predicted, relationship }) => {
           const isLobbyable = onLobby && influence >= 5 && (predicted === 'lean_nay' || predicted === 'undecided' || predicted === 'nay')
-          const committed = motion.votes.find((vote) => vote.councillorId === councillor.id)
-          const whip = motion.partyWhipDirection[councillor.partyId] ?? 'free'
-          const reason = committed ? 'Lobbied commitment' : whip === 'free' ? 'Personal position' : `Party whip: ${whip}`
+          const reason = explainCouncillorStance(world, councillor, motion)
           return (
             <div key={councillor.id} className={`stance-card stance-${predicted}`}>
               <div className="stance-card-top">
@@ -279,6 +356,7 @@ function MotionCard({ motion, playerPartyId, isResolved, onVote, world }: {
       </div>
       <h3 className="motion-headline">{motion.headline}</h3>
       {motion.description && <p className="motion-description">{motion.description}</p>}
+      <MotionStakesBlock world={world} motion={motion} />
 
       <div className="motion-whip">
         <span className={`whip-indicator ${whip}`}>{whipLabel}</span>
@@ -317,14 +395,8 @@ function MotionCard({ motion, playerPartyId, isResolved, onVote, world }: {
 }
 
 const CATEGORY_OPTIONS: MotionCategory[] = [
-  'planning', 'transport', 'housing', 'services', 'environment', 'safety', 'economy', 'governance', 'budget',
+  'planning', 'transport', 'housing', 'services', 'environment', 'safety', 'economy', 'governance',
 ]
-
-const CONTESTEDNESS_PREVIEW: Record<CouncilMotion['contestedness'], string> = {
-  broad: 'Likely broad consensus',
-  contested: 'Likely contested',
-  divisive: 'Likely divisive',
-}
 
 export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion (${MOTION_PROPOSAL_INFLUENCE_COST} influence)`, initial, world }: {
   onSubmit: (input: CustomMotionInput) => void
@@ -338,61 +410,112 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
   const [category, setCategory] = useState<MotionCategory>(initial?.category ?? 'services')
   const [lean, setLean] = useState<PoliticalValues>(initial?.ideologyLean ?? { change: 0, growth: 0, services: 0 })
   const [costSignal, setCostSignal] = useState(initial?.costSignal ?? 0.4)
-  const [suggestSalt, setSuggestSalt] = useState(0)
-  const [assemblerOpen, setAssemblerOpen] = useState(false)
-  const [intervention, setIntervention] = useState('')
-  const [subject, setSubject] = useState('')
-  const [location, setLocation] = useState('')
+  const [templateId, setTemplateId] = useState(initial?.templateId ?? '')
+  const [templateIndex, setTemplateIndex] = useState(0)
 
   const isRepeal = initial?.kind === 'repeal'
-  const prompts = listMotionPromptOptions(category)
   const recentHeadlines = world?.politicianMode?.legislationHistory.map((motion) => motion.headline) ?? []
-  const contestedness = previewMotionContestedness(lean, costSignal)
+  const options = templatesForCategory(category, recentHeadlines)
+  const selectedTemplate = options.find((template) => template.id === templateId) ?? options[templateIndex] ?? options[0]
 
-  const applyDraft = (draft: CustomMotionInput & { contestedness?: CouncilMotion['contestedness'] }) => {
-    setHeadline(draft.headline)
-    setDescription(draft.description)
-    setCategory(draft.category)
+  const applyTemplate = (template: PolicyTemplate) => {
+    setTemplateId(template.id)
+    setHeadline(template.headline)
+    setDescription(template.description)
+    setCategory(template.category)
     setLean({
-      change: Math.round(draft.ideologyLean.change),
-      growth: Math.round(draft.ideologyLean.growth),
-      services: Math.round(draft.ideologyLean.services),
+      change: template.ideologyLean.change ?? 0,
+      growth: template.ideologyLean.growth ?? 0,
+      services: template.ideologyLean.services ?? 0,
     })
-    if (typeof draft.costSignal === 'number') setCostSignal(draft.costSignal)
+    setCostSignal(template.costSignal)
   }
 
-  const handleSuggest = () => {
-    const nextSalt = suggestSalt + 1
-    setSuggestSalt(nextSalt)
-    const seed = (world?.seed ?? 1) + (world?.week ?? 0) * 97 + nextSalt * 131 + category.length * 11
-    applyDraft(suggestCustomMotion(seed, recentHeadlines, category))
+  const cycleTemplate = () => {
+    if (options.length === 0) return
+    const nextIndex = (templateIndex + 1) % options.length
+    setTemplateIndex(nextIndex)
+    applyTemplate(options[nextIndex])
   }
 
-  const applyAssembler = (nextIntervention = intervention, nextSubject = subject, nextLocation = location) => {
-    if (!nextIntervention || !nextSubject || !nextLocation) return
-    const seed = (world?.seed ?? 1) + (world?.week ?? 0) * 53 + nextIntervention.length + nextSubject.length
-    applyDraft(assembleMotionDraft({
-      category,
-      intervention: nextIntervention,
-      subject: nextSubject,
-      location: nextLocation,
-      seedSalt: seed,
-    }))
-  }
+  const previewStakes = world && selectedTemplate
+    ? describeMotionStakes(world, {
+      effects: selectedTemplate.effects,
+      costSignal,
+      ideologyLean: lean,
+      kind: 'ordinary',
+    })
+    : null
 
   return (
     <div className="proposal-form">
       <h4>{isRepeal ? 'Propose Repeal' : 'Propose a Motion'}</h4>
       {!isRepeal && (
-        <p className="proposal-hint">Pick a suggestion, tap a prompt chip, or assemble from the options below — then edit before submitting.</p>
+        <p className="proposal-hint">Pick a real bill, preview who it helps and what it costs, then tweak the wording if you like.</p>
       )}
 
       {!isRepeal && (
-        <div className="proposal-suggest-row">
-          <button type="button" className="ink-button secondary" onClick={handleSuggest}>
-            Suggest a motion
-          </button>
-        </div>
+        <>
+          <div className="proposal-field">
+            <label>Category</label>
+            <select
+              value={category}
+              onChange={(e) => {
+                const next = e.target.value as MotionCategory
+                setCategory(next)
+                setTemplateIndex(0)
+                const nextOptions = templatesForCategory(next, recentHeadlines)
+                if (nextOptions[0]) applyTemplate(nextOptions[0])
+              }}
+            >
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option[0].toUpperCase()}{option.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="proposal-field">
+            <label>Bill</label>
+            <select
+              value={selectedTemplate?.id ?? ''}
+              onChange={(e) => {
+                const template = options.find((entry) => entry.id === e.target.value)
+                if (template) {
+                  setTemplateIndex(Math.max(0, options.findIndex((entry) => entry.id === template.id)))
+                  applyTemplate(template)
+                }
+              }}
+            >
+              {options.map((template) => (
+                <option key={template.id} value={template.id}>{template.headline}</option>
+              ))}
+            </select>
+          </div>
+          <div className="proposal-suggest-row">
+            <button type="button" className="ink-button secondary" onClick={cycleTemplate}>
+              Next unused bill
+            </button>
+            {world && (
+              <button
+                type="button"
+                className="ink-button secondary"
+                onClick={() => {
+                  const draft = suggestTemplateMotion(world, recentHeadlines, category, templateIndex + 1)
+                  const template = options.find((entry) => entry.id === draft.templateId)
+                  if (template) applyTemplate(template)
+                  else {
+                    setHeadline(draft.headline)
+                    setDescription(draft.description)
+                    setLean(draft.ideologyLean)
+                    setCostSignal(draft.costSignal ?? 0.4)
+                    setTemplateId(draft.templateId ?? '')
+                  }
+                }}
+              >
+                Suggest
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       <div className="proposal-field">
@@ -401,12 +524,12 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
           type="text"
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
-          placeholder="e.g. Ban parking on High Street"
+          placeholder="e.g. Restore library opening hours"
           maxLength={80}
         />
       </div>
       <div className="proposal-field">
-        <label>{isRepeal ? 'Rationale (required)' : 'Description (optional)'}</label>
+        <label>{isRepeal ? 'Rationale (required)' : 'Description'}</label>
         <input
           type="text"
           value={description}
@@ -415,120 +538,12 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
           maxLength={150}
         />
       </div>
-      <div className="proposal-field">
-        <label>Category</label>
-        <select
-          value={category}
-          onChange={(e) => {
-            const next = e.target.value as MotionCategory
-            setCategory(next)
-            setIntervention('')
-            setSubject('')
-            setLocation('')
-          }}
-          disabled={isRepeal}
-        >
-          {CATEGORY_OPTIONS.map((option) => (
-            <option key={option} value={option}>{option[0].toUpperCase()}{option.slice(1)}</option>
-          ))}
-        </select>
-      </div>
 
-      {!isRepeal && (
-        <>
-          <div className="proposal-chips" aria-label="Intervention prompts">
-            {prompts.interventions.slice(0, 5).map((entry) => (
-              <button
-                key={entry}
-                type="button"
-                className={`proposal-chip${intervention === entry ? ' is-active' : ''}`}
-                onClick={() => {
-                  setIntervention(entry)
-                  const nextSubject = subject || prompts.subjects[0]
-                  const nextLocation = location || prompts.locations[0]
-                  setSubject(nextSubject)
-                  setLocation(nextLocation)
-                  applyAssembler(entry, nextSubject, nextLocation)
-                }}
-              >
-                {entry}
-              </button>
-            ))}
-          </div>
-          <div className="proposal-chips" aria-label="Subject prompts">
-            {prompts.subjects.slice(0, 5).map((entry) => (
-              <button
-                key={entry}
-                type="button"
-                className={`proposal-chip${subject === entry ? ' is-active' : ''}`}
-                onClick={() => {
-                  setSubject(entry)
-                  const nextIntervention = intervention || prompts.interventions[0]
-                  const nextLocation = location || prompts.locations[0]
-                  setIntervention(nextIntervention)
-                  setLocation(nextLocation)
-                  applyAssembler(nextIntervention, entry, nextLocation)
-                }}
-              >
-                {entry}
-              </button>
-            ))}
-          </div>
-
-          <details className="proposal-assembler" open={assemblerOpen} onToggle={(event) => setAssemblerOpen((event.target as HTMLDetailsElement).open)}>
-            <summary>Custom creator</summary>
-            <div className="proposal-assembler-fields">
-              <label className="proposal-field">
-                Intervention
-                <select
-                  value={intervention}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setIntervention(next)
-                    applyAssembler(next, subject || prompts.subjects[0], location || prompts.locations[0])
-                    if (!subject) setSubject(prompts.subjects[0])
-                    if (!location) setLocation(prompts.locations[0])
-                  }}
-                >
-                  <option value="">Choose…</option>
-                  {prompts.interventions.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                </select>
-              </label>
-              <label className="proposal-field">
-                Subject
-                <select
-                  value={subject}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setSubject(next)
-                    applyAssembler(intervention || prompts.interventions[0], next, location || prompts.locations[0])
-                    if (!intervention) setIntervention(prompts.interventions[0])
-                    if (!location) setLocation(prompts.locations[0])
-                  }}
-                >
-                  <option value="">Choose…</option>
-                  {prompts.subjects.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                </select>
-              </label>
-              <label className="proposal-field">
-                Place
-                <select
-                  value={location}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setLocation(next)
-                    applyAssembler(intervention || prompts.interventions[0], subject || prompts.subjects[0], next)
-                    if (!intervention) setIntervention(prompts.interventions[0])
-                    if (!subject) setSubject(prompts.subjects[0])
-                  }}
-                >
-                  <option value="">Choose…</option>
-                  {prompts.locations.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                </select>
-              </label>
-            </div>
-          </details>
-        </>
+      {!isRepeal && previewStakes && (
+        <div className={`motion-stakes cost-${previewStakes.cost}`}>
+          <p>{formatStakesLine(previewStakes)}</p>
+          <p><strong>Lean:</strong> {previewStakes.lean}</p>
+        </div>
       )}
 
       <div className="proposal-sliders">
@@ -548,11 +563,6 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
           <div className="slider-labels"><span>Cut</span><span>Invest</span></div>
         </div>
       </div>
-      {!isRepeal && (
-        <p className={`proposal-contestedness-preview contested-${contestedness}`}>
-          {CONTESTEDNESS_PREVIEW[contestedness]}
-        </p>
-      )}
       <div className="proposal-actions">
         <button
           type="button"
@@ -565,7 +575,9 @@ export function ProposalForm({ onSubmit, onCancel, submitLabel = `Submit Motion 
             ideologyLean: lean,
             kind: initial?.kind,
             targetMotionId: initial?.targetMotionId,
-            costSignal: initial?.costSignal ?? costSignal,
+            costSignal,
+            templateId: templateId || selectedTemplate?.id,
+            effects: selectedTemplate?.effects,
           })}
         >
           {submitLabel}
