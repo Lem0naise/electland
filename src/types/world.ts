@@ -343,6 +343,7 @@ export interface World {
   simToasts: SimToast[]
   government?: GovernmentState
   victory?: VictoryState
+  partyAffinityMatrix: Record<string, number>
 }
 
 export interface SimToast {

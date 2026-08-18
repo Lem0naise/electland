@@ -256,6 +256,7 @@ export function makeWorld(overrides?: Partial<World>): World {
     simToasts: [],
     budget: getDefaultBudget(),
     councilHistory: [],
+    partyAffinityMatrix: {},
     ...overrides,
   }
 }

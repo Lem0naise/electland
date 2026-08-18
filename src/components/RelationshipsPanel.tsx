@@ -46,9 +46,14 @@ export function RelationshipsPanel({ world, onRelationshipAction, lastResult }: 
               </span>
               {isExpanded && rel.history.length > 0 && (
                 <span className="rel-history">
-                  {rel.history.slice(-4).map((h, i) => (
-                    <span key={i} className="rel-history-item">{h}</span>
-                  ))}
+                  {rel.history.slice(-6).map((h, i) => {
+                    const positive = h.startsWith('+')
+                    const negative = h.startsWith('-')
+                    const display = positive || negative ? h.slice(1) : h
+                    return (
+                      <span key={i} className={`rel-history-item${positive ? ' is-positive' : ''}${negative ? ' is-negative' : ''}`}>{display}</span>
+                    )
+                  })}
                 </span>
               )}
               </button>

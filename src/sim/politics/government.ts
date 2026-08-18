@@ -87,7 +87,7 @@ function buildGovernmentLabel(world: World): string | undefined {
   const lead = world.parties.find((p) => p.id === gov.leadPartyId)
   const name = lead?.name ?? gov.leadPartyId
   const shortName = name.length > 12 ? name.slice(0, 10) + '…' : name
-  const suffix = gov.kind === 'majority' ? 'maj' : 'min'
+  const suffix = gov.kind === 'majority' ? 'maj' : gov.kind === 'coalition' ? 'coal' : 'min'
   return `${shortName} ${suffix}`
 }
 

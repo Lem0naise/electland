@@ -339,6 +339,7 @@ function normalizeSave(data: SaveData): SaveData {
     w.politicianMode.proposedBudget = normalizeBudget(w.politicianMode.proposedBudget)
   }
   if (!w.allianceReputation) w.allianceReputation = {}
+  if (!w.partyAffinityMatrix) w.partyAffinityMatrix = {}
   w.constituencies = w.constituencies.map((constituency) => ({
     ...constituency,
     tacticalPressure: Object.fromEntries(w.parties.map((party) => [

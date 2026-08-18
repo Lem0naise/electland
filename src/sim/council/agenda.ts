@@ -10,6 +10,7 @@ import type {
 import type { Relationship } from '../../types/politics'
 import { createRng } from '../core/random'
 import { clamp } from '../core/math'
+import { updatePartyAffinityMatrix } from '../politics/relationships'
 import {
   customMotionToCouncilMotion,
   generateOrdinaryMotion,
@@ -380,15 +381,15 @@ export function resolveCouncilSession(world: World): World {
       if (!cllrVote) continue
       const isProposer = motion.proposerId === rel.targetId
       if (cllrVote.vote === motion.playerVote) {
-        const agreeBonus = isProposer && motion.playerVote === 'aye' ? (motion.kind === 'repeal' ? 12 : 10) : 5
-        strengthDelta += sameParty ? agreeBonus + 2 : agreeBonus
-        if (history.length < 5) {
-          history.push(`${isProposer && motion.playerVote === 'aye' ? 'Supported their motion' : 'Agreed on'}: ${motion.headline}`)
+        const agreeBonus = isProposer && motion.playerVote === 'aye' ? (motion.kind === 'repeal' ? 27 : 25) : 10
+        strengthDelta += sameParty ? agreeBonus + 4 : agreeBonus
+        if (history.length < 8) {
+          history.push(`+${isProposer && motion.playerVote === 'aye' ? 'Backed their motion' : 'Voted together'}: ${motion.headline}`)
         }
       } else if (motion.playerVote !== 'abstain' && cllrVote.vote !== 'abstain') {
-        strengthDelta -= isProposer ? (motion.kind === 'repeal' ? 10 : 8) : 4
-        if (history.length < 5) {
-          history.push(`${isProposer ? 'Opposed their motion' : 'Disagreed on'}: ${motion.headline}`)
+        strengthDelta -= isProposer ? (motion.kind === 'repeal' ? 17 : 15) : 10
+        if (history.length < 8) {
+          history.push(`-${isProposer ? 'Opposed their motion' : 'Voted against'}: ${motion.headline}`)
         }
       }
     }
@@ -408,9 +409,11 @@ export function resolveCouncilSession(world: World): World {
   })
 
   const nextPm = nextWorld.politicianMode ?? pm
+  const partyIds = [...new Set(pm.councillors.map((c) => c.partyId))]
   return {
     ...nextWorld,
     newsFeed: [...councilNews, ...nextWorld.newsFeed].slice(0, 30),
+    partyAffinityMatrix: updatePartyAffinityMatrix(nextWorld.partyAffinityMatrix, resolvedMotions, partyIds),
     politicianMode: {
       ...nextPm,
       politician: pol,

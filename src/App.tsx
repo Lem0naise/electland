@@ -82,6 +82,15 @@ function playerPartySeats(world: World) {
   return world.nationalResults.find((r) => r.partyId === world.playerPartyId)?.seatsWon ?? 0
 }
 
+function playerIsLargestParty(world: World): boolean {
+  const sorted = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)
+  const largest = sorted[0]
+  if (!largest) return false
+  if (largest.partyId === world.playerPartyId) return true
+  const playerSeats = playerPartySeats(world)
+  return playerSeats > 0 && playerSeats === largest.seatsWon
+}
+
 function newsToast(description: string, outcome: ActionResult['outcome'] = 'neutral'): ActionResult {
   return {
     action: { type: 'canvass', label: '', description: '', apCost: 0 },
@@ -339,7 +348,7 @@ function App() {
 
   const resolveHungCouncil = (w: World) => {
     if (w.government?.status !== 'forming') return w
-    if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w)) {
+    if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w) || !playerIsLargestParty(w)) {
       const next = reconcilePlayerOfficeAndVictory(formNpcOpposition(w))
       setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', isPlayerPartyGovernmentLead(next) ? 'success' : 'neutral'))
       return next

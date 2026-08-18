@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { generateGovernanceDecisions, coalitionCompatibility } from '../lib/sim'
+import { generateGovernanceDecisions } from '../lib/sim'
+import { playerPartyAffinity, npcPartyAffinity } from '../sim/politics/relationships'
 import type { GovernanceDecision, World } from '../types/sim'
 
 interface CoalitionOption {
@@ -58,7 +59,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
     const combined = playerSeats + theirSeats
     const repKey = [world.playerPartyId, other.id].sort().join('_')
     const repPenalty = (world.allianceReputation[repKey] ?? 0) * 15
-    const compat = Math.max(0, coalitionCompatibility(playerParty?.values ?? { change: 0, growth: 0, services: 0 }, other.values) - repPenalty)
+    const compat = Math.max(0, playerPartyAffinity(world, other.id) - repPenalty)
     const accepted = combined >= majority && compat >= 50
 
     options.push({
@@ -102,7 +103,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
       nonPlayerOptions.push({
         name: `${largestParty.name} + ${other.name}`,
         combined: largestResult.seatsWon + r.seatsWon,
-        compat: coalitionCompatibility(largestParty.values, other.values),
+        compat: npcPartyAffinity(world, largestParty.id, other.id),
       })
     }
     nonPlayerOptions.sort((a, b) => b.compat - a.compat)
@@ -111,7 +112,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
   const fateText = playerIsLargest
     ? `As the largest party, you lead negotiations.`
     : bestNonPlayer
-    ? `If you don't form a government, ${bestNonPlayer.name} would have ${bestNonPlayer.combined} seats (${bestNonPlayer.compat}% match).`
+    ? `If you don't form a government, ${bestNonPlayer.name} would have ${bestNonPlayer.combined} seats (${bestNonPlayer.compat}% relationship).`
     : `If you don't form a government, ${largestParty?.name ?? 'the largest party'} would likely govern as a minority.`
 
   function tryForm(option: CoalitionOption) {
@@ -129,7 +130,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
       const cannotMajority = option.combinedSeats < majority
       const message = cannotMajority
         ? `${option.label.replace('with ', '')} — only ${option.combinedSeats} seats combined (need ${majority}). Not enough for a majority.`
-        : `${option.label.replace('with ', '')} — compatibility too low (${option.compatibility}%, need ≥50%). They decline.`
+        : `${option.label.replace('with ', '')} — relationship too weak (${option.compatibility}%, need ≥50%). They decline.`
       setAttemptResult({ accepted: false, message })
     }
   }
@@ -140,7 +141,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
         <div className="modal-header">
           <span className="modal-kicker">Government Formation</span>
           <h2>No Overall Control</h2>
-          <p className="modal-sub">{majority} seats needed for a majority.</p>
+          <p className="modal-sub">As the largest party, you lead negotiations. {majority} seats needed for a majority.</p>
         </div>
 
         <div className="coalition-list">
@@ -160,7 +161,7 @@ export function CoalitionModal({ world, onFormCoalition, onFormMinority, onOppos
                   </div>
                   {!opt.isMinority && (
                     <span className="coalition-row-compat">
-                      {opt.compatibility}% match
+                      {opt.compatibility}% relationship
                       {opt.repPenalty > 0 && (
                         <span className="coalition-rep-note" title="Penalty from broken pacts">
                           {' '}(−{opt.repPenalty}%)

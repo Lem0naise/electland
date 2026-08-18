@@ -50,11 +50,14 @@ import {
 } from '../types/sim'
 import {
   createCaretakerGovernment,
+  formCoalitionGovernment as formCoalitionGov,
+  formMinorityGovernment as formMinorityGov,
   governmentLeadParty,
   isPlayerPartyGovernmentLead,
   stampGovernmentLabel,
 } from '../sim/politics/government'
 import { scorePolicyReputationForTile } from '../sim/council/legislation'
+import { playerPartyAffinity, npcPartyAffinity } from '../sim/politics/relationships'
 import { predictCouncillorVote } from '../sim/council/voting'
 export type { PredictedStance } from '../sim/council/voting'
 export { predictCouncillorVote }
@@ -3132,6 +3135,7 @@ export function generateWorld(options: WorldOptions): World {
     simToasts: [],
     budget: getDefaultBudget(),
     councilHistory: [] as CouncilDecisionRecord[],
+    partyAffinityMatrix: {} as Record<string, number>,
   }
 
   // Build a temporary stats object so calculateResults can run
@@ -5229,21 +5233,19 @@ export function formNpcOpposition(world: World): World {
     const partner = [...world.nationalResults]
       .filter((result) => result.partyId !== world.playerPartyId)
       .map((result) => {
-        const party = world.parties.find((entry) => entry.id === result.partyId)
-        const lead = world.parties.find((entry) => entry.id === world.playerPartyId)
-        const compat = party && lead ? coalitionCompatibility(lead.values, party.values) : 0
+        const compat = playerPartyAffinity(world, result.partyId)
         return { result, compat }
       })
       .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)[0]
     const canCoalition = partner && largest.seatsWon + partner.result.seatsWon >= majority && partner.compat >= 50
     if (canCoalition) {
       return {
-        ...formCoalitionGovernment(world, partner.result.partyId),
+        ...formCoalitionGov(world, world.playerPartyId, [partner.result.partyId]),
         newsFeed: [`Week ${world.week}: Party leadership forms a coalition with ${partner.result.partyName}. You are in government.`, ...world.newsFeed].slice(0, 30),
       }
     }
     return {
-      ...formMinorityGovernment(world),
+      ...formMinorityGov(world, world.playerPartyId),
       newsFeed: [`Week ${world.week}: Party leadership forms a minority administration. You are in government.`, ...world.newsFeed].slice(0, 30),
     }
   }
@@ -5260,9 +5262,7 @@ export function formNpcOpposition(world: World): World {
   const partner = [...world.nationalResults]
     .filter((result) => result.partyId !== largest.partyId && result.partyId !== world.playerPartyId)
     .map((result) => {
-      const party = world.parties.find((entry) => entry.id === result.partyId)
-      const lead = world.parties.find((entry) => entry.id === largest.partyId)
-      const compat = party && lead ? coalitionCompatibility(lead.values, party.values) : 0
+      const compat = npcPartyAffinity(world, largest.partyId, result.partyId)
       return { result, compat }
     })
     .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)[0]

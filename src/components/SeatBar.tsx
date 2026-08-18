@@ -39,7 +39,7 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats }: {
   const pol = world.politicianMode?.politician
 
   return (
-    <div className="seat-bar-wrap">
+    <div className="seat-bar-wrap" onClick={onOpenStats} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpenStats() }}>
       <div className="seat-bar">
         <div className="seat-bar-track">
           {seatBreakdown}
@@ -65,11 +65,7 @@ export const SeatBar = memo(function SeatBar({ world, onOpenStats }: {
               ? `${leading?.partyName ?? 'Leading party'} holds ${leading?.seatsWon ?? 0}/${total} seats`
               : `Hung council · ${majority} seats for a majority`}
           </span>
-          <div className="seat-bar-actions">
-            <button type="button" className="seat-bar-action-btn is-stats" onClick={onOpenStats}>
-              {'\uD83D\uDCCA'} Stats
-            </button>
-          </div>
+          <span className="seat-bar-stats-hint">{'\uD83D\uDCCA'} Stats</span>
         </div>
       </div>
     </div>
