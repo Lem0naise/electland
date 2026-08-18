@@ -87,13 +87,12 @@ describe('canPromoteToCommitteeChair', () => {
 })
 
 describe('canLaunchLeadershipChallenge', () => {
-  it('requires incumbency, terms, influence, reputation, loyalty, support', () => {
+  it('requires incumbency, terms, influence, loyalty, support', () => {
     const base = withPoliticianMode(makeWorld(), {
       careerRank: 'committee-chair',
       isIncumbent: true,
       termsServed: 2,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 50,
       relationships: [{ targetId: 'c1', targetName: 'Ally', partyId: 'party-a', partyColour: '#000', wardId: 'ward-2', type: 'ally', strength: 40, history: [] }],
     })
@@ -103,8 +102,7 @@ describe('canLaunchLeadershipChallenge', () => {
       careerRank: 'committee-chair',
       isIncumbent: false,
       termsServed: 2,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 50,
     }))).toBe(false)
 
@@ -112,8 +110,7 @@ describe('canLaunchLeadershipChallenge', () => {
       careerRank: 'committee-chair',
       isIncumbent: true,
       termsServed: 1,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 50,
     }))).toBe(false)
 
@@ -121,8 +118,7 @@ describe('canLaunchLeadershipChallenge', () => {
       careerRank: 'committee-chair',
       isIncumbent: true,
       termsServed: 2,
-      influence: 59,
-      reputation: 60,
+      influence: 69,
       partyLoyalty: 50,
     }))).toBe(false)
 
@@ -130,17 +126,7 @@ describe('canLaunchLeadershipChallenge', () => {
       careerRank: 'committee-chair',
       isIncumbent: true,
       termsServed: 2,
-      influence: 60,
-      reputation: 59,
-      partyLoyalty: 50,
-    }))).toBe(false)
-
-    expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
-      isIncumbent: true,
-      termsServed: 2,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 49,
     }))).toBe(false)
 
@@ -148,8 +134,7 @@ describe('canLaunchLeadershipChallenge', () => {
       careerRank: 'committee-chair',
       isIncumbent: true,
       termsServed: 2,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 50,
       relationships: [],
     }))).toBe(false)
@@ -202,8 +187,7 @@ describe('launchLeadershipChallenge', () => {
       name: 'Jordan Lee',
       isIncumbent: true,
       termsServed: 2,
-      influence: 60,
-      reputation: 60,
+      influence: 70,
       partyLoyalty: 50,
       relationships: [{ targetId: 'c1', targetName: 'Ally', partyId: 'party-a', partyColour: '#000', wardId: 'ward-2', type: 'ally', strength: 40, history: [] }],
     })

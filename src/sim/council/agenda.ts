@@ -296,7 +296,6 @@ export function resolveCouncilSession(world: World): World {
   let motionsProposed = pol.motionsProposed
   let loyaltyChange = 0
   let rebellionCount = 0
-  let reputationChange = 0
   let influenceChange = 0
   let legislationHistory = [...pm.legislationHistory]
   let imposedCompromiseBudget = false
@@ -311,8 +310,7 @@ export function resolveCouncilSession(world: World): World {
       if (rebelled) {
         rebellionCount += 1
         loyaltyChange -= (12 - (pol.traits.some((trait) => trait.id === 'maverick') ? 4 : 0))
-        reputationChange += 4
-        influenceChange += 2
+        influenceChange += 4
       } else if (whip !== 'free') {
         loyaltyChange += 2
       }
@@ -366,7 +364,6 @@ export function resolveCouncilSession(world: World): World {
     motionsProposed,
     rebellions: pol.rebellions + rebellionCount,
     partyLoyalty: clamp(pol.partyLoyalty + loyaltyChange, 0, 100),
-    reputation: clamp(pol.reputation + reputationChange, 0, 100),
     influence: clamp(pol.influence + influenceChange, 0, 100),
   }
 

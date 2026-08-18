@@ -20,7 +20,7 @@ export const PARTY_PRESET_PACKS: PartyPresetPack[] = [
     id: 'british-local',
     label: 'British local',
     parties: [
-      { name: 'Local Conservatives', colour: '#0087DC', values: { change: -30, growth: 15, services: 25 }, preferredFooting: 'established', preferredArchetype: 'business' },
+      { name: 'Conservatives', colour: '#0087DC', values: { change: -30, growth: 15, services: 25 }, preferredFooting: 'established', preferredArchetype: 'business' },
       { name: 'Labour', colour: '#E4003B', values: { change: 15, growth: 5, services: 35 }, preferredFooting: 'established', preferredArchetype: 'workers' },
       { name: 'Lib Dems', colour: '#FAA61A', values: { change: 10, growth: 15, services: 20 }, preferredArchetype: 'municipal' },
       { name: 'Green Party', colour: '#02A95B', values: { change: 40, growth: -35, services: 30 }, preferredArchetype: 'green' },

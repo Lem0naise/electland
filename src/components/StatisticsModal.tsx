@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { electedSeatCounts, loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
+import { explainPlayerPartyAffinity, explainNpcPartyAffinity } from '../sim/politics/relationships'
 import { VoteHistoryChart } from './VoteHistoryChart'
 import { SeatHistoryChart } from './SeatHistoryChart'
 import type { World } from '../types/sim'
@@ -11,6 +12,9 @@ interface StatisticsModalProps {
 
 export function StatisticsModal({ world, onClose }: StatisticsModalProps) {
   const [selectedPartyId, setSelectedPartyId] = useState<string>('')
+  const otherParties = world.parties.filter((p) => p.id !== world.playerPartyId)
+  const [affinityPartyA, setAffinityPartyA] = useState<string>(world.playerPartyId)
+  const [affinityPartyB, setAffinityPartyB] = useState<string>(otherParties[0]?.id ?? '')
   const majority = world.stats.councilMajority
   const total = world.constituencies.length
   const playerPartyId = world.playerPartyId
@@ -334,6 +338,52 @@ export function StatisticsModal({ world, onClose }: StatisticsModalProps) {
             <div className="stats-section">
               <div className="stats-section-label">Seats over time</div>
               <SeatHistoryChart world={world} />
+            </div>
+          )}
+
+          {world.politicianMode && (
+            <div className="stats-section">
+              <div className="stats-section-label">Party relations</div>
+              <div className="affinity-picker">
+                <div className="affinity-picker-selects">
+                  <label>
+                    <span className="affinity-picker-label">Party A</span>
+                    <select value={affinityPartyA} onChange={(e) => setAffinityPartyA(e.target.value)}>
+                      {world.parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                  <span className="affinity-picker-arrow">→</span>
+                  <label>
+                    <span className="affinity-picker-label">Party B</span>
+                    <select value={affinityPartyB} onChange={(e) => setAffinityPartyB(e.target.value)}>
+                      {world.parties.filter((p) => p.id !== affinityPartyA).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {(() => {
+                  const isPlayerA = affinityPartyA === world.playerPartyId
+                  const isPlayerB = affinityPartyB === world.playerPartyId
+                  const explanation = isPlayerA
+                    ? explainPlayerPartyAffinity(world, affinityPartyB)
+                    : isPlayerB
+                      ? explainPlayerPartyAffinity(world, affinityPartyA)
+                      : explainNpcPartyAffinity(world, affinityPartyA, affinityPartyB)
+                  const warmth = explanation.score >= 65 ? 'warm' : explanation.score <= 35 ? 'cool' : 'neutral'
+                  const partyAName = world.parties.find((p) => p.id === affinityPartyA)?.name ?? '?'
+                  const partyBName = world.parties.find((p) => p.id === affinityPartyB)?.name ?? '?'
+                  return (
+                    <div className={`affinity-result affinity-${warmth}`}>
+                      <div className="affinity-result-score">{explanation.score}<span className="affinity-result-max"> / 100</span></div>
+                      <div className="affinity-result-title">{partyAName}'s opinion of {partyBName}</div>
+                      <ul className="affinity-result-reasons">
+                        {explanation.components.map((c, i) => (
+                          <li key={i}>{c.label}: <strong>{c.value}</strong></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
           )}
 

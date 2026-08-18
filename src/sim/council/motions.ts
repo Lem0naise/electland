@@ -14,7 +14,7 @@ import { clamp, roundPoliticalValues } from '../core/math'
 import { getRepealablePolicies, blocImpactFromEffects } from './legislation'
 import { buildPartyWhips, findWhipIssuer } from './voting'
 
-export const MOTION_PROPOSAL_INFLUENCE_COST = 8
+export const MOTION_PROPOSAL_INFLUENCE_COST = 20
 export const BUDGET_AMENDMENT_INFLUENCE_COST = 10
 
 export { POLICY_TEMPLATES }

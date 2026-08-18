@@ -94,7 +94,6 @@ export function ConstituencyInspector({
           {world.politicianMode?.politician.wardId === selectedWard.id && (
             <div className="pol-ward-info-strip">
               <span title="Your local personal rating affects party support in this ward; it is not projected vote share.">Personal rating: <strong>{world.politicianMode.politician.personalApproval >= 0 ? '+' : ''}{(world.politicianMode.politician.personalApproval * 100).toFixed(0)}</strong></span>
-              <span>Reputation: <strong>{world.politicianMode.politician.reputation}</strong></span>
               <span>{world.politicianMode.politician.isIncumbent ? 'Incumbent' : 'Challenger'}</span>
             </div>
           )}

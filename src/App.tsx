@@ -46,6 +46,7 @@ import {
   generateGovernanceDecisions,
   generateWorld,
   governingStatusLabel,
+  playerPartyIsGoverning,
   MOTION_PROPOSAL_INFLUENCE_COST,
   playerCanNegotiateCoalition,
   recalculateWardAggregates,
@@ -350,7 +351,7 @@ function App() {
     if (w.government?.status !== 'forming') return w
     if (playerPartySeats(w) === 0 || !playerCanNegotiateCoalition(w) || !playerIsLargestParty(w)) {
       const next = reconcilePlayerOfficeAndVictory(formNpcOpposition(w))
-      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', isPlayerPartyGovernmentLead(next) ? 'success' : 'neutral'))
+      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', playerPartyIsGoverning(next) ? 'success' : 'neutral'))
       return next
     }
     setShowCoalitionModal(true)

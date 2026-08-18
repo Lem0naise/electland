@@ -46,10 +46,6 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
           </span>
         </div>
         <div className="pol-stat">
-          <span className="pol-stat-label">Reputation</span>
-          <span className="pol-stat-value">{pol.reputation}</span>
-        </div>
-        <div className="pol-stat">
           <span className="pol-stat-label">Influence</span>
           <span className="pol-stat-value">{pol.influence}</span>
         </div>
@@ -227,11 +223,6 @@ export function PoliticianActionsPanel({ world, onAction, onToggleAuto, onSetCol
             {lastResult.approvalDelta != null && lastResult.approvalDelta !== 0 && (
               <span className={lastResult.approvalDelta > 0 ? 'delta-pos' : 'delta-neg'}>
                 Approval {lastResult.approvalDelta > 0 ? '+' : ''}{(lastResult.approvalDelta * 100).toFixed(0)}%
-              </span>
-            )}
-            {lastResult.reputationDelta != null && lastResult.reputationDelta !== 0 && (
-              <span className={lastResult.reputationDelta > 0 ? 'delta-pos' : 'delta-neg'}>
-                Rep {lastResult.reputationDelta > 0 ? '+' : ''}{lastResult.reputationDelta}
               </span>
             )}
             {lastResult.influenceDelta != null && lastResult.influenceDelta !== 0 && (

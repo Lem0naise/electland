@@ -81,14 +81,23 @@ export function formCoalitionGovernment(world: World, leadPartyId: string, partn
   })
 }
 
+function shortPartyName(name: string, max: number): string {
+  return name.length > max ? name.slice(0, max - 1) + '…' : name
+}
+
 function buildGovernmentLabel(world: World): string | undefined {
   const gov = world.government
   if (!gov || gov.status !== 'formed') return undefined
   const lead = world.parties.find((p) => p.id === gov.leadPartyId)
-  const name = lead?.name ?? gov.leadPartyId
-  const shortName = name.length > 12 ? name.slice(0, 10) + '…' : name
-  const suffix = gov.kind === 'majority' ? 'maj' : gov.kind === 'coalition' ? 'coal' : 'min'
-  return `${shortName} ${suffix}`
+  const leadName = shortPartyName(lead?.name ?? gov.leadPartyId, 12)
+  if (gov.kind === 'coalition' && gov.partnerPartyIds.length > 0) {
+    const partnerNames = gov.partnerPartyIds
+      .map((id) => shortPartyName(world.parties.find((p) => p.id === id)?.name ?? id, 10))
+      .join(' + ')
+    return `${leadName} + ${partnerNames}`
+  }
+  const suffix = gov.kind === 'majority' ? 'maj' : 'min'
+  return `${leadName} ${suffix}`
 }
 
 export function stampGovernmentLabel(world: World): World {

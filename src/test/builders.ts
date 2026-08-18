@@ -87,7 +87,6 @@ export function makePolitician(overrides?: Partial<PoliticianState>): Politician
     personalApproval: 0,
     personalValues: { ...DEFAULT_VALUES },
     personalPolicyNextWeek: 1,
-    reputation: 20,
     relationships: [],
     traits: [],
     careerHistory: [{ week: 1, description: 'Elected', tier: 'backbencher', rank: 'backbencher' }],

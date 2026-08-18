@@ -50,8 +50,7 @@ function requirementsForRank(world: World, rank: CareerRank, pol: PoliticianStat
       return [
         { label: 'Incumbent councillor', met: pol.isIncumbent, current: pol.isIncumbent ? 1 : 0, needed: 1 },
         { label: 'Terms served', met: pol.termsServed >= 2, current: pol.termsServed, needed: 2 },
-        { label: 'Influence', met: pol.influence >= 60, current: pol.influence, needed: 60 },
-        { label: 'Reputation', met: pol.reputation >= 60, current: pol.reputation, needed: 60 },
+        { label: 'Influence', met: pol.influence >= 70, current: pol.influence, needed: 70 },
         { label: 'Party loyalty', met: pol.partyLoyalty >= 50, current: pol.partyLoyalty, needed: 50 },
         {
           label: 'Party support',
@@ -95,8 +94,7 @@ export function canLaunchLeadershipChallenge(world: World): boolean {
   const { supporters, requiredSupporters } = politicalSupportCounts(world, pol)
   return pol.isIncumbent
     && pol.termsServed >= 2
-    && pol.influence >= 60
-    && pol.reputation >= 60
+    && pol.influence >= 70
     && pol.partyLoyalty >= 50
     && (requiredSupporters === 0 || supporters >= requiredSupporters)
 }

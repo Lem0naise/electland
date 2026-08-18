@@ -2433,7 +2433,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 
 .pol-stats-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 .pol-stat {
@@ -2983,6 +2983,7 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   border: 1px solid rgba(0, 0, 0, 0.25);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
+.council-dot--gov { box-shadow: 0 0 0 2px rgba(255,255,255,0.85), 0 0 0 3px var(--ink-soft); }
 .council-dot--player { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
 @media (hover: hover) {
   .council-dot[data-tooltip]::after {
@@ -3951,6 +3952,24 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
   font-style: italic;
   padding: 2px 0;
 }
+
+/* Affinity picker */
+.affinity-picker { display: flex; flex-direction: column; gap: 10px; }
+.affinity-picker-selects { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.affinity-picker-selects label { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 100px; }
+.affinity-picker-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); }
+.affinity-picker-selects select { font-family: inherit; font-size: 0.82rem; padding: 4px 6px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); }
+.affinity-picker-arrow { font-size: 1.1rem; color: var(--ink-soft); padding-bottom: 4px; }
+.affinity-result { border: 1px solid var(--rule); padding: 10px 14px; border-radius: 4px; }
+.affinity-result-score { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.affinity-result-max { font-size: 0.8rem; font-weight: 400; color: var(--ink-soft); }
+.affinity-result-title { font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 6px; }
+.affinity-result-reasons { list-style: none; padding: 0; margin: 0; font-size: 0.78rem; }
+.affinity-result-reasons li { padding: 2px 0; border-top: 1px solid var(--rule); }
+.affinity-result-reasons li:first-child { border-top: none; }
+.affinity-result.affinity-warm .affinity-result-score { color: var(--safe); }
+.affinity-result.affinity-cool .affinity-result-score { color: var(--danger, #c0392b); }
+.affinity-result.affinity-neutral .affinity-result-score { color: var(--ink-soft); }
 
 /* Party filter */
 .stats-party-filter {

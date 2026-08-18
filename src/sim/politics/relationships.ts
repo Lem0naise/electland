@@ -49,20 +49,67 @@ export function affinityKey(a: string, b: string): string {
   return [a, b].sort().join('_')
 }
 
+const PACT_AFFINITY_BONUS = 15
+
+function activePactBonus(world: World, partyA: string, partyB: string): number {
+  const pacts = world.electoralPacts ?? []
+  const hasPact = pacts.some((p) =>
+    p.status === 'active' && p.partyIds.includes(partyA) && p.partyIds.includes(partyB),
+  )
+  return hasPact ? PACT_AFFINITY_BONUS : 0
+}
+
 export function playerPartyAffinity(world: World, targetPartyId: string): number {
   const pm = world.politicianMode
   if (!pm) return 50
   const rels = pm.politician.relationships.filter((r) => r.partyId === targetPartyId)
-  if (rels.length === 0) return 50
+  if (rels.length === 0) return 50 + activePactBonus(world, world.playerPartyId, targetPartyId)
   const avg = rels.reduce((sum, r) => sum + r.strength, 0) / rels.length
-  return clamp(Math.round((avg + 100) / 2), 0, 100)
+  const base = Math.round((avg + 100) / 2)
+  return clamp(base + activePactBonus(world, world.playerPartyId, targetPartyId), 0, 100)
 }
 
 export function npcPartyAffinity(world: World, partyA: string, partyB: string): number {
   const key = affinityKey(partyA, partyB)
   const raw = world.partyAffinityMatrix[key]
-  if (raw === undefined) return 50
-  return clamp(Math.round((raw + 100) / 2), 0, 100)
+  const base = raw === undefined ? 50 : Math.round((raw + 100) / 2)
+  return clamp(base + activePactBonus(world, partyA, partyB), 0, 100)
+}
+
+export interface AffinityExplanation {
+  score: number
+  components: Array<{ label: string; value: number }>
+}
+
+export function explainPlayerPartyAffinity(world: World, targetPartyId: string): AffinityExplanation {
+  const pm = world.politicianMode
+  const components: AffinityExplanation['components'] = []
+  const rels = pm?.politician.relationships.filter((r) => r.partyId === targetPartyId) ?? []
+  if (rels.length > 0) {
+    const avg = rels.reduce((sum, r) => sum + r.strength, 0) / rels.length
+    components.push({ label: `Avg. councillor relationship (${rels.length})`, value: Math.round((avg + 100) / 2) })
+  } else {
+    components.push({ label: 'No councillor relationships', value: 50 })
+  }
+  const pactBonus = activePactBonus(world, world.playerPartyId, targetPartyId)
+  if (pactBonus > 0) components.push({ label: 'Active electoral pact', value: pactBonus })
+  const score = playerPartyAffinity(world, targetPartyId)
+  return { score, components }
+}
+
+export function explainNpcPartyAffinity(world: World, partyA: string, partyB: string): AffinityExplanation {
+  const components: AffinityExplanation['components'] = []
+  const key = affinityKey(partyA, partyB)
+  const raw = world.partyAffinityMatrix[key]
+  if (raw !== undefined) {
+    components.push({ label: 'Council voting alignment', value: Math.round((raw + 100) / 2) })
+  } else {
+    components.push({ label: 'No voting history', value: 50 })
+  }
+  const pactBonus = activePactBonus(world, partyA, partyB)
+  if (pactBonus > 0) components.push({ label: 'Active electoral pact', value: pactBonus })
+  const score = npcPartyAffinity(world, partyA, partyB)
+  return { score, components }
 }
 
 export function updatePartyAffinityMatrix(

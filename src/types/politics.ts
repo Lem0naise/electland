@@ -89,7 +89,6 @@ export interface PoliticianTrait {
   effect: string
   modifier?: Partial<{
     approvalGain: number
-    reputationGain: number
     influenceGain: number
     rebellionCostReduction: number
   }>
@@ -123,7 +122,6 @@ export interface PoliticianState {
   personalApproval: number
   personalValues: PoliticalValues
   personalPolicyNextWeek: number
-  reputation: number
   relationships: Relationship[]
   traits: PoliticianTrait[]
   careerHistory: CareerEvent[]
