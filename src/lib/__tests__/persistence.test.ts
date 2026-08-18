@@ -35,14 +35,14 @@ function withPoliticianMode(world: World): World {
 }
 
 describe('v2 save migration', () => {
-  it('migrates deputy-leader career rank to committee-chair', () => {
+  it('migrates deputy-leader career rank to party-whip', () => {
     const world = withPoliticianMode(makeWorld())
     world.politicianMode!.politician.careerTier = 'deputy-leader'
     world.politicianMode!.politician.careerRank = 'backbencher'
 
     const migrated = parseSaveData(JSON.stringify(baseV2Save(world)))
-    expect(migrated?.world.politicianMode?.politician.careerRank).toBe('committee-chair')
-    expect(migrated?.world.politicianMode?.politician.careerTier).toBe('committee-chair')
+    expect(migrated?.world.politicianMode?.politician.careerRank).toBe('party-whip')
+    expect(migrated?.world.politicianMode?.politician.careerTier).toBe('party-whip')
   })
 
   it('migrates mayor career rank to party-leader with victory state', () => {

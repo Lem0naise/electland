@@ -5214,7 +5214,8 @@ export function formMinorityGovernment(world: World): World {
 }
 
 export function formNpcOpposition(world: World): World {
-  const largest = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)[0]
+  const sorted = [...world.nationalResults].sort((a, b) => b.seatsWon - a.seatsWon)
+  const largest = sorted[0]
   const majority = world.stats.councilMajority
   const pactFields = {
     electoralPacts: world.electoralPacts ?? [],
@@ -5222,6 +5223,33 @@ export function formNpcOpposition(world: World): World {
   }
   if (!largest) {
     return { ...world, ...pactFields, government: undefined }
+  }
+
+  const secondPlace = sorted[1]
+  const isTied = secondPlace && secondPlace.seatsWon === largest.seatsWon
+  if (isTied) {
+    const playerTied = sorted.filter((r) => r.seatsWon === largest.seatsWon).some((r) => r.partyId === world.playerPartyId)
+    if (playerTied) {
+      return { ...world, ...pactFields }
+    }
+    const tiedParties = sorted.filter((r) => r.seatsWon === largest.seatsWon)
+    const bestLeader = tiedParties.sort((a, b) => {
+      const otherParties = sorted.filter((r) => r.partyId !== a.partyId && r.partyId !== b.partyId)
+      const aMaxAffinity = Math.max(0, ...otherParties.map((o) => npcPartyAffinity(world, a.partyId, o.partyId)))
+      const bMaxAffinity = Math.max(0, ...otherParties.map((o) => npcPartyAffinity(world, b.partyId, o.partyId)))
+      return bMaxAffinity - aMaxAffinity
+    })[0]
+    const candidates = sorted
+      .filter((r) => r.partyId !== bestLeader.partyId)
+      .map((r) => ({ result: r, compat: r.partyId === world.playerPartyId ? playerPartyAffinity(world, bestLeader.partyId) : npcPartyAffinity(world, bestLeader.partyId, r.partyId) }))
+      .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)
+    const partner = candidates.find((c) => c.compat >= 50 && bestLeader.seatsWon + c.result.seatsWon >= majority)
+    return stampGovernmentLabel({
+      ...world,
+      ...pactFields,
+      government: formedNpcGovernment(world, bestLeader.partyId, partner ? 'coalition' : 'minority', partner ? [partner.result.partyId] : []),
+      newsFeed: [`Week ${world.week}: ${bestLeader.partyName} forms ${partner ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. ${partner?.result.partyId === world.playerPartyId ? 'You are in government.' : 'You are in opposition.'}`, ...world.newsFeed].slice(0, 30),
+    })
   }
 
   if (largest.partyId === world.playerPartyId) {
@@ -5258,7 +5286,7 @@ export function formNpcOpposition(world: World): World {
       ...world,
       ...pactFields,
       government: formedNpcGovernment(world, largest.partyId, 'majority'),
-      newsFeed: [`Week ${world.week}: ${largest.partyName} forms a majority administration. You remain in opposition.`, ...world.newsFeed].slice(0, 30),
+      newsFeed: [`Week ${world.week}: ${largest.partyName} forms a majority administration. You are in opposition.`, ...world.newsFeed].slice(0, 30),
     })
   }
 
@@ -5282,7 +5310,7 @@ export function formNpcOpposition(world: World): World {
       partner ? 'coalition' : 'minority',
       partner ? [partner.result.partyId] : [],
     ),
-    newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${partner ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. ${partner?.result.partyId === world.playerPartyId ? 'You are in government.' : 'You remain in opposition.'}`, ...world.newsFeed].slice(0, 30),
+    newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${partner ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. ${partner?.result.partyId === world.playerPartyId ? 'You are in government.' : 'You are in opposition.'}`, ...world.newsFeed].slice(0, 30),
   })
 }
 
@@ -5416,14 +5444,14 @@ export function getCareerRequirements(world: World): CareerRequirements | null {
 }
 
 function getNextRank(current: CareerRank): CareerRank | null {
-  const order: CareerRank[] = ['backbencher', 'committee-chair', 'party-leader']
+  const order: CareerRank[] = ['backbencher', 'party-whip', 'party-leader']
   const idx = order.indexOf(current)
   return idx < order.length - 1 ? order[idx + 1] : null
 }
 
 const RANK_LABELS: Record<CareerRank, string> = {
   'backbencher': 'Backbencher',
-  'committee-chair': 'Committee Chair',
+  'party-whip': 'Party Whip',
   'party-leader': 'Party Leader',
 }
 
@@ -5433,7 +5461,7 @@ export function getTierLabel(tier: CareerRank): string {
 
 function getRequirementsForRank(rank: CareerRank, pol: PoliticianState): Array<{ label: string; met: boolean; current: number; needed: number }> {
   switch (rank) {
-    case 'committee-chair':
+    case 'party-whip':
       return [
         { label: 'Terms served', met: pol.termsServed >= 1, current: pol.termsServed, needed: 1 },
         { label: 'Motions passed', met: pol.motionsPassed >= 2, current: pol.motionsPassed, needed: 2 },
@@ -5442,7 +5470,7 @@ function getRequirementsForRank(rank: CareerRank, pol: PoliticianState): Array<{
     case 'party-leader':
       return [
         { label: 'Terms served', met: pol.termsServed >= 3, current: pol.termsServed, needed: 3 },
-        { label: 'Influence', met: pol.influence >= 70, current: pol.influence, needed: 70 },
+        { label: 'Influence', met: pol.influence >= 100, current: pol.influence, needed: 100 },
         { label: 'Allies', met: pol.relationships.filter((r) => r.type === 'ally').length >= 3, current: pol.relationships.filter((r) => r.type === 'ally').length, needed: 3 },
       ]
     default:

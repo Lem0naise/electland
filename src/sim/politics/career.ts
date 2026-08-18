@@ -10,11 +10,11 @@ export interface CareerRequirements {
 
 const RANK_LABELS: Record<CareerRank, string> = {
   backbencher: 'Backbencher',
-  'committee-chair': 'Committee Chair',
+  'party-whip': 'Party Whip',
   'party-leader': 'Party Leader',
 }
 
-const RANK_ORDER: CareerRank[] = ['backbencher', 'committee-chair', 'party-leader']
+const RANK_ORDER: CareerRank[] = ['backbencher', 'party-whip', 'party-leader']
 
 export function getNextRank(current: CareerRank): CareerRank | null {
   const idx = RANK_ORDER.indexOf(current)
@@ -32,13 +32,15 @@ function politicalSupportCounts(world: World, pol: PoliticianState): { supporter
   const supporters = pol.relationships.filter(
     (r) => r.partyId === pol.partyId && r.strength >= 40,
   ).length
-  const requiredSupporters = Math.min(3, samePartyCouncillors.length)
+  const totalSeats = world.constituencies.length
+  const computed = Math.max(1, Math.round(totalSeats * 0.4))
+  const requiredSupporters = Math.min(computed, samePartyCouncillors.length)
   return { supporters, requiredSupporters }
 }
 
 function requirementsForRank(world: World, rank: CareerRank, pol: PoliticianState): CareerRequirements['requirements'] {
   switch (rank) {
-    case 'committee-chair':
+    case 'party-whip':
       return [
         { label: 'Incumbent councillor', met: pol.isIncumbent, current: pol.isIncumbent ? 1 : 0, needed: 1 },
         { label: 'Terms served', met: pol.termsServed >= 1, current: pol.termsServed, needed: 1 },
@@ -50,7 +52,7 @@ function requirementsForRank(world: World, rank: CareerRank, pol: PoliticianStat
       return [
         { label: 'Incumbent councillor', met: pol.isIncumbent, current: pol.isIncumbent ? 1 : 0, needed: 1 },
         { label: 'Terms served', met: pol.termsServed >= 2, current: pol.termsServed, needed: 2 },
-        { label: 'Influence', met: pol.influence >= 70, current: pol.influence, needed: 70 },
+        { label: 'Influence', met: pol.influence >= 100, current: pol.influence, needed: 100 },
         { label: 'Party loyalty', met: pol.partyLoyalty >= 50, current: pol.partyLoyalty, needed: 50 },
         {
           label: 'Party support',
@@ -75,7 +77,7 @@ export function getCareerRequirements(world: World): CareerRequirements | null {
   return { rank: nextRank, label: RANK_LABELS[nextRank], requirements, eligible }
 }
 
-export function canPromoteToCommitteeChair(world: World): boolean {
+export function canPromoteToPartyWhip(world: World): boolean {
   const pm = world.politicianMode
   if (!pm) return false
   const pol = pm.politician
@@ -90,11 +92,11 @@ export function canLaunchLeadershipChallenge(world: World): boolean {
   const pm = world.politicianMode
   if (!pm) return false
   const pol = pm.politician
-  if (pol.careerRank !== 'committee-chair') return false
+  if (pol.careerRank !== 'party-whip') return false
   const { supporters, requiredSupporters } = politicalSupportCounts(world, pol)
   return pol.isIncumbent
     && pol.termsServed >= 2
-    && pol.influence >= 70
+    && pol.influence >= 100
     && pol.partyLoyalty >= 50
     && (requiredSupporters === 0 || supporters >= requiredSupporters)
 }
@@ -104,11 +106,11 @@ function careerEvent(week: number, description: string, rank: CareerRank): Polit
   return { week, description, rank, tier }
 }
 
-export function promoteToCommitteeChair(world: World): World {
-  if (!canPromoteToCommitteeChair(world) || !world.politicianMode) return world
+export function promoteToPartyWhip(world: World): World {
+  if (!canPromoteToPartyWhip(world) || !world.politicianMode) return world
   const pm = world.politicianMode
   const pol = pm.politician
-  const nextRank: CareerRank = 'committee-chair'
+  const nextRank: CareerRank = 'party-whip'
   const promotedPol: PoliticianState = {
     ...pol,
     careerRank: nextRank,

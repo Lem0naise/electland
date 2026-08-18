@@ -78,7 +78,7 @@ function buildBudgetMotion(world: World, motionId: string): CouncilMotion {
       partyWhipDirection: {},
     })
 
-  const proposer = proposerPartyId === pm.politician.partyId
+  const proposer = amendment && proposerPartyId === pm.politician.partyId
     ? { id: pm.politician.id, name: pm.politician.name, partyId: pm.politician.partyId }
     : (() => {
       const cllr = pm.councillors.find((entry) => entry.partyId === proposerPartyId)

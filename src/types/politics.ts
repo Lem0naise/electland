@@ -1,9 +1,9 @@
 import type { PoliticalValueKey, PoliticalValues } from './world'
 
-export type CareerRank = 'backbencher' | 'committee-chair' | 'party-leader'
+export type CareerRank = 'backbencher' | 'party-whip' | 'party-leader'
 
 /** @deprecated Use CareerRank */
-export type CareerTier = 'backbencher' | 'committee-chair' | 'deputy-leader' | 'party-leader' | 'mayor'
+export type CareerTier = 'backbencher' | 'party-whip' | 'committee-chair' | 'deputy-leader' | 'party-leader' | 'mayor'
 
 export type GovernmentKind = 'caretaker' | 'majority' | 'minority' | 'coalition'
 

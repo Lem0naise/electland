@@ -13,7 +13,7 @@ import type { BudgetEvent, EnactedPolicy, PoliticianModeState, PolicyEffect } fr
 const SAVE_KEY = 'electland_save'
 const CURRENT_VERSION = 3
 
-const VALID_CAREER_RANKS = new Set<CareerRank>(['backbencher', 'committee-chair', 'party-leader'])
+const VALID_CAREER_RANKS = new Set<CareerRank>(['backbencher', 'party-whip', 'party-leader'])
 
 export interface SaveData {
   version: number
@@ -220,8 +220,8 @@ function inferBudgetEvents(pm: PoliticianModeState): BudgetEvent[] {
 
 function migrateCareerRank(oldTier: string): CareerRank {
   if (oldTier === 'mayor') return 'party-leader'
-  if (oldTier === 'deputy-leader') return 'committee-chair'
-  if (oldTier === 'party-leader' || oldTier === 'committee-chair' || oldTier === 'backbencher') {
+  if (oldTier === 'deputy-leader' || oldTier === 'committee-chair') return 'party-whip'
+  if (oldTier === 'party-leader' || oldTier === 'party-whip' || oldTier === 'backbencher') {
     return oldTier
   }
   return 'backbencher'

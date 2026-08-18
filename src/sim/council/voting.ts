@@ -112,7 +112,7 @@ export function buildPartyWhips(world: World, motion: CouncilMotion): Record<str
 export function findWhipIssuer(world: World, partyId: string): Councillor | undefined {
   const pm = world.politicianMode
   if (!pm) return undefined
-  if (partyId === pm.politician.partyId && pm.politician.careerRank === 'party-leader') {
+  if (partyId === pm.politician.partyId && (pm.politician.careerRank === 'party-whip' || pm.politician.careerRank === 'party-leader')) {
     return {
       id: pm.politician.id,
       name: pm.politician.name,
@@ -160,8 +160,8 @@ export function calculateNpcVote(
   const governingBudgetWhip = motion.kind === 'budget' && whip !== 'free' && governingIds.has(cllr.partyId)
   const sameParty = cllr.partyId === pm.politician.partyId
 
-  const playerIsLeader = pm.politician.careerRank === 'party-leader'
-  if (sameParty && playerIsLeader && motion.playerVote) {
+  const playerIsWhipOrLeader = pm.politician.careerRank === 'party-whip' || pm.politician.careerRank === 'party-leader'
+  if (sameParty && playerIsWhipOrLeader && motion.playerVote) {
     baseVote = motion.playerVote
   }
 
@@ -177,7 +177,7 @@ export function calculateNpcVote(
   }
 
   const relationship = pm.politician.relationships.find((entry) => entry.targetId === cllr.id)
-  if (!sameParty || !playerIsLeader) {
+  if (!sameParty || !playerIsWhipOrLeader) {
     const followThreshold = sameParty ? 30 : 40
     const followChance = sameParty ? 0.40 : 0.18
     if (relationship && relationship.strength > followThreshold && rng() < followChance) {

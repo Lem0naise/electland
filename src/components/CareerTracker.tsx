@@ -2,7 +2,7 @@ import { getCareerRequirements, getTierLabel, type CareerRequirements } from '..
 import type { CareerRank, World } from '../types/sim'
 import { isPlayerMayor } from '../sim/politics/career'
 
-const RANK_ORDER: CareerRank[] = ['backbencher', 'committee-chair', 'party-leader']
+const RANK_ORDER: CareerRank[] = ['backbencher', 'party-whip', 'party-leader']
 
 export function CareerTracker({ world, onPromote }: { world: World; onPromote: () => void }) {
   const pm = world.politicianMode
@@ -56,7 +56,7 @@ export function CareerTracker({ world, onPromote }: { world: World; onPromote: (
           </div>
           {nextReqs.eligible && (
             <button type="button" className="ink-button career-promote-btn" onClick={onPromote}>
-              {pol.careerRank === 'committee-chair' ? 'Launch Leadership Challenge' : 'Accept Promotion'}
+              {pol.careerRank === 'party-whip' ? 'Launch Leadership Challenge' : 'Accept Promotion'}
             </button>
           )}
         </div>

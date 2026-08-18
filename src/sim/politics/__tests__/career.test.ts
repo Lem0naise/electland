@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   getNextRank,
-  canPromoteToCommitteeChair,
+  canPromoteToPartyWhip,
   canLaunchLeadershipChallenge,
   getCareerRequirements,
-  promoteToCommitteeChair,
+  promoteToPartyWhip,
   launchLeadershipChallenge,
   isPlayerMayor,
   reconcilePlayerOfficeAndVictory,
@@ -35,13 +35,13 @@ function withPoliticianMode(world: World, polOverrides?: Parameters<typeof makeP
 
 describe('getNextRank', () => {
   it('returns correct progression', () => {
-    expect(getNextRank('backbencher')).toBe('committee-chair')
-    expect(getNextRank('committee-chair')).toBe('party-leader')
+    expect(getNextRank('backbencher')).toBe('party-whip')
+    expect(getNextRank('party-whip')).toBe('party-leader')
     expect(getNextRank('party-leader')).toBeNull()
   })
 })
 
-describe('canPromoteToCommitteeChair', () => {
+describe('canPromoteToPartyWhip', () => {
   it('requires incumbency, terms, motions, influence', () => {
     const eligible = withPoliticianMode(makeWorld(), {
       careerRank: 'backbencher',
@@ -50,9 +50,9 @@ describe('canPromoteToCommitteeChair', () => {
       motionsPassed: 2,
       influence: 20,
     })
-    expect(canPromoteToCommitteeChair(eligible)).toBe(true)
+    expect(canPromoteToPartyWhip(eligible)).toBe(true)
 
-    expect(canPromoteToCommitteeChair(withPoliticianMode(makeWorld(), {
+    expect(canPromoteToPartyWhip(withPoliticianMode(makeWorld(), {
       careerRank: 'backbencher',
       isIncumbent: false,
       termsServed: 1,
@@ -60,7 +60,7 @@ describe('canPromoteToCommitteeChair', () => {
       influence: 20,
     }))).toBe(false)
 
-    expect(canPromoteToCommitteeChair(withPoliticianMode(makeWorld(), {
+    expect(canPromoteToPartyWhip(withPoliticianMode(makeWorld(), {
       careerRank: 'backbencher',
       isIncumbent: true,
       termsServed: 0,
@@ -68,7 +68,7 @@ describe('canPromoteToCommitteeChair', () => {
       influence: 20,
     }))).toBe(false)
 
-    expect(canPromoteToCommitteeChair(withPoliticianMode(makeWorld(), {
+    expect(canPromoteToPartyWhip(withPoliticianMode(makeWorld(), {
       careerRank: 'backbencher',
       isIncumbent: true,
       termsServed: 1,
@@ -76,7 +76,7 @@ describe('canPromoteToCommitteeChair', () => {
       influence: 20,
     }))).toBe(false)
 
-    expect(canPromoteToCommitteeChair(withPoliticianMode(makeWorld(), {
+    expect(canPromoteToPartyWhip(withPoliticianMode(makeWorld(), {
       careerRank: 'backbencher',
       isIncumbent: true,
       termsServed: 1,
@@ -89,52 +89,52 @@ describe('canPromoteToCommitteeChair', () => {
 describe('canLaunchLeadershipChallenge', () => {
   it('requires incumbency, terms, influence, loyalty, support', () => {
     const base = withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: true,
       termsServed: 2,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 50,
       relationships: [{ targetId: 'c1', targetName: 'Ally', partyId: 'party-a', partyColour: '#000', wardId: 'ward-2', type: 'ally', strength: 40, history: [] }],
     })
     expect(canLaunchLeadershipChallenge(base)).toBe(true)
 
     expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: false,
       termsServed: 2,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 50,
     }))).toBe(false)
 
     expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: true,
       termsServed: 1,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 50,
     }))).toBe(false)
 
     expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: true,
       termsServed: 2,
-      influence: 69,
+      influence: 99,
       partyLoyalty: 50,
     }))).toBe(false)
 
     expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: true,
       termsServed: 2,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 49,
     }))).toBe(false)
 
     expect(canLaunchLeadershipChallenge(withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       isIncumbent: true,
       termsServed: 2,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 50,
       relationships: [],
     }))).toBe(false)
@@ -142,30 +142,32 @@ describe('canLaunchLeadershipChallenge', () => {
 })
 
 describe('leadership support scaling', () => {
-  it('scales to caucus size (min 3, or fewer if party has fewer councillors)', () => {
-    const smallCaucus = withPoliticianMode(makeWorld(), { careerRank: 'committee-chair' })
-    smallCaucus.politicianMode!.councillors = [
+  it('scales to ~40% of total seats, capped by caucus size', () => {
+    const smallWorld = withPoliticianMode(makeWorld(), { careerRank: 'party-whip' })
+    smallWorld.politicianMode!.councillors = [
       makeCouncillor({ id: 'c1', partyId: 'party-a', wardId: 'ward-1' }),
       makeCouncillor({ id: 'c2', partyId: 'party-a', wardId: 'ward-2' }),
     ]
-    const smallReqs = getCareerRequirements(smallCaucus)
+    const smallReqs = getCareerRequirements(smallWorld)
     const smallSupport = smallReqs?.requirements.find((req) => req.label === 'Party support')
-    expect(smallSupport?.needed).toBe(2)
+    expect(smallSupport?.needed).toBe(1)
 
-    const largeCaucus = withPoliticianMode(makeWorld(), { careerRank: 'committee-chair' })
-    largeCaucus.politicianMode!.councillors = [
-      makeCouncillor({ id: 'c1', partyId: 'party-a', wardId: 'ward-1' }),
-      makeCouncillor({ id: 'c2', partyId: 'party-a', wardId: 'ward-2' }),
-      makeCouncillor({ id: 'c3', partyId: 'party-a', wardId: 'ward-3' }),
-      makeCouncillor({ id: 'c4', partyId: 'party-a', wardId: 'ward-4' }),
-    ]
+    const largeCaucus = withPoliticianMode(makeWorld(), { careerRank: 'party-whip' })
+    largeCaucus.constituencies = Array.from({ length: 10 }, (_, i) => ({
+      ...largeCaucus.constituencies[0],
+      id: `ward-${i + 1}`,
+      name: `Ward ${i + 1}`,
+    }))
+    largeCaucus.politicianMode!.councillors = Array.from({ length: 6 }, (_, i) => (
+      makeCouncillor({ id: `c${i + 1}`, partyId: 'party-a', wardId: `ward-${i + 1}` })
+    ))
     const largeReqs = getCareerRequirements(largeCaucus)
     const largeSupport = largeReqs?.requirements.find((req) => req.label === 'Party support')
-    expect(largeSupport?.needed).toBe(3)
+    expect(largeSupport?.needed).toBe(4)
   })
 })
 
-describe('promoteToCommitteeChair', () => {
+describe('promoteToPartyWhip', () => {
   it('updates rank and adds career history', () => {
     const world = withPoliticianMode(makeWorld({ week: 5 }), {
       careerRank: 'backbencher',
@@ -174,20 +176,20 @@ describe('promoteToCommitteeChair', () => {
       motionsPassed: 2,
       influence: 20,
     })
-    const next = promoteToCommitteeChair(world)
-    expect(next.politicianMode!.politician.careerRank).toBe('committee-chair')
-    expect(next.politicianMode!.politician.careerHistory.at(-1)?.rank).toBe('committee-chair')
+    const next = promoteToPartyWhip(world)
+    expect(next.politicianMode!.politician.careerRank).toBe('party-whip')
+    expect(next.politicianMode!.politician.careerHistory.at(-1)?.rank).toBe('party-whip')
   })
 })
 
 describe('launchLeadershipChallenge', () => {
   it('updates rank and party leader name', () => {
     const world = withPoliticianMode(makeWorld(), {
-      careerRank: 'committee-chair',
+      careerRank: 'party-whip',
       name: 'Jordan Lee',
       isIncumbent: true,
       termsServed: 2,
-      influence: 70,
+      influence: 100,
       partyLoyalty: 50,
       relationships: [{ targetId: 'c1', targetName: 'Ally', partyId: 'party-a', partyColour: '#000', wardId: 'ward-2', type: 'ally', strength: 40, history: [] }],
     })

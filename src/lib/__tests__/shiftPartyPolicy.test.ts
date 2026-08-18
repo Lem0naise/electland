@@ -51,7 +51,7 @@ function personalShift(overrides?: Partial<PoliticianAction>): PoliticianAction 
 describe('shift_party_policy', () => {
   it('is offered only to party leaders', () => {
     const backbencher = withPoliticianMode(makeWorld(), { careerRank: 'backbencher' })
-    const chair = withPoliticianMode(makeWorld(), { careerRank: 'committee-chair' })
+    const chair = withPoliticianMode(makeWorld(), { careerRank: 'party-whip' })
     const leader = withPoliticianMode(makeWorld(), { careerRank: 'party-leader' })
 
     expect(getPoliticianActions(backbencher).some((action) => action.type === 'shift_party_policy')).toBe(false)

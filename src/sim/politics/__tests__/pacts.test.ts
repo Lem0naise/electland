@@ -111,7 +111,7 @@ describe('canManagePact', () => {
 
 describe('canWithdrawCommitment', () => {
   it('allows non-leader to manage own ward commitment', () => {
-    const world = withPoliticianMode(threePartyWorld(), { careerRank: 'committee-chair', wardId: 'ward-1' })
+    const world = withPoliticianMode(threePartyWorld(), { careerRank: 'party-whip', wardId: 'ward-1' })
     const pact = makePact({
       commitments: [makeCommitment({ wardId: 'ward-1', standingDownPartyId: 'party-a', beneficiaryPartyId: 'party-b' })],
     })
@@ -120,7 +120,7 @@ describe('canWithdrawCommitment', () => {
   })
 
   it('blocks non-leader from managing another ward commitment', () => {
-    const world = withPoliticianMode(threePartyWorld(), { careerRank: 'committee-chair', wardId: 'ward-1' })
+    const world = withPoliticianMode(threePartyWorld(), { careerRank: 'party-whip', wardId: 'ward-1' })
     const pact = makePact({
       commitments: [makeCommitment({ id: 'c-other', wardId: 'ward-2', standingDownPartyId: 'party-a', beneficiaryPartyId: 'party-b' })],
     })

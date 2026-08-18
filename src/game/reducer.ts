@@ -2,7 +2,7 @@ import { lobbyCouncillor, simulateWeek } from '../lib/sim'
 import { resolveCouncilSession } from '../sim/council/agenda'
 import { queueCustomMotion, queueRepealMotion } from '../sim/council/motions'
 import { canProposeBudget, normalizeBudget } from '../sim/council/budget'
-import { launchLeadershipChallenge, promoteToCommitteeChair } from '../sim/politics/career'
+import { launchLeadershipChallenge, promoteToPartyWhip } from '../sim/politics/career'
 import { resolveGovernmentFormation } from '../sim/politics/government'
 import {
   acceptNpcProposal,
@@ -57,7 +57,7 @@ export function gameReducer(world: World, action: GameAction): World {
       return resolveCouncilSession(world)
 
     case 'PROMOTE_TO_COMMITTEE_CHAIR':
-      return promoteToCommitteeChair(world)
+      return promoteToPartyWhip(world)
 
     case 'LAUNCH_LEADERSHIP_CHALLENGE':
       return launchLeadershipChallenge(world)

@@ -45,11 +45,12 @@ function pickTemplate(rng: () => number, recentHeadlines: string[], present: Set
 
 function findProposer(world: World, partyId: string): { id: string; name: string; partyId: string } {
   const pm = world.politicianMode!
-  if (pm.politician.partyId === partyId) {
-    return { id: pm.politician.id, name: pm.politician.name, partyId }
+  const npcCouncillors = pm.councillors.filter((entry) => entry.partyId === partyId)
+  if (npcCouncillors.length > 0) {
+    const rng = createRng(world.seed + world.week * 7717 + partyId.length)
+    const pick = npcCouncillors[Math.floor(rng() * npcCouncillors.length)]
+    return { id: pick.id, name: pick.name, partyId: pick.partyId }
   }
-  const councillor = pm.councillors.find((entry) => entry.partyId === partyId)
-  if (councillor) return { id: councillor.id, name: councillor.name, partyId: councillor.partyId }
   const party = world.parties.find((entry) => entry.id === partyId)
   return { id: `party_${partyId}`, name: party?.leader ?? 'Unknown', partyId }
 }

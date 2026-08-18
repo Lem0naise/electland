@@ -40,7 +40,7 @@ describe('canProposeBudget', () => {
 
     expect(canProposeBudget(withPoliticianMode(makeWorld({
       government: makeGovernment({ leadPartyId: 'party-a', status: 'formed', kind: 'majority' }),
-    }), { careerRank: 'committee-chair', careerTier: 'committee-chair', partyId: 'party-a' }))).toBe(false)
+    }), { careerRank: 'party-whip', careerTier: 'party-whip', partyId: 'party-a' }))).toBe(false)
 
     expect(canProposeBudget(withPoliticianMode(makeWorld({
       government: makeGovernment({ leadPartyId: 'party-b', status: 'formed', kind: 'majority' }),
