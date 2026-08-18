@@ -40,6 +40,7 @@ import {
   queueRepealMotion,
   estimateTilePreference,
   formNpcOpposition,
+  npcCoalitionExcludingPlayer,
   focusCouncilMotion,
   generateCouncilSession,
   ordinarySessionKind,
@@ -354,6 +355,13 @@ function App() {
       setLastActionResult(newsToast(next.newsFeed[0] ?? 'Government formation resolved.', playerPartyIsGoverning(next) ? 'success' : 'neutral'))
       return next
     }
+    const npcDeal = npcCoalitionExcludingPlayer(w)
+    if (npcDeal) {
+      const next = reconcilePlayerOfficeAndVictory(npcDeal)
+      setLastActionResult(newsToast(next.newsFeed[0] ?? 'Other parties formed a coalition.', 'neutral'))
+      return next
+    }
+    setLastActionResult(newsToast('No overall control — you must form a government.', 'neutral'))
     setShowCoalitionModal(true)
     return w
   }

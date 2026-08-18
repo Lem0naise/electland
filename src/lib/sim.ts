@@ -3377,6 +3377,8 @@ export function simulateWeek(world: World): World {
   if (electionHappening) {
     if (playerWon) {
       newsFeedLines.push(`ELECTION NIGHT: ${world.parties.find((p) => p.id === world.playerPartyId)?.name} wins the council majority!`)
+    } else if (!results.nationalResults.some((r) => r.seatsWon >= majority)) {
+      newsFeedLines.push(`ELECTION NIGHT: No overall control — ${seatLeader?.partyName ?? 'Unknown'} is the largest party.`)
     } else {
       newsFeedLines.push(`ELECTION NIGHT: ${seatLeader?.partyName ?? 'Unknown'} wins the council.`)
     }
@@ -3528,6 +3530,7 @@ export function simulateWeek(world: World): World {
             week: world.week + 1,
             electionNumber: world.electionsHeld + 1,
             partySeats: Object.fromEntries(results.nationalResults.map((r) => [r.partyId, r.seatsWon])),
+            noc: !results.nationalResults.some((r) => r.seatsWon >= majority),
           },
         ].slice(-15)
       : (world.electionSeatHistory ?? []),
@@ -4008,22 +4011,19 @@ export function suggestPacts(world: World, allyPartyId: string, totalSacrifice =
 
   const playerCommitted = new Set<string>()
   const allyCommitted = new Set<string>()
-  const allyInvolvedInAnyPact = new Set<string>()
   for (const p of world.alliancePacts) {
     if (p.broken) continue
     for (const e of p.entries) {
       if (p.partyAId === world.playerPartyId) playerCommitted.add(e.wardA)
       if (p.partyBId === world.playerPartyId && !e.isUnilateral) playerCommitted.add(e.wardB)
-      if (p.partyAId === allyPartyId) { allyCommitted.add(e.wardA); allyInvolvedInAnyPact.add(e.wardA) }
-      if (p.partyBId === allyPartyId && !e.isUnilateral) { allyCommitted.add(e.wardB); allyInvolvedInAnyPact.add(e.wardB) }
-      if (p.partyBId === allyPartyId) allyInvolvedInAnyPact.add(e.wardA)
-      if (p.partyAId === allyPartyId) allyInvolvedInAnyPact.add(e.wardB)
+      if (p.partyAId === allyPartyId) allyCommitted.add(e.wardA)
+      if (p.partyBId === allyPartyId && !e.isUnilateral) allyCommitted.add(e.wardB)
     }
   }
 
   for (const ourWard of world.constituencies) {
     if (playerCommitted.has(ourWard.id)) continue
-    if (allyInvolvedInAnyPact.has(ourWard.id)) continue
+    if (allyCommitted.has(ourWard.id)) continue
     const playerShare = ourWard.results.find((r) => r.partyId === world.playerPartyId)?.voteShare ?? 0
 
     for (const theirWard of world.constituencies) {
@@ -5230,6 +5230,29 @@ export function formNpcOpposition(world: World): World {
   if (isTied) {
     const playerTied = sorted.filter((r) => r.seatsWon === largest.seatsWon).some((r) => r.partyId === world.playerPartyId)
     if (playerTied) {
+      const npcTied = sorted.filter((r) => r.seatsWon === largest.seatsWon && r.partyId !== world.playerPartyId)
+      if (npcTied.length > 0) {
+        const leader = npcTied[0]
+        const candidates = sorted
+          .filter((r) => r.partyId !== leader.partyId && r.partyId !== world.playerPartyId)
+          .map((r) => ({ result: r, compat: npcPartyAffinity(world, leader.partyId, r.partyId) }))
+          .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)
+        const partner = candidates.find((c) => c.compat >= 50 && leader.seatsWon + c.result.seatsWon >= majority)
+        if (partner) {
+          return stampGovernmentLabel({
+            ...world,
+            ...pactFields,
+            government: formedNpcGovernment(world, leader.partyId, 'coalition', [partner.result.partyId]),
+            newsFeed: [`Week ${world.week}: ${leader.partyName} forms a coalition with ${partner.result.partyName}. You are in opposition.`, ...world.newsFeed].slice(0, 30),
+          })
+        }
+        return stampGovernmentLabel({
+          ...world,
+          ...pactFields,
+          government: formedNpcGovernment(world, leader.partyId, 'minority'),
+          newsFeed: [`Week ${world.week}: ${leader.partyName} forms a minority administration. You are in opposition.`, ...world.newsFeed].slice(0, 30),
+        })
+      }
       return { ...world, ...pactFields }
     }
     const tiedParties = sorted.filter((r) => r.seatsWon === largest.seatsWon)
@@ -5312,6 +5335,35 @@ export function formNpcOpposition(world: World): World {
     ),
     newsFeed: [`Week ${world.week}: ${largest.partyName} forms ${partner ? `a coalition with ${partner.result.partyName}` : 'a minority administration'}. ${partner?.result.partyId === world.playerPartyId ? 'You are in government.' : 'You are in opposition.'}`, ...world.newsFeed].slice(0, 30),
   })
+}
+
+export function npcCoalitionExcludingPlayer(world: World): World | null {
+  const majority = world.stats.councilMajority
+  const npcResults = [...world.nationalResults]
+    .filter((r) => r.partyId !== world.playerPartyId && r.seatsWon > 0)
+    .sort((a, b) => b.seatsWon - a.seatsWon)
+
+  for (const leader of npcResults) {
+    const partners = npcResults
+      .filter((r) => r.partyId !== leader.partyId)
+      .map((r) => ({ result: r, compat: npcPartyAffinity(world, leader.partyId, r.partyId) }))
+      .sort((a, b) => b.compat - a.compat || b.result.seatsWon - a.result.seatsWon)
+
+    const partner = partners.find((c) => c.compat >= 50 && leader.seatsWon + c.result.seatsWon >= majority)
+    if (partner) {
+      const pactFields = { electoralPacts: world.electoralPacts ?? [], pactTrust: world.pactTrust ?? {} }
+      return stampGovernmentLabel({
+        ...world,
+        ...pactFields,
+        government: formedNpcGovernment(world, leader.partyId, 'coalition', [partner.result.partyId]),
+        newsFeed: [
+          `Week ${world.week}: ${leader.partyName} forms a coalition with ${partner.result.partyName}. You are in opposition.`,
+          ...world.newsFeed,
+        ].slice(0, 30),
+      })
+    }
+  }
+  return null
 }
 
 export function playerCanNegotiateCoalition(world: World): boolean {

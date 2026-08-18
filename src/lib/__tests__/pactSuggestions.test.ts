@@ -180,7 +180,7 @@ describe('suggestPacts strategic scoring', () => {
 })
 
 describe('suggestPacts cross-pact filtering', () => {
-  it('excludes counter-demand wards where ally already has an existing pact', () => {
+  it('excludes wards where ally is already standing down', () => {
     const world = exchangeStepsScenarioWorld()
     world.alliancePacts = [
       makeAlliancePact({
@@ -203,7 +203,7 @@ describe('suggestPacts cross-pact filtering', () => {
     expect(stMarysAsCounter).toBeUndefined()
 
     const exchangeStepsAsCounter = suggs.find((s) => s.ourWardId === 'exchange-steps')
-    expect(exchangeStepsAsCounter).toBeUndefined()
+    expect(exchangeStepsAsCounter).toBeDefined()
   })
 
   it('does not exclude wards where an unrelated party has a pact', () => {

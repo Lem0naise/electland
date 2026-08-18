@@ -11,6 +11,7 @@ export interface ElectionSeatHistoryEntry {
   electionNumber: number
   partySeats: Record<string, number>
   governmentLabel?: string
+  noc?: boolean
 }
 
 export interface ElectionNightResult {
