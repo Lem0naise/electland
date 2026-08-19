@@ -406,7 +406,7 @@ export function resolveCouncilSession(world: World): World {
   })
 
   const nextPm = nextWorld.politicianMode ?? pm
-  const partyIds = [...new Set(pm.councillors.map((c) => c.partyId))]
+  const partyIds = [...new Set([...pm.councillors.map((c) => c.partyId), world.playerPartyId])]
   return {
     ...nextWorld,
     newsFeed: [...councilNews, ...nextWorld.newsFeed].slice(0, 30),

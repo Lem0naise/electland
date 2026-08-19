@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { electedSeatCounts, loadCouncillorTenure, partyArchetypeLabel } from '../lib/sim'
-import { explainPlayerPartyAffinity, explainNpcPartyAffinity } from '../sim/politics/relationships'
+import { explainPlayerPartyAffinity, explainNpcPartyAffinity, playerPartyAffinity } from '../sim/politics/relationships'
 import { VoteHistoryChart } from './VoteHistoryChart'
 import { SeatHistoryChart } from './SeatHistoryChart'
 import type { World } from '../types/sim'
@@ -344,6 +344,21 @@ export function StatisticsModal({ world, onClose }: StatisticsModalProps) {
           {world.politicianMode && (
             <div className="stats-section">
               <div className="stats-section-label">Party relations</div>
+              <div className="affinity-summary">
+                {world.parties.filter((p) => p.id !== world.playerPartyId).map((p) => {
+                  const score = playerPartyAffinity(world, p.id)
+                  return (
+                    <div key={p.id} className="affinity-summary-row" onClick={() => { setAffinityPartyA(world.playerPartyId); setAffinityPartyB(p.id) }}>
+                      <span className="affinity-summary-swatch" style={{ background: p.colour }} />
+                      <span className="affinity-summary-name">{p.name}</span>
+                      <span className="affinity-summary-bar">
+                        <span className="affinity-summary-fill" style={{ width: `${score}%` }} />
+                      </span>
+                      <span className="affinity-summary-score">{score}</span>
+                    </div>
+                  )
+                })}
+              </div>
               <div className="affinity-picker">
                 <div className="affinity-picker-selects">
                   <label>

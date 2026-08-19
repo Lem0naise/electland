@@ -3954,6 +3954,14 @@ input[type='range'] { width: 100%; accent-color: var(--ink-mid); }
 }
 
 /* Affinity picker */
+.affinity-summary { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.affinity-summary-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 3px 0; }
+.affinity-summary-row:hover { opacity: 0.8; }
+.affinity-summary-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.affinity-summary-name { font-size: 0.78rem; min-width: 90px; }
+.affinity-summary-bar { flex: 1; height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.affinity-summary-fill { display: block; height: 100%; background: var(--ink-soft); border-radius: 4px; transition: width 0.3s; }
+.affinity-summary-score { font-size: 0.75rem; min-width: 24px; text-align: right; font-weight: 600; }
 .affinity-picker { display: flex; flex-direction: column; gap: 10px; }
 .affinity-picker-selects { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .affinity-picker-selects label { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 100px; }

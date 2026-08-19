@@ -58,7 +58,7 @@ import {
   stampGovernmentLabel,
 } from '../sim/politics/government'
 import { scorePolicyReputationForTile } from '../sim/council/legislation'
-import { playerPartyAffinity, npcPartyAffinity } from '../sim/politics/relationships'
+import { playerPartyAffinity, npcPartyAffinity, affinityKey } from '../sim/politics/relationships'
 import { predictCouncillorVote } from '../sim/council/voting'
 export type { PredictedStance } from '../sim/council/voting'
 export { predictCouncillorVote }
@@ -3049,6 +3049,19 @@ function pickWeeklyEvent(rng: () => number): WeeklyEvent | undefined {
 }
 
 // ─── Main world generation ────────────────────────────────────────────────────
+
+function seedPartyAffinityMatrix(parties: PartyDefinition[]): Record<string, number> {
+  const matrix: Record<string, number> = {}
+  for (let i = 0; i < parties.length; i++) {
+    for (let j = i + 1; j < parties.length; j++) {
+      const dist = valueDistance(parties[i].values, parties[j].values, { change: 1, growth: 1, services: 1 })
+      const raw = Math.round(clamp(80 - (dist / 100), -70, 70))
+      matrix[affinityKey(parties[i].id, parties[j].id)] = raw
+    }
+  }
+  return matrix
+}
+
 export function generateWorld(options: WorldOptions): World {
   const rng = createRng(options.seed)
   const townName = createTownName(rng)
@@ -3136,7 +3149,7 @@ export function generateWorld(options: WorldOptions): World {
     simToasts: [],
     budget: getDefaultBudget(),
     councilHistory: [] as CouncilDecisionRecord[],
-    partyAffinityMatrix: {} as Record<string, number>,
+    partyAffinityMatrix: seedPartyAffinityMatrix(parties),
   }
 
   // Build a temporary stats object so calculateResults can run

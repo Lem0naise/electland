@@ -60,12 +60,9 @@ function activePactBonus(world: World, partyA: string, partyB: string): number {
 }
 
 export function playerPartyAffinity(world: World, targetPartyId: string): number {
-  const pm = world.politicianMode
-  if (!pm) return 50
-  const rels = pm.politician.relationships.filter((r) => r.partyId === targetPartyId)
-  if (rels.length === 0) return 50 + activePactBonus(world, world.playerPartyId, targetPartyId)
-  const avg = rels.reduce((sum, r) => sum + r.strength, 0) / rels.length
-  const base = Math.round((avg + 100) / 2)
+  const key = affinityKey(world.playerPartyId, targetPartyId)
+  const raw = world.partyAffinityMatrix[key]
+  const base = raw === undefined ? 50 : Math.round((raw + 100) / 2)
   return clamp(base + activePactBonus(world, world.playerPartyId, targetPartyId), 0, 100)
 }
 
@@ -82,14 +79,13 @@ export interface AffinityExplanation {
 }
 
 export function explainPlayerPartyAffinity(world: World, targetPartyId: string): AffinityExplanation {
-  const pm = world.politicianMode
   const components: AffinityExplanation['components'] = []
-  const rels = pm?.politician.relationships.filter((r) => r.partyId === targetPartyId) ?? []
-  if (rels.length > 0) {
-    const avg = rels.reduce((sum, r) => sum + r.strength, 0) / rels.length
-    components.push({ label: `Avg. councillor relationship (${rels.length})`, value: Math.round((avg + 100) / 2) })
+  const key = affinityKey(world.playerPartyId, targetPartyId)
+  const raw = world.partyAffinityMatrix[key]
+  if (raw !== undefined) {
+    components.push({ label: 'Council voting alignment', value: Math.round((raw + 100) / 2) })
   } else {
-    components.push({ label: 'No councillor relationships', value: 50 })
+    components.push({ label: 'No voting history', value: 50 })
   }
   const pactBonus = activePactBonus(world, world.playerPartyId, targetPartyId)
   if (pactBonus > 0) components.push({ label: 'Active electoral pact', value: pactBonus })
@@ -140,7 +136,7 @@ export function updatePartyAffinityMatrix(
         const ayeA = votesA.filter((v) => v.vote === 'aye').length / votesA.length
         const ayeB = votesB.filter((v) => v.vote === 'aye').length / votesB.length
         const agreement = 1 - Math.abs(ayeA - ayeB)
-        delta += (agreement - 0.5) * 6
+        delta += (agreement - 0.5) * 20
       }
       const prev = updated[key] ?? 0
       updated[key] = clamp(prev + delta, -100, 100)
